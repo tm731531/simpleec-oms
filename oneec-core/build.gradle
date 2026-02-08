@@ -1,0 +1,12 @@
+dependencies {
+    implementation project(':oneec-common')
+
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+    implementation 'org.springframework.boot:spring-boot-starter-amqp'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+
+    // MyBatis-Plus (Spring Boot 3 compatible)
+    implementation 'com.baomidou:mybatis-plus-spring-boot3-starter:3.5.7'
+
+    runtimeOnly 'org.postgresql:postgresql'
+}

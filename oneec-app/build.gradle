@@ -1,0 +1,25 @@
+plugins {
+    id 'org.springframework.boot'
+}
+
+dependencies {
+    implementation project(':oneec-common')
+    implementation project(':oneec-core')
+    implementation project(':oneec-channel')
+    implementation project(':oneec-web')
+
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+    implementation 'org.springframework.boot:spring-boot-starter-amqp'
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+
+    // MyBatis-Plus
+    implementation 'com.baomidou:mybatis-plus-spring-boot3-starter:3.5.7'
+
+    runtimeOnly 'org.postgresql:postgresql'
+}
+
+bootJar {
+    archiveFileName = 'oneec-oms.jar'
+    mainClass = 'com.oneec.app.OneecApplication'
+}

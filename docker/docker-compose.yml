@@ -1,0 +1,96 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: oneec-postgres
+    environment:
+      POSTGRES_DB: oneec
+      POSTGRES_USER: oneec
+      POSTGRES_PASSWORD: oneec123
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/01-original-schema.sql:/docker-entrypoint-initdb.d/01-original-schema.sql
+      - ./postgres/02-new-tables.sql:/docker-entrypoint-initdb.d/02-new-tables.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U oneec -d oneec"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: oneec-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: oneec-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: oneec
+      RABBITMQ_DEFAULT_PASS: oneec123
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  nginx:
+    image: nginx:alpine
+    container_name: oneec-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ../oneec-frontend/dist:/usr/share/nginx/html:ro
+    depends_on:
+      - app
+    profiles:
+      - full
+
+  app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: oneec-app
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: oneec
+      DB_USER: oneec
+      DB_PASS: oneec123
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: oneec
+      RABBITMQ_PASS: oneec123
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    profiles:
+      - full
+
+volumes:
+  postgres_data:
+  redis_data:
+  rabbitmq_data:
