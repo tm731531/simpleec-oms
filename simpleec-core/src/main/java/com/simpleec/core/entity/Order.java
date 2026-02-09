@@ -1,13 +1,14 @@
 package com.simpleec.core.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.simpleec.core.crypto.EncryptedFieldTypeHandler;
 import lombok.Data;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
-@TableName("orders")
+@TableName(value = "orders", autoResultMap = true)
 public class Order {
 
     @TableId(type = IdType.ASSIGN_UUID)
@@ -17,10 +18,19 @@ public class Order {
     private String channelId;
     private String channelOrderId;
     private String orderStatus;
+
+    @TableField(typeHandler = EncryptedFieldTypeHandler.class)
     private String buyerName;
+
+    @TableField(typeHandler = EncryptedFieldTypeHandler.class)
     private String buyerPhone;
+
+    @TableField(typeHandler = EncryptedFieldTypeHandler.class)
     private String buyerEmail;
+
+    @TableField(typeHandler = EncryptedFieldTypeHandler.class)
     private String shippingAddress;
+
     private String shippingMethod;
     private String paymentMethod;
 

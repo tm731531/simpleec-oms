@@ -25,9 +25,10 @@ public class OrderController {
     @PostMapping("/{id}/status")
     public ApiResponse<Void> updateStatus(
             @PathVariable String id,
+            @RequestParam String merchantId,
             @RequestParam String toStatus,
             @RequestParam(required = false) String remark) {
-        orderService.updateStatus(id, null, toStatus, "system", remark);
+        orderService.updateStatus(merchantId, id, null, toStatus, "system", remark);
         return ApiResponse.ok();
     }
 }

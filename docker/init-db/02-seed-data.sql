@@ -28,7 +28,10 @@ VALUES ('pa_admin_001', 'SimpleEC Admin', 'admin@simpleec.com',
 -- ---------------------------------------------------------------------------
 INSERT INTO public.global_config (id, data, description) VALUES
 ('vip_10_limits', '{"max_channels": 50, "max_products": 10000}', 'VIP 10 resource limits'),
-('vip_0_limits',  '{"max_channels": 3, "max_products": 100}',    'Free tier resource limits');
+('vip_0_limits',  '{"max_channels": 3, "max_products": 100}',    'Free tier resource limits'),
+('encryption_master_key',
+ 'ZVNzMksyaDVNWGR2ZVZSc1ZVSnJUVWxTVjFJdk9Xb3hhVUUwV0dkNE9FMTRjM3B1Y0hKbE5saFpSVDA5',
+ 'AES-256-GCM master key (3xBase64). DEV ONLY — replace in production.');
 
 -- ---------------------------------------------------------------------------
 -- merchant
