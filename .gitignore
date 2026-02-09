@@ -36,6 +36,10 @@ bin/
 *.log
 application-local.yml
 
+### Docker data (bind mounts) ###
+data/
+.env
+
 ### Node (frontend) ###
 node_modules/
 dist/
