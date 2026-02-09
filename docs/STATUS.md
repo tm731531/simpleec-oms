@@ -281,4 +281,5 @@ DTO 設計稿見 `docs/event-flows/DB_ENTITY_GAPS.md` §6。
 | `docs/event-flows/FETCH_PRODUCTS.md` | 同步商品事件流 |
 | `docs/event-flows/DB_ENTITY_GAPS.md` | Entity ↔ Schema 差異追蹤 |
 | `docs/STATISTICS_DESIGN.md` | 統計設計（多角色 × 正逆物流 × 退貨） |
+| `docs/ABSTRACT_DESIGN.md` | 抽象設計規格書（模組合約 × 介面定義 × 步驟說明） |
 | `docs/event-flows/README.md` | 事件流一致性 checklist |
