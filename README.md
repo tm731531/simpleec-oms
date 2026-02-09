@@ -9,6 +9,7 @@
 - **Hash Dedup** — Redis SHA-256 去重，避免重複處理已同步的訂單
 - **JSONB 訂單明細** — 訂單明細直接存 `orders.items` JSONB，簡化查詢
 - **NanoID 主鍵** — 所有表使用 VARCHAR(20) NanoID，由應用程式產生
+- **PII 加密** — 訂單買家欄位 AES-256-GCM 加密存儲，API 列表自動遮罩，詳情解鎖明文，CSV 匯出完整明文
 - **全鏈路觀測** — OpenTelemetry + Grafana（Prometheus / Loki / Tempo）
 - **資料可搬遷** — bind mount 外部資料目錄，支援環境複製與平行測試
 

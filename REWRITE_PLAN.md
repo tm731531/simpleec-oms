@@ -449,3 +449,16 @@
 - Plugin: `/home/tom/.claude/plugins/local/simpleec-oms/.claude-plugin/plugin.json`
 - Skill: `/home/tom/.claude/plugins/local/simpleec-oms/skills/simpleec-oms-design/SKILL.md`
 - 觸發關鍵字：SimpleEC, OMS, 通路, 平台, 拉單, 訂單管理, 電商, channel job, simpleec-oms
+
+## 第十五輪 — Entity ↔ Schema 對齊（Level 1）— 已完成
+
+| # | 修正重點 | 影響範圍 |
+|---|---------|---------|
+| 56 | **所有 Entity PK Long→String NanoID**：4 個 Entity (Order, Product, SellPack, OrderStatusLog) 的 id + FK 全改 String + IdType.ASSIGN_UUID。刪除 OrderItem.java + ProductSpec.java + 對應 Mapper | Entity, Service, Controller, ChannelAdapter |
+
+## 第十六輪 — PII 加密 + API 遮罩（Level 1.5）— 已完成
+
+| # | 修正重點 | 影響範圍 |
+|---|---------|---------|
+| 57 | **PII 欄位 AES-256-GCM 加密**：orders 表 4 個買家欄位（buyer_name, buyer_phone, buyer_email, shipping_address）透過 MyBatis TypeHandler 透明加解密。Master key 三次 Base64 存 global_config，PBKDF2 + merchantId 衍生 per-merchant key | core/crypto/*, Order.java, OrderService.java, 01-schema.sql, 02-seed-data.sql |
+| 58 | **API PII 遮罩 + 解鎖 + CSV 匯出**：列表 API 回傳 OrderVO（遮罩：王\*明、0912\*\*\*678）；GET /{id} 回傳完整明文；GET /export CSV 下載含完整明文 + UTF-8 BOM for Excel | common/util/PiiMasker.java, api/vo/OrderVO.java, OrderController.java, OrderService.java |

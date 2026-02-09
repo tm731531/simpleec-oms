@@ -8,14 +8,16 @@
 
 | 類別 | 項目 | 嚴重度 | 狀態 |
 |------|------|--------|------|
-| PK 型別 | 所有 Entity 的 id 還是 Long → 應改 String (NanoID) | 🔴 高 | 待修 |
-| Entity 缺欄位 | SellPack 缺 4 個欄位 (sku + 3 個平台欄位) | 🔴 高 | 待修 |
-| Entity 缺欄位 | Order 缺 items JSONB 欄位 | 🔴 高 | 待修 |
-| Entity 型別不一致 | Order.merchantId/channelId Long vs String | 🔴 高 | 待修 |
-| Entity 應刪除 | OrderItem.java 應刪除（無 order_items 表） | 🔴 高 | 待修 |
+| PK 型別 | 所有 Entity 的 id 改 String (NanoID) + IdType.ASSIGN_UUID | 🔴 高 | ✅ 已修 (Level 1) |
+| Entity 缺欄位 | SellPack 加 4 個欄位 (sku + 3 個平台欄位) | 🔴 高 | ✅ 已修 (Level 1) |
+| Entity 缺欄位 | Order 加 items JSONB 欄位 | 🔴 高 | ✅ 已修 (Level 1) |
+| Entity 型別不一致 | Order.merchantId/channelId 改 String | 🔴 高 | ✅ 已修 (Level 1) |
+| Entity 應刪除 | OrderItem.java + ProductSpec.java 已刪除 | 🔴 高 | ✅ 已修 (Level 1) |
+| PII 加密 | Order 4 個 PII 欄位 AES-256-GCM 加密 (TypeHandler) | 🔴 高 | ✅ 已修 (Level 1.5) |
+| PII API 遮罩 | OrderVO + PiiMasker 列表遮罩/詳情明文/CSV匯出 | 🔴 高 | ✅ 已修 (Level 1.5) |
 | Adapter 缺方法 | ChannelAdapter 缺 fetchProducts() | 🟡 中 | 待修 |
 | Adapter 回傳型 | fetchOrders 回傳 Order → 應改 ChannelOrder | 🟡 中 | 待修 |
-| Adapter 參數型 | channelId 是 Long → 應改 String | 🟡 中 | 待修 |
+| Adapter 參數型 | channelId 已改 String | 🟡 中 | ✅ 已修 (Level 1) |
 | DTO 缺少 | ChannelProduct, ChannelOrder 等 DTO | 🟡 中 | 待建 |
 
 ---
@@ -201,21 +203,26 @@ public class ChannelOrderItem {
 ## 7. 修正優先順序
 
 ```
-Phase 1 — 必須先修（影響所有事件流）:
-  1. 全局 PK/FK 型別: 所有 Entity 的 id/merchantId/channelId/productId 改 String
-  2. Order.java 加 items (JSONB) 欄位
-  3. 刪除 OrderItem.java + 相關 Mapper/Repository
-  4. SellPack.java 加 4 個欄位 (sku, channelSpecId, channelProductName, channelSpecName)
+Phase 1 — ✅ 已完成（Level 1 — Entity ↔ Schema 對齊）:
+  1. ✅ 全局 PK/FK 型別: 所有 Entity 改 String + IdType.ASSIGN_UUID
+  2. ✅ Order.java 加 items (JSONB) 欄位
+  3. ✅ 刪除 OrderItem.java + ProductSpec.java + 相關 Mapper
+  4. ✅ SellPack.java 加 4 個欄位 (sku, channelSpecId, channelProductName, channelSpecName)
+  5. ✅ ChannelAdapter 參數 Long channelId → String channelId
 
-Phase 2 — Adapter 層重構:
-  5. 新建 ChannelProduct, ChannelOrder 等 DTO
-  6. ChannelAdapter 加 fetchProducts(String channelId)
-  7. ChannelAdapter.fetchOrders() 改回傳 ChannelOrder, 參數改 String
-  8. 各平台 Adapter 實作 fetchProducts + 修改 fetchOrders
+Phase 1.5 — ✅ 已完成（PII 加密 + API 遮罩）:
+  6. ✅ Order 4 個 PII 欄位 AES-256-GCM 加密（TypeHandler）
+  7. ✅ OrderVO + PiiMasker — 列表遮罩 / 詳情明文 / CSV 匯出
 
-Phase 3 — 驗證:
-  9. 驗證所有 §15 payload 的欄位都能從 DB 組裝出來
-  10. 驗證 FETCH_PRODUCTS / FETCH_ORDERS 事件流的完整性
+Phase 2 — Adapter 層重構（待做）:
+  8. 新建 ChannelProduct, ChannelOrder 等 DTO
+  9. ChannelAdapter 加 fetchProducts(String channelId)
+  10. ChannelAdapter.fetchOrders() 改回傳 ChannelOrder
+  11. 各平台 Adapter 實作 fetchProducts + 修改 fetchOrders
+
+Phase 3 — 驗證（待做）:
+  12. 驗證所有 payload 的欄位都能從 DB 組裝出來
+  13. 驗證 FETCH_PRODUCTS / FETCH_ORDERS 事件流的完整性
 ```
 
 ---

@@ -85,6 +85,7 @@ Error:
   │
   │  資料來源:
   │    GET /api/v1/orders?merchantId=xxx&status=xxx&page=0&size=20
+  │    ★ 回傳 OrderVO — PII 遮罩（王*明、0912***678、to***@gmail.com、台北市***）
   │
   │  篩選條件:
   │    ├── 通路（channelId）
@@ -92,8 +93,11 @@ Error:
   │    ├── 日期區間（channel_created_at）
   │    └── 搜尋（buyer_name / channel_order_id）
   │
+  │  匯出:
+  │    GET /api/v1/orders/export?merchantId=xxx  → CSV 下載（完整明文 PII）
+  │
   │  列表欄位:
-  │    平台訂單編號 | 買家 | 金額 | 狀態 badge | 平台建立時間
+  │    平台訂單編號 | 買家（遮罩） | 金額 | 狀態 badge | 平台建立時間
   │
   │  狀態 badge 映射:
   │    pending    → 待處理（黃色）
@@ -110,11 +114,12 @@ Error:
 訂單詳情頁: OrderDetailView.vue
   │
   │  資料來源:
-  │    GET /api/v1/orders/{orderId}
+  │    GET /api/v1/orders/{orderId}?merchantId=xxx
+  │    ★ 回傳 OrderVO — 完整明文 PII（點開解鎖）
   │
   │  顯示區塊:
   │    ├── 訂單基本資訊（訂單編號、狀態、金額）
-  │    ├── 買家資訊（姓名、電話、Email、地址）
+  │    ├── 買家資訊（★ 完整明文：姓名、電話、Email、地址）
   │    ├── 商品明細（items JSONB → 表格顯示）
   │    │     SKU | 商品名 | 規格名 | 數量 | 單價 | 小計
   │    ├── 物流資訊（出貨記錄、追蹤號碼）
@@ -374,10 +379,10 @@ BackendJob → ORDER_STATUS_CHANGED handler
 | `channel_id` | VARCHAR(20) | msg.ownerId | FK → channel |
 | `channel_order_id` | VARCHAR(100) | `payload.channelOrderId` | 唯一約束: (channel_id, channel_order_id) |
 | `order_status` | VARCHAR(20) | `payload.orderStatus` | pending/confirmed/processing/shipped/delivered/completed/cancelled/refunding/refunded |
-| `buyer_name` | VARCHAR(256) | `payload.buyerName` | |
-| `buyer_phone` | VARCHAR(50) | `payload.buyerPhone` | |
-| `buyer_email` | VARCHAR(256) | `payload.buyerEmail` | |
-| `shipping_address` | TEXT | `payload.shippingAddress` | |
+| `buyer_name` | VARCHAR(512) | `payload.buyerName` | ★ AES-256-GCM 加密（TypeHandler 透明處理） |
+| `buyer_phone` | VARCHAR(256) | `payload.buyerPhone` | ★ AES-256-GCM 加密 |
+| `buyer_email` | VARCHAR(512) | `payload.buyerEmail` | ★ AES-256-GCM 加密 |
+| `shipping_address` | TEXT | `payload.shippingAddress` | ★ AES-256-GCM 加密 |
 | `shipping_method` | VARCHAR(50) | `payload.shippingMethod` | |
 | `payment_method` | VARCHAR(50) | `payload.paymentMethod` | |
 | `total_amount` | DECIMAL(12,2) | `payload.totalAmount` | |
@@ -456,19 +461,24 @@ WHERE channel_id = ? AND channel_product_id = ?
 
 ## 4. Entity 缺口分析
 
-### ❌ Order.java — 所有 ID 型別錯 + 缺 items JSONB
+### ✅ Order.java — 已修正（Level 1 + Level 1.5）
 
-| 欄位 | Entity 目前 | 應該是 | 問題 |
-|------|-----------|--------|------|
-| `id` | `Long` | `String` | **NanoID** |
-| `merchantId` | `Long` | `String` | **NanoID** |
-| `channelId` | `Long` | `String` | **NanoID** |
-| `items` | 無 | `String` (JSONB) | **缺少！訂單明細存這裡** |
+| 欄位 | 修正前 | 修正後 | 狀態 |
+|------|--------|--------|------|
+| `id` | `Long` | `String` + `IdType.ASSIGN_UUID` | ✅ 已修 |
+| `merchantId` | `Long` | `String` | ✅ 已修 |
+| `channelId` | `Long` | `String` | ✅ 已修 |
+| `items` | 無 | `String` (JSONB) | ✅ 已修 |
+| PII 4 欄位 | 明文 | AES-256-GCM 加密（EncryptedFieldTypeHandler） | ✅ 已修 |
 
-### ❌ OrderItem.java — 應該刪除
+> **PII 在事件流中的處理：**
+> - ChannelJob：平台 API 回傳明文 PII → Kafka payload 帶明文（記憶體中）
+> - OrderProcessJob：INSERT orders 時 MyBatis TypeHandler 自動加密寫入 DB
+> - API 層：TypeHandler 自動解密 → OrderVO 遮罩（列表）/ 明文（詳情+匯出）
 
-Schema v4 移除了 `order_items` 獨立表，改用 `orders.items` JSONB。
-`OrderItem.java` 整個 Entity 類別應該刪除。
+### ✅ OrderItem.java — 已刪除（Level 1）
+
+OrderItem.java + OrderItemMapper.java + ProductSpec.java + ProductSpecMapper.java 已刪除。
 
 ### ❌ ChannelAdapter 的 fetchOrders 回傳類型 + 參數類型
 
@@ -637,9 +647,9 @@ channelOrderId  →   channelOrderId  →   channelOrderId    →  channel_order
 orderStatus     →   orderStatus     →   orderStatus       →  order_status        →  orderStatus        ✅ OK
 buyerName       →   buyerName       →   buyerName         →  buyer_name          →  buyerName          ✅ OK
 totalAmount     →   totalAmount     →   totalAmount       →  total_amount        →  totalAmount        ✅ OK
-merchantId      →   (from msg)      →   msg.merchantId    →  merchant_id (varchar) → merchantId        ❌ Entity 是 Long
-channelId       →   (from msg)      →   msg.ownerId       →  channel_id (varchar)  → channelId         ❌ Entity 是 Long
-items           →   items           →   items[]           →  items (JSONB)       →  items              ❌ Entity 缺
+merchantId      →   (from msg)      →   msg.merchantId    →  merchant_id (varchar) → merchantId        ✅ 已改 String
+channelId       →   (from msg)      →   msg.ownerId       →  channel_id (varchar)  → channelId         ✅ 已改 String
+items           →   items           →   items[]           →  items (JSONB)       →  items              ✅ 已加
 
                      DTO (item)           payload (item)        orders.items[] JSONB
                     ─────────            ──────────            ──────────────────
@@ -657,4 +667,6 @@ subtotal         →  subtotal         →   subtotal          →  subtotal    
 ★ orders.id, order_status_logs.id 都是 VARCHAR(20) NanoID（程式端產生）
 ★ 無 order_items 獨立表 — 明細直接存在 orders.items JSONB
 ★ sellPackId + productId 由 OrderProcessJob 在入庫時 match 填入
+★ buyer_name, buyer_phone, buyer_email, shipping_address — AES-256-GCM 加密存儲
+★ API 列表回傳 OrderVO（PII 遮罩），詳情/匯出回傳明文
 ```

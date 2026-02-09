@@ -376,10 +376,10 @@ CREATE TABLE public.orders (
     channel_id        VARCHAR(20)   NOT NULL,
     channel_order_id  VARCHAR(100)  NOT NULL,    -- 平台訂單編號
     order_status      VARCHAR(20)   NOT NULL DEFAULT 'pending',
-    buyer_name        VARCHAR(256),
-    buyer_phone       VARCHAR(50),
-    buyer_email       VARCHAR(256),
-    shipping_address  TEXT,
+    buyer_name        VARCHAR(512),              -- ★ AES-256-GCM 加密（Base64 密文較長）
+    buyer_phone       VARCHAR(256),              -- ★ AES-256-GCM 加密
+    buyer_email       VARCHAR(512),              -- ★ AES-256-GCM 加密
+    shipping_address  TEXT,                      -- ★ AES-256-GCM 加密
     shipping_method   VARCHAR(50),
     payment_method    VARCHAR(50),
     total_amount      DECIMAL(12,2) NOT NULL DEFAULT 0,
@@ -401,6 +401,15 @@ CREATE INDEX idx_order_merchant_status ON public.orders (merchant_id, order_stat
 CREATE INDEX idx_order_created ON public.orders (created_at DESC);
 CREATE INDEX idx_order_items ON public.orders USING GIN (items);
 ```
+
+**★ PII 加密說明：**
+
+> `buyer_name`, `buyer_phone`, `buyer_email`, `shipping_address` 四個欄位在 application 層做 AES-256-GCM 加密。
+> Master key 存在 `global_config` 表（key=`encryption_master_key`，三次 Base64 編碼）。
+> 透過 PBKDF2 + merchantId 鹽衍生 per-merchant AES key。
+> MyBatis TypeHandler (`EncryptedFieldTypeHandler`) 透明加解密，Java code 層看到明文。
+> 欄位加寬是因為 Base64(nonce+ciphertext+tag) 比明文長約 1.5~2x。
+> API 列表回傳遮罩值（王\*明、0912\*\*\*678），詳情/匯出回傳完整明文。
 
 **orders.items JSONB 結構:**
 

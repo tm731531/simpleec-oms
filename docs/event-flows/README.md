@@ -42,3 +42,6 @@
 - [ ] 所有 ID 欄位（PK, FK）→ VARCHAR(20) NanoID（不是 BIGSERIAL）
 - [ ] SKU 欄位名 → 統一叫 `sku`（不是 item_number, sku_code 等）
 - [ ] JSONB 欄位（orders.items, refund_orders.items）→ 帶齊 sku, sellPackId, productId
+- [ ] PII 欄位（buyer_name, buyer_phone, buyer_email, shipping_address）→ 確認 EncryptedFieldTypeHandler 配置
+- [ ] 若 JOB 需讀取加密欄位 → 確認 EncryptionContext.setMerchantId() 已設定
+- [ ] API 回傳 PII → 確認使用 OrderVO.fromMasked()（列表）/ fromPlain()（詳情+匯出）

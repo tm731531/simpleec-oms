@@ -13,7 +13,7 @@
 |----|--------|------|
 | **Gradle 骨架** | 5 模組 (common/core/channel/web/app)，Spring Boot 3.5.0 + Java 17 | ✅ 可用（編譯成功） |
 | **DB Schema** | 01-original-schema.sql (20 表) + 02-new-tables.sql (11 表) | ✅ 可用 |
-| **Entity** | Product, ProductSpec, SellPack, Order, OrderStatusLog | ✅ 可用（OrderItem 已合併入 Order） |
+| **Entity** | Product, SellPack, Order, OrderStatusLog | ✅ 可用（OrderItem/ProductSpec 已刪除，NanoID PK） |
 | **Mapper** | 6 個 MyBatis-Plus BaseMapper（自動 CRUD） | ✅ 可用 |
 | **Service** | ProductService, OrderService（分頁、篩選、交易、狀態紀錄） | ✅ 可用 |
 | **Controller** | ProductController, OrderController, ChannelActionController, Health | ✅ 可用 |
@@ -563,10 +563,15 @@ public class ErpController {
   POST   /api/v1/sell-packs/{id}/unpublish  → 下架
 
 訂單
-  GET    /api/v1/orders                → 訂單列表（可篩 channel/status/日期）
-  GET    /api/v1/orders/{id}           → 訂單詳情（含 items）
+  GET    /api/v1/orders                → 訂單列表（★ PII 遮罩：姓名留首尾、電話留前4後3、Email留前2@domain、地址留城市）
+  GET    /api/v1/orders/{id}           → 訂單詳情（★ 完整明文 PII — 點開解鎖）
+  GET    /api/v1/orders/export         → CSV 匯出（★ 完整明文 PII，UTF-8 BOM for Excel）
   POST   /api/v1/orders/{id}/ship      → 出貨確認（發 MQ）
   POST   /api/v1/orders/{id}/cancel    → 取消（發 MQ）
+
+  ★ PII 加密: 4 個買家欄位（buyer_name, buyer_phone, buyer_email, shipping_address）
+    DB 層透過 EncryptedFieldTypeHandler 做 AES-256-GCM 加密/解密（透明）
+    API 層透過 OrderVO + PiiMasker 做遮罩（列表）/ 明文（詳情+匯出）
 
 通路動作
   POST   /api/v1/channels/{id}/sync-products  → 同步商品（發到 {platform}.slow，action=FETCH_PRODUCTS，key=channelId 排隊）

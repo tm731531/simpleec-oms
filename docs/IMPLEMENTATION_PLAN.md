@@ -686,6 +686,37 @@ curl http://localhost:8082/api/v1/orders?merchantId=SEED_MERCHANT_001
 
 ---
 
+---
+
+## Level 1.5 — PII 加密 + API 遮罩（已完成 2026-02-09）
+
+### Step 16：PII 欄位加密（AES-256-GCM）
+
+**已完成。** DB 層透明加解密。
+
+| 新增檔案 | 說明 |
+|---------|------|
+| `core/crypto/EncryptionContext.java` | ThreadLocal merchantId |
+| `core/crypto/MasterKeyProvider.java` | JdbcTemplate 讀三次 Base64 master key |
+| `core/crypto/AesGcmEncryptor.java` | AES-256-GCM + PBKDF2 per-merchant key |
+| `core/crypto/EncryptedFieldTypeHandler.java` | MyBatis TypeHandler 透明加解密 |
+| `core/crypto/EncryptionConfig.java` | Spring Config 注入 encryptor |
+
+**修改：** Order.java（autoResultMap + 4 個 TypeHandler 註解）、OrderService.java（EncryptionContext 包裝）、Schema（加寬欄位 + master key seed）
+
+### Step 17：API PII 遮罩 + 解鎖 + CSV 匯出
+
+**已完成。**
+
+| 新增檔案 | 說明 |
+|---------|------|
+| `common/util/PiiMasker.java` | 遮罩工具（maskName/Phone/Email/Address） |
+| `api/vo/OrderVO.java` | 回應 DTO（fromMasked / fromPlain） |
+
+**修改：** OrderService.java（+getById +listForExport）、OrderController.java（列表遮罩 + 詳情明文 + CSV 匯出）
+
+---
+
 ## 未來（不在本次範圍）
 
 - **Level 2**：補齊缺少的 14 張表的 Entity / Mapper（Merchant, Channel, Platform, Account 等）
