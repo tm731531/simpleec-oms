@@ -79,6 +79,9 @@ CREATE TABLE public.sell_pack
     product_id bigint NOT NULL,
     channel_id character varying(20) NOT NULL,
     channel_product_id character varying(256),
+    channel_spec_id character varying(256),
+    channel_product_name character varying(512),
+    channel_spec_name character varying(256),
     channel_product_url character varying(1024),
     title character varying(512),
     selling_price decimal(12,2),
@@ -98,14 +101,18 @@ CREATE INDEX idx_sellpack_merchant ON public.sell_pack (merchant_id);
 CREATE INDEX idx_sellpack_channel ON public.sell_pack (channel_id);
 CREATE INDEX idx_sellpack_product ON public.sell_pack (product_id);
 CREATE INDEX idx_sellpack_channel_product ON public.sell_pack (channel_id, channel_product_id);
+CREATE INDEX idx_sellpack_channel_spec ON public.sell_pack (channel_id, channel_spec_id);
 
 COMMENT ON TABLE public.sell_pack IS '賣場檔 - 商品與通路上架的映射';
 COMMENT ON COLUMN public.sell_pack.merchant_id IS '所屬商家';
 COMMENT ON COLUMN public.sell_pack.product_id IS '對應商品';
 COMMENT ON COLUMN public.sell_pack.channel_id IS '對應通路';
-COMMENT ON COLUMN public.sell_pack.channel_product_id IS '通路端商品ID';
+COMMENT ON COLUMN public.sell_pack.channel_product_id IS '通路端商品ID（平台商品編號）';
+COMMENT ON COLUMN public.sell_pack.channel_spec_id IS '通路端規格ID（平台規格編號）';
+COMMENT ON COLUMN public.sell_pack.channel_product_name IS '通路端商品名稱（平台上顯示的商品名）';
+COMMENT ON COLUMN public.sell_pack.channel_spec_name IS '通路端規格名稱（平台上顯示的規格名）';
 COMMENT ON COLUMN public.sell_pack.channel_product_url IS '通路端商品URL';
-COMMENT ON COLUMN public.sell_pack.title IS '通路上的商品標題';
+COMMENT ON COLUMN public.sell_pack.title IS '通路上的商品標題（我方自訂）';
 COMMENT ON COLUMN public.sell_pack.selling_price IS '售價';
 COMMENT ON COLUMN public.sell_pack.quantity IS '通路上的庫存';
 COMMENT ON COLUMN public.sell_pack.status IS '狀態: draft/pending/active/inactive/failed';

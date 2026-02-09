@@ -102,7 +102,7 @@ failed_task_logs (失敗任務 LOG — RD 定時查看清理)
 
 - `product` — 商品主檔（merchant_id + item_number 唯一）
 - `product_spec` — 商品規格/SKU
-- `sell_pack` — 賣場檔（商品在通路的上架資訊）
+- `sell_pack` — 賣場檔（商品在通路的上架資訊，含平台雙 ID + 雙 Name：channel_product_id/channel_spec_id/channel_product_name/channel_spec_name）
 - `orders` — 訂單（channel_id + channel_order_id 唯一，含商品明細 JSONB，不再拆 order_items）
 - `order_status_logs` — 狀態變更紀錄
 - `order_shipments` — 出貨物流
@@ -736,6 +736,10 @@ scheduler            4 partitions     心跳事件（SchedulerJob 消費，決�
 ─── 基礎設施 ───
 
 task.failed          4 partitions     失敗 LOG（RetryDispatchJob 消費，★ fast 一律不重打，slow 依條件重打）
+
+─── 死信 Topic ───
+
+task.dlt             4 partitions     死信佇列（終點站，不被消費，30 天 retention。見 §14）
 
 新增平台時：新增 {platform}.fast + {platform}.slow 兩個 topic 即可
 ```
@@ -3443,14 +3447,22 @@ docker compose up 啟動後的 container 清單：
   前端（1）：
     simpleec-admin                     :80 (Nginx + Vue 3)
 
-  總計：19 個 container
+  可觀測性（7）：                                                ← NEW（見 §13）
+    otel-collector                     :4317/:4318 (OTLP 收集器)
+    tempo                              :3200 (Trace 儲存)
+    loki                               :3100 (Log 聚合)
+    prometheus                         :9090 (Metrics 儲存)
+    grafana                            :3000 (統一儀表板)
+    kafka-ui                           :8088 (Topic 瀏覽/管理)
+
+  總計：26 個 container（19 業務 + 7 可觀測性）
 ```
 
 ---
 
 ## 10. 開發順序（建議）
 
-> **最終目標：`docker compose up` 一次啟動 19 個 container（見 §9.3）。**
+> **最終目標：`docker compose up` 一次啟動 26 個 container（見 §9.3）。**
 > 每個 Phase 結束都要確認 `docker compose up` 能正常跑，逐步加入新的 service 直到完整。
 
 > **依據：** 現有 codebase 盤點（§0）。已有 Entity/Mapper/Service/Controller 骨架可用，
@@ -3574,7 +3586,7 @@ docker compose up 啟動後能看到：
 
 ```
 目標：5 支獨立 JOB 全部就位，docker compose 加入所有 JOB container
-驗收：docker compose up → 19 個 container 全部啟動
+驗收：docker compose up → 26 個 container 全部啟動（含可觀測性，見 §13）
 ```
 
 - [ ] simpleec-order-job：OrderProcessJob（消費 order.process，DB upsert + 自治路由）
@@ -3591,7 +3603,7 @@ docker compose up 啟動後能看到：
   - simpleec-order-job / simpleec-scheduler-job
   - simpleec-backend-job / simpleec-frontend-job / simpleec-retry-job
 - [ ] ScheduleConfig + application.yml 排程規則
-- [ ] `docker compose up --build` → 19 個 container 全部啟動
+- [ ] `docker compose up --build` → 26 個 container 全部啟動
 - [ ] 看 log 確認排程：心跳 → SchedulerJob → 各平台 topic → ChannelJob
 
 ### Phase 4：Redis 快取 + JWT + CRUD + Gateway（3 天）
@@ -3638,7 +3650,7 @@ docker compose up 啟動後能看到：
 
 ```
 目標：simpleec-admin 容器加入 docker-compose，瀏覽器能操作整套系統
-驗收：docker compose up (19 container) → http://localhost → 登入 → 操作通路/商品/訂單 ← MVP 完成
+驗收：docker compose up (26 container) → http://localhost → 登入 → 操作通路/商品/訂單 ← MVP 完成
 ```
 
 - [ ] Vue 3 + Vite + PrimeVue + TypeScript 初始化（simpleec-admin/）
@@ -3691,8 +3703,8 @@ Phase 1 (2天)           Kafka 基礎 + TaskMessage + TaskProducer
 Phase 2 (3天)           ChannelJob（獨立 Spring Boot）
   │                     ✅ docker compose up → simpleec-channel-momo-fast 消費訊息
   ▼
-Phase 3 (3天)           其他 5 支 JOB（各自獨立 Spring Boot）
-  │                     ✅ docker compose up → 19 個 container 全部啟動
+Phase 3 (3天)           其他 5 支 JOB（各自獨立 Spring Boot）+ 可觀測性基礎建設
+  │                     ✅ docker compose up → 26 個 container 全部啟動
   │                     ✅ 排程 → 分發 → 消費 完整鏈路
   ▼
 Phase 4 (3天)           Redis 快取 + JWT + CRUD + Gateway
@@ -3703,7 +3715,7 @@ Phase 5 (3天)           ActionService 實作 + 端到端流程
   │                     ✅ 排程 → 拉單 → Dedup → 整理 → DB
   ▼
 Phase 6 (5天)           Vue 3 前端 + Nginx 容器
-  │                     ✅ 瀏覽器操作整套系統 ← MVP 完成（19 container）
+  │                     ✅ 瀏覽器操作整套系統 ← MVP 完成（26 container）
   ▼
 Phase 7 (每家3~5天)     通路 Adapter 實作
   │                     ✅ 真實打通路 API
@@ -3719,7 +3731,7 @@ Phase 0~6（MVP 完成）：2 + 2 + 3 + 3 + 3 + 3 + 5 = 21 天
 Phase 7（通路 Adapter）：每家 3~5 天，4 家 = 12~20 天
 Phase 8（壓力驗證）：2 天
 
-1 人開發到 MVP：~21 天（docker compose up 19 個 container 整套系統可用）
+1 人開發到 MVP：~21 天（docker compose up 26 個 container 整套系統可用）
 1 人開發到完整：~37 天（含 4 家通路 Adapter + 壓力驗證）
 
 前端（Phase 6）可以先在本地 dev server 開發，最後才包成 Docker image。
@@ -4006,3 +4018,913 @@ SchedulerJob 每秒心跳，判斷每個商家的本地時區：
         🟡 TOKEN_INVALID = API 活著但 Token 不對
         🔴 API_DOWN = 通路 API 掛了
 ```
+
+---
+
+## 13. 可觀測性設計
+
+> **核心目標：** 在 Kafka 流式架構下快速找到問題——知道 trace ID 走到哪、死在哪裡、有沒有做資料變動。
+
+### 13.1 架構總覽
+
+```
+                         ┌─────────────┐
+                         │  Grafana     │ :3000
+                         │  (Dashboard) │
+                         └──┬──┬──┬────┘
+                            │  │  │
+              ┌─────────────┘  │  └──────────────┐
+              ▼                ▼                  ▼
+        ┌──────────┐   ┌───────────┐       ┌──────────┐
+        │Prometheus│   │   Loki    │       │  Tempo   │
+        │ (Metrics)│   │  (Logs)   │       │ (Traces) │
+        └────▲─────┘   └────▲─────┘       └────▲─────┘
+             │               │                  │
+             └───────────────┼──────────────────┘
+                             │
+                    ┌────────┴────────┐
+                    │ OTEL Collector  │ :4317/:4318
+                    └────────▲────────┘
+                             │ OTLP
+              ┌──────────────┼──────────────┐
+              │              │              │
+         [API/Gateway]  [ChannelJobs]  [Other JOBs]
+         (OTEL Agent)   (OTEL Agent)  (OTEL Agent)
+```
+
+### 13.2 技術選型
+
+| 需求 | 選型 | 理由 |
+|------|------|------|
+| Trace 跨 JOB 追蹤 | OpenTelemetry Java Agent v2.10.0 | 零 code 自動注入 W3C `traceparent` 到 Kafka header |
+| Trace 儲存 | Grafana Tempo | 與 Loki/Grafana 原生整合 |
+| 集中式日誌 | Grafana Loki | 比 ELK 輕量，與 Tempo trace 原生關聯 |
+| Metrics 儲存 | Prometheus | 業界標準，Grafana 原生 |
+| 統一儀表板 | Grafana | 整合 Metrics + Logs + Traces |
+| OTLP 中轉 | OTEL Collector (contrib) | 統一接收所有服務的 telemetry，轉發到各 backend |
+| Kafka 管理 | Kafka UI (provectuslabs) | Topic 瀏覽、Consumer Group 管理、訊息查看 |
+
+> **為什麼 Loki 而不是 ELK？**
+> 1. ELK 需要 3 個重服務（Elasticsearch + Logstash + Kibana），資源需求高
+> 2. Loki 只索引 label、不索引 log 內容，儲存成本低
+> 3. Loki 與 Tempo 原生關聯：trace_id → 一鍵跳轉對應 log
+> 4. 全部在 Grafana 一個介面完成（Metrics + Logs + Traces）
+
+### 13.3 OTEL Java Agent（零 code 自動化）
+
+所有 8 個 Dockerfile 都加入 OTEL Agent：
+
+```dockerfile
+ADD https://github.com/.../opentelemetry-javaagent.jar /app/otel-agent.jar
+ENTRYPOINT ["java", "-javaagent:/app/otel-agent.jar", "-jar", "app.jar"]
+```
+
+**Agent 自動做的事：**
+
+| 能力 | 說明 |
+|------|------|
+| Kafka trace 傳播 | 自動在 Kafka record header 注入/讀取 W3C `traceparent` → trace 跨 JOB 串接 |
+| HTTP trace | Spring MVC 進出自動 span |
+| JDBC trace | PostgreSQL query 自動 span |
+| Redis trace | Redis 命令自動 span |
+| MDC 注入 | 自動注入 `trace_id` + `span_id` 到 SLF4J MDC |
+
+**環境變數（docker-compose.yml x-common-env）：**
+
+```yaml
+OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+OTEL_LOGS_EXPORTER: otlp
+OTEL_METRICS_EXPORTER: otlp
+OTEL_TRACES_EXPORTER: otlp
+```
+
+### 13.4 TaskMessage traceId 欄位
+
+```java
+private String traceId;                    // 業務層面冗餘副本
+@Builder.Default
+private int schemaVersion = 1;             // 訊息格式版本（見 §14.1）
+```
+
+**雙保險設計：**
+- **主要**：OTEL Agent 自動透過 Kafka header `traceparent` 傳播 trace（不需任何 code）
+- **冗餘**：`TaskProducer.send()` 額外把 `Span.current().getSpanContext().getTraceId()` 寫入 `TaskMessage.traceId`，方便 DB 查詢和 log 搜尋
+
+### 13.5 MDC 結構化日誌
+
+每個 JOB 的 `handle()` 入口注入業務 MDC：
+
+```java
+public void handle(TaskMessage msg, Acknowledgment ack) {
+    TaskMdcHelper.set(msg);   // 注入 MDC
+    try {
+        // ... 業務邏輯 ...
+    } finally {
+        TaskMdcHelper.clear(); // 清除 MDC
+    }
+}
+```
+
+**MDC 欄位：**
+
+| MDC Key | 來源 |
+|---------|------|
+| `trace_id` | OTEL Agent 自動注入 |
+| `span_id` | OTEL Agent 自動注入 |
+| `messageId` | TaskMessage.messageId |
+| `merchantId` | TaskMessage.merchantId |
+| `taskAction` | TaskMessage.taskAction |
+| `sourceJobType` | TaskMessage.sourceJobType |
+| `businessTraceId` | TaskMessage.traceId |
+
+**logback-spring.xml 雙模式：**
+- **本地開發**：人類可讀 pattern（含 traceId/msgId/merchant/action）
+- **Docker 環境**：JSON 格式（LogstashEncoder 8.0），Loki 友善
+
+### 13.6 Grafana 三大查詢場景
+
+#### 場景 1：Trace ID 走到哪？
+
+1. 打開 Grafana → Tempo
+2. 輸入 trace ID → 看到完整 waterfall：
+
+```
+API (POST /channels/actions)
+  └── Kafka Produce: momo.fast
+       └── ChannelJob.handle()
+            └── Platform API call (momo)
+            └── Kafka Produce: order.process
+                 └── OrderProcessJob.handle()
+                      └── Redis SET order:hash:...
+                      └── Kafka Produce: task.backend
+                           └── BackendJob.handle()
+```
+
+#### 場景 2：死在哪裡？
+
+```logql
+# 所有 ERROR 日誌
+{service_name=~"simpleec-.*"} |= "ERROR"
+
+# 特定 trace 的所有日誌（跨所有 JOB）
+{service_name=~"simpleec-.*"} | json | trace_id="<your-trace-id>"
+
+# Poison pill 事件
+{service_name=~"simpleec-.*"} |= "Poison pill"
+
+# DLT 路由事件
+{service_name=~"simpleec-.*"} |= "routing to DLT"
+```
+
+#### 場景 3：有沒有做資料變動？
+
+```logql
+# 特定商家的訂單處理
+{service_name="simpleec-order-job"} | json | merchantId="M001"
+
+# Retry 活動
+{service_name="simpleec-retry-job"} | json | taskAction="RETRY_DISPATCH"
+
+# Channel Job 失敗
+{service_name="simpleec-channel-momo-fast"} |= "FAILED"
+```
+
+### 13.7 設定檔清單
+
+| 檔案 | 用途 |
+|------|------|
+| `docker/otel/otel-collector-config.yml` | OTLP receiver → Tempo + Loki + Prometheus |
+| `docker/tempo/tempo.yml` | Trace 本地儲存 |
+| `docker/loki/loki.yml` | Log 本地儲存，30 天 retention |
+| `docker/prometheus/prometheus.yml` | Scrape otel-collector + api + gateway |
+| `docker/grafana/provisioning/datasources/datasources.yml` | 三個 datasource + trace↔log 關聯 |
+| `docker/grafana/provisioning/dashboards/dashboards.yml` | Dashboard 自動載入 |
+| `simpleec-core/src/main/resources/logback-spring.xml` | 雙模式結構化日誌 |
+| `simpleec-core/.../observability/TaskMdcHelper.java` | Kafka consumer MDC 注入 |
+
+### 13.8 Metrics 來源
+
+| 服務類型 | Metrics 來源 | 方式 |
+|---------|------------|------|
+| API / Gateway | Spring Boot Actuator `/actuator/prometheus` | Prometheus scrape |
+| 所有 JOB | OTEL Agent 透過 OTLP | Agent → Collector → Prometheus |
+| Kafka broker | Kafka 內建 JMX | Prometheus scrape（可選） |
+
+> **JOB 不需要 Actuator web endpoint**（它們是 `spring.main.web-application-type: none`）。
+> JOB 的 metrics 由 OTEL Agent 透過 OTLP 直接送到 Collector。
+
+---
+
+## 14. Queue 管理
+
+### 14.1 Schema Version（訊息版本控制）
+
+```java
+public final class SchemaVersionHandler {
+    public static final int CURRENT_VERSION = 1;
+    public static int normalize(int v) { return v <= 0 ? 1 : v; }
+    public static boolean isSupported(int v) {
+        return normalize(v) >= 1 && normalize(v) <= CURRENT_VERSION;
+    }
+}
+```
+
+**向後相容：** Jackson 反序列化舊訊息（缺少 `schemaVersion` 欄位）→ int 預設值 0 → `normalize(0) → 1`。
+
+**所有 JOB handle() 入口的版本檢查：**
+
+```java
+if (!SchemaVersionHandler.isSupported(msg.getSchemaVersion())) {
+    log.warn("Unsupported schemaVersion={}, routing to DLT", msg.getSchemaVersion());
+    taskProducer.send("task.dlt", null, msg);
+    ack.acknowledge();
+    return;
+}
+```
+
+**使用場景：** 滾動升級時，新版 consumer 需要處理舊版訊息（normalize），舊版 consumer 收到新版訊息（unsupported → DLT）。
+
+### 14.2 Dead Letter Topic (task.dlt)
+
+```
+task.dlt — 4 partitions, 30 天 retention
+
+★ 終點站：不被任何 consumer 消費
+★ 只供人工查看（Kafka UI 或 CLI）
+★ 30 天後自動清除
+```
+
+**進入 DLT 的路徑：**
+
+```
+1. Schema 版本不支援    → 任何 JOB 收到不支援的 schemaVersion → task.dlt
+2. Fast topic 失敗      → RetryDispatchJob 收到 originalTopic=*.fast → task.dlt（鐵則：fast 永不重打）
+3. 超過重打上限          → retryCount >= maxRetry → task.dlt
+4. 不可重打的 action     → RetryPolicyService 判斷不可重打 → task.dlt
+```
+
+**與 task.failed 的區別：**
+
+| | task.failed | task.dlt |
+|---|-----------|---------|
+| 消費者 | RetryDispatchJob | 無（人工查看） |
+| 用途 | 判斷是否重打 | 永久失敗記錄 |
+| Retention | 永久 | 30 天 |
+| 訊息來源 | 所有 JOB 失敗時 | RetryDispatchJob + Schema gate |
+
+### 14.3 Poison Pill 防護
+
+```java
+// KafkaConfig.java
+factory.setCommonErrorHandler(new DefaultErrorHandler(
+    (record, ex) -> log.error("Poison pill: topic={}, partition={}, offset={}",
+        record.topic(), record.partition(), record.offset()),
+    new FixedBackOff(0L, 0L)  // 不重試，直接跳過
+));
+```
+
+**場景：** 訊息無法反序列化（壞 JSON、class 不存在、欄位型別不相容）。不跳過會永遠卡住 partition。
+
+### 14.4 Feature Gate（功能開關）
+
+```java
+@Configuration
+@ConfigurationProperties(prefix = "feature.gates")
+@Data
+public class FeatureGateConfig {
+    private boolean enhancedRetryLogic = false;
+    // 未來依需求擴充
+}
+```
+
+各 `application.yml` 可用 `feature.gates.enhanced-retry-logic: true/false` 控制。用於滾動部署時逐步啟用新功能。
+
+### 14.5 營運工具一覽
+
+| 工具 | URL | 用途 |
+|------|-----|------|
+| Grafana | http://localhost:3000 | 統一儀表板（Metrics + Logs + Traces） |
+| Kafka UI | http://localhost:8088 | Topic 瀏覽、Consumer Group 管理、訊息查看 |
+| Prometheus | http://localhost:9090 | 直接查詢 Metrics |
+| Tempo | http://localhost:3200 | Trace 查詢（通常透過 Grafana） |
+| Loki | http://localhost:3100 | Log 查詢（通常透過 Grafana） |
+
+**詳細營運手冊：** `docs/OPERATIONS_RUNBOOK.md`（含垃圾訊息清理、offset 重置、DLT 查看、Consumer Group 卡住處理等）
+
+### 14.6 訊息流向與失敗處理（完整）
+
+```
+正常流程:
+  API → {channel}.fast → ChannelJob → SUCCESS → ack
+
+失敗流程:
+  ChannelJob → FAILED → task.failed → RetryDispatchJob
+    ├── Fast topic (鐵則) → task.dlt (永不重打)
+    ├── 超過 maxRetry → task.dlt
+    ├── 不可重打的 action → task.dlt
+    └── 可重打 → retryCount++ → 原 topic
+
+Schema 不支援:
+  任何 JOB 收到 schemaVersion 不支援 → task.dlt → ack
+
+Poison Pill:
+  反序列化失敗 → DefaultErrorHandler 跳過 → 記 log（Loki 可搜）
+```
+
+---
+
+## 15. Topic 訊息格式 + 事件流範例
+
+> **本章用真實 JSON 呈現每個 topic 裡的訊息長相，搭配端到端事件流。**
+> 從最簡單的日常操作開始：改價、改量、商品上下架、出貨確認、退款、檢查平台健康。
+
+**★ Payload 設計原則：帶齊，不回查。**
+
+> API 層發送事件時，一次把 ChannelJob 呼叫通路 API 所需的全部資訊塞進 payload。
+> ChannelJob 拿到訊息後**直接打通路 API，不回 DB 查詢**。
+>
+> 理由：
+> 1. **時間一致性** — 分散式系統中，事件到達時 DB 狀態可能已被其他事件改過，查出來的不是客戶當下要求的值
+> 2. **減少 query** — ChannelJob 是高併發消費者，每則訊息省一次 DB round-trip
+> 3. **訊息自足** — payload 自帶所有資訊，即使 DB 掛了也能從 Kafka 訊息重建完整上下文
+> 4. **Payload 大小** — 多帶幾個欄位（商品名、規格名、平台編號）頂多多幾百 bytes，不影響 Kafka 效能
+
+**★ 平台雙 ID + 雙 Name（sell_pack 欄位對照）：**
+
+> 平台通常用自己的 ID 去操作（不是我方的商品名），所以 payload 要帶齊平台端的雙 ID 和雙 Name。
+> 資料來源是 `sell_pack` 表，API 層發事件時一次查出帶齊。
+
+| Payload 欄位 | DB 欄位 | 說明 |
+|-------------|---------|------|
+| `channelProductId` | `sell_pack.channel_product_id` | 平台商品編號（平台的「賣編」） |
+| `channelSpecId` | `sell_pack.channel_spec_id` | 平台規格編號 |
+| `channelProductName` | `sell_pack.channel_product_name` | 平台上顯示的商品名稱 |
+| `channelSpecName` | `sell_pack.channel_spec_name` | 平台上顯示的規格名稱 |
+| `productName` | `product.name` | 我方商品名稱（LOG / 通知用） |
+| `specName` | `product_spec.spec_name` | 我方規格名稱（LOG / 通知用） |
+
+### 15.1 TaskMessage 通用結構
+
+所有 topic 裡的訊息都是同一個 `TaskMessage` JSON 格式：
+
+```json
+{
+  "messageId":      "uuid",          // 每則訊息唯一 ID
+  "taskType":       "channel_action",// channel_action / backend / scheduler / dispatch / dlt
+  "taskAction":     "MODIFY_PRICE",  // 具體動作
+  "sourceJobType":  "api",           // 發送來源（api / channel-job / order-process-job / ...）
+  "merchantId":     "M001",          // 商家 ID
+  "ownerType":      "channel",       // channel / account / merchant / system
+  "ownerId":        "CH-MOMO-001",   // 通路 ID / 帳號 ID / ...
+  "timezone":       "Asia/Taipei",   // 商家時區
+  "payload":        { ... },         // 各 action 不同的 payload（見下方）
+  "createdAt":      "2026-02-09T10:30:00Z",
+  "retryCount":     0,               // 重打次數
+  "topic":          "momo.fast",     // 目標 topic
+  "partitionKey":   "SP-12345",      // Kafka partition key（null = round-robin）
+  "traceId":        "abcdef1234567890abcdef1234567890",  // OTEL trace ID
+  "schemaVersion":  1                // 訊息格式版本
+}
+```
+
+---
+
+### 15.2 改價（MODIFY_PRICE）
+
+**事件流：**
+
+```
+客戶在前台改價
+  │
+  ▼
+simpleec-api (POST /api/v1/sell-packs/{id}/price)
+  │  產生 TaskMessage，key = sellPackId（同 SKU 嚴格有序）
+  ▼
+┌─────────────────────────────────────────────────────────┐
+│  Topic: momo.fast                                       │
+│  Key:   SP-12345                                        │
+│                                                         │
+│  {                                                      │
+│    "messageId":     "a1b2c3d4-...",                     │
+│    "taskType":      "channel_action",                   │
+│    "taskAction":    "MODIFY_PRICE",                     │
+│    "sourceJobType": "api",                              │
+│    "merchantId":    "M001",                             │
+│    "ownerType":     "channel",                          │
+│    "ownerId":       "CH-MOMO-001",                      │
+│    "timezone":      "Asia/Taipei",                      │
+│    "payload": {                                         │
+│      "sellPackId":         "SP-12345",                  │
+│      "productId":          "PRD-001",                   │
+│      "productName":        "養生雞精禮盒",                │
+│      "specName":           "60ml × 12入",               │
+│      "channelProductId":   "MOMO-SKU-98765",            │
+│      "channelSpecId":      "MOMO-SPEC-98765-A",         │
+│      "channelProductName": "MOMO養生雞精禮盒限定組",       │
+│      "channelSpecName":    "60ml×12入(單盒)",            │
+│      "currentPrice":       350,                         │
+│      "newPrice":           299,                         │
+│      "currency":           "TWD"                        │
+│    },                                                   │
+│    "createdAt":     "2026-02-09T10:30:00Z",             │
+│    "retryCount":    0,                                  │
+│    "topic":         "momo.fast",                        │
+│    "partitionKey":  "SP-12345",                         │
+│    "traceId":       "abc123...",                        │
+│    "schemaVersion": 1                                   │
+│  }                                                      │
+└─────────────────────────────────────────────────────────┘
+  │
+  ▼
+ChannelJob (simpleec-channel-momo-fast)
+  │  ModifyPriceActionService:
+  │    setting()          → 從 payload 取得全部欄位（不查 DB）
+  │    getPlatformTokens()→ 從 DB 取得 momo access token（唯一的 DB query）
+  │    verifyNeedData()   → 檢查 channelProductId, channelSpecId, channelProductName, newPrice 不為空
+  │    doAction()         → 直接用 payload 資訊呼叫 momo API 修改價格
+  │  結果：
+  │    ✅ 成功 → SyncLog SUCCESS → ack（結束，無下游 topic）
+  │    ❌ 失敗 → SyncLog FAILED → task.failed → ack
+  ▼
+（成功時到此結束，無下游）
+
+失敗時 → task.failed:
+┌─────────────────────────────────────────────────────────┐
+│  Topic: task.failed                                     │
+│  Key:   null                                            │
+│                                                         │
+│  {                                                      │
+│    "messageId":     "e5f6g7h8-...",                     │
+│    "taskType":      "dispatch",                         │
+│    "taskAction":    "RETRY_DISPATCH",                   │
+│    "sourceJobType": "channel-job",                      │
+│    "merchantId":    "M001",                             │
+│    "ownerType":     "channel",                          │
+│    "ownerId":       "CH-MOMO-001",                      │
+│    "payload": {                                         │
+│      "originalTopic":   "momo.fast",                    │
+│      "originalKey":     "SP-12345",                     │
+│      "originalAction":  "MODIFY_PRICE",                 │
+│      "error":           "Momo API returned 503",        │
+│      "originalPayload": { ... }                         │
+│    },                                                   │
+│    "retryCount":    0,                                  │
+│    "traceId":       "abc123...",                        │
+│    "schemaVersion": 1                                   │
+│  }                                                      │
+└─────────────────────────────────────────────────────────┘
+  │
+  ▼
+RetryDispatchJob
+  │  originalTopic = "momo.fast" → ★ fast 鐵則：永不重打
+  ▼
+┌─────────────────────────────────────────────────────────┐
+│  Topic: task.dlt                                        │
+│  Key:   null                                            │
+│                                                         │
+│  {                                                      │
+│    "messageId":     "i9j0k1l2-...",                     │
+│    "taskType":      "dlt",                              │
+│    "taskAction":    "FAST_TOPIC_NO_RETRY",              │
+│    "sourceJobType": "retry-dispatch-job",               │
+│    "merchantId":    "M001",                             │
+│    "payload": {                                         │
+│      "originalTopic":  "momo.fast",                     │
+│      "originalAction": "MODIFY_PRICE",                  │
+│      "error":          "Momo API returned 503"          │
+│    },                                                   │
+│    "retryCount":    0,                                  │
+│    "traceId":       "abc123...",                        │
+│    "schemaVersion": 1                                   │
+│  }                                                      │
+└─────────────────────────────────────────────────────────┘
+  │
+  ▼
+（終點站，30 天後自動清除，Kafka UI 可查看）
+```
+
+---
+
+### 15.3 改量（MODIFY_QUANTITY）
+
+**事件流：** 與改價幾乎相同，只是 payload 不同。
+
+```
+Topic: momo.fast
+Key:   SP-12345（同 SKU 嚴格有序，防止改價改量交錯）
+
+{
+  "messageId":     "b2c3d4e5-...",
+  "taskType":      "channel_action",
+  "taskAction":    "MODIFY_QUANTITY",
+  "sourceJobType": "api",
+  "merchantId":    "M001",
+  "ownerType":     "channel",
+  "ownerId":       "CH-MOMO-001",
+  "payload": {
+    "sellPackId":         "SP-12345",
+    "productId":          "PRD-001",
+    "productName":        "養生雞精禮盒",
+    "specName":           "60ml × 12入",
+    "channelProductId":   "MOMO-SKU-98765",
+    "channelSpecId":      "MOMO-SPEC-98765-A",
+    "channelProductName": "MOMO養生雞精禮盒限定組",
+    "channelSpecName":    "60ml×12入(單盒)",
+    "currentQuantity":    100,
+    "newQuantity":        50
+  },
+  "partitionKey":  "SP-12345",
+  "schemaVersion": 1
+}
+```
+
+> **為什麼改價改量用同一個 partitionKey (sellPackId)?**
+> 同一個 SKU 的改價和改量會落在同一個 partition → 嚴格有序 → 不會出現「先改量後改價」卻在通路端順序反過來的問題。
+
+---
+
+### 15.4 商品上架 / 下架（START_SELLING / STOP_SELLING）
+
+```
+Topic: shopee.fast
+Key:   SP-67890（同 SKU 有序，防止上架下架交錯）
+
+── 上架 ──
+{
+  "taskAction":    "START_SELLING",
+  "sourceJobType": "api",
+  "merchantId":    "M001",
+  "ownerId":       "CH-SHOPEE-001",
+  "payload": {
+    "sellPackId":         "SP-67890",
+    "productId":          "PRD-002",
+    "productName":        "有機綠茶粉",
+    "specName":           "200g 罐裝",
+    "channelProductId":   "SHOPEE-ITEM-54321",
+    "channelSpecId":      "SHOPEE-SPEC-54321-A",
+    "channelProductName": "蝦皮有機綠茶粉超值組",
+    "channelSpecName":    "200g罐裝",
+    "currentStatus":      "STOPPED",
+    "price":              450,
+    "quantity":           200
+  },
+  "partitionKey":  "SP-67890",
+  "topic":         "shopee.fast",
+  "schemaVersion": 1
+}
+
+── 下架 ──
+{
+  "taskAction":    "STOP_SELLING",
+  "sourceJobType": "api",
+  "merchantId":    "M001",
+  "ownerId":       "CH-SHOPEE-001",
+  "payload": {
+    "sellPackId":         "SP-67890",
+    "productId":          "PRD-002",
+    "productName":        "有機綠茶粉",
+    "specName":           "200g 罐裝",
+    "channelProductId":   "SHOPEE-ITEM-54321",
+    "channelSpecId":      "SHOPEE-SPEC-54321-A",
+    "channelProductName": "蝦皮有機綠茶粉超值組",
+    "channelSpecName":    "200g罐裝",
+    "currentStatus":      "SELLING"
+  },
+  "partitionKey":  "SP-67890",
+  "topic":         "shopee.fast",
+  "schemaVersion": 1
+}
+```
+
+**事件流（同改價）：**
+
+```
+API → shopee.fast → ChannelJob → 呼叫 Shopee API
+  ├── 成功 → SyncLog SUCCESS → ack（結束）
+  └── 失敗 → task.failed → RetryDispatchJob → task.dlt（fast 不重打）
+```
+
+---
+
+### 15.5 出貨確認（SHIPPING_CONFIRMED）— 設計預留
+
+> **⚠️ 出貨是獨立的大議題，本節僅列出基本框架。**
+> 實際出貨涉及：分包（一張訂單拆多箱）、物流商串接、封箱、包裝、檢貨（揀貨核對）。
+> 這些流程需要獨立的出貨管理表（order_shipments 的擴充）和倉儲作業流程，後續另行設計。
+
+**簡化版事件流（單包出貨）：**
+
+```
+客戶在前台點「確認出貨」
+  │
+  ▼
+simpleec-api (POST /api/v1/orders/{id}/ship)
+  │  key = orderId（同一張訂單的出貨操作有序）
+  ▼
+┌─────────────────────────────────────────────────────────┐
+│  Topic: yahoo.fast                                      │
+│  Key:   ORD-20260209-001                                │
+│                                                         │
+│  {                                                      │
+│    "taskAction":    "SHIPPING_CONFIRMED",               │
+│    "sourceJobType": "api",                              │
+│    "merchantId":    "M001",                             │
+│    "ownerId":       "CH-YAHOO-001",                     │
+│    "payload": {                                         │
+│      "orderId":           "ORD-20260209-001",           │
+│      "channelOrderId":    "YAHOO-ORD-88888",            │
+│      "orderItems": [                                    │
+│        {                                                │
+│          "channelItemId":  "YAHOO-ITEM-001",            │
+│          "productName":    "養生雞精禮盒",                │
+│          "specName":       "60ml × 12入",               │
+│          "quantity":       2                             │
+│        }                                                │
+│      ],                                                 │
+│      "shipmentInfo": {                                  │
+│        "trackingNumber":   "7711234567890",             │
+│        "shippingCompany":  "黑貓宅急便",                 │
+│        "shipDate":         "2026-02-09"                 │
+│      }                                                  │
+│    },                                                   │
+│    "partitionKey":  "ORD-20260209-001",                 │
+│    "topic":         "yahoo.fast",                       │
+│    "schemaVersion": 1                                   │
+│  }                                                      │
+└─────────────────────────────────────────────────────────┘
+  │
+  ▼
+ChannelJob → 呼叫 Yahoo API 回報出貨
+  ├── 成功 → task.backend (ORDER_STATUS_CHANGED)
+  └── 失敗 → task.failed → task.dlt（fast 不重打）
+```
+
+**後續需設計的出貨子議題：**
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│  出貨完整流程（待設計）                                          │
+│                                                                │
+│  1. 分包（Split Shipment）                                      │
+│     一張訂單多個商品 → 拆成多箱出貨 → 每箱各自追蹤號               │
+│     需要 order_shipment_items 關聯表                              │
+│                                                                │
+│  2. 物流商串接                                                   │
+│     各物流商 API 不同 → 取號、列印面單、追蹤狀態回寫               │
+│     可能需要獨立的 logistics adapter 層                           │
+│                                                                │
+│  3. 封箱 / 包裝                                                  │
+│     記錄每箱的尺寸重量 → 物流商計費依據                            │
+│                                                                │
+│  4. 檢貨 / 揀貨核對                                              │
+│     倉庫作業：揀貨清單 → 掃碼核對 → 確認無誤 → 封箱               │
+│     需要 picking_list / packing_list 相關表                      │
+│                                                                │
+│  5. 平台出貨規則差異                                              │
+│     momo: 需回傳物流單號 + 出貨時間                               │
+│     shopee: 需先取得 shipping order → 再 confirm ship            │
+│     yahoo: 回傳追蹤號即可                                        │
+│     pchome: 需回傳物流商代碼 + 追蹤號                             │
+│                                                                │
+│  ★ 先不開發，但 payload 結構預留 orderItems + shipmentInfo        │
+│    以便後續擴充為分包模式                                         │
+└────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 15.6 退款拉取（FETCH_REFUND_ORDERS）
+
+**事件流：**
+
+```
+SchedulerJob 排程觸發（每 30 分鐘）
+  │
+  ▼
+┌─────────────────────────────────────────────────────────┐
+│  Topic: pchome.slow                                     │
+│  Key:   null（round-robin，最大吞吐）                     │
+│                                                         │
+│  {                                                      │
+│    "taskAction":    "FETCH_REFUND_ORDERS",              │
+│    "sourceJobType": "scheduler-job",                    │
+│    "merchantId":    "M001",                             │
+│    "ownerId":       "CH-PCHOME-001",                    │
+│    "payload": {                                         │
+│      "channelId":   "CH-PCHOME-001",                    │
+│      "fromDate":    "2026-02-09T00:00:00Z",             │
+│      "toDate":      "2026-02-09T10:30:00Z"              │
+│    },                                                   │
+│    "partitionKey":  null,                               │
+│    "topic":         "pchome.slow",                      │
+│    "schemaVersion": 1                                   │
+│  }                                                      │
+└─────────────────────────────────────────────────────────┘
+  │
+  ▼
+ChannelJob (simpleec-channel-pchome-slow)
+  │  FetchRefundOrdersActionService:
+  │    doAction() → 呼叫 PChome API 拉退款單
+  │    每筆退款 → Hash Dedup → 有變化才送下游
+  ▼
+┌─────────────────────────────────────────────────────────┐
+│  Topic: order.process                                   │
+│  Key:   CH-PCHOME-001:M001                              │
+│                                                         │
+│  {                                                      │
+│    "taskAction":    "REFUND_ORDER",                     │
+│    "sourceJobType": "channel-job",                      │
+│    "merchantId":    "M001",                             │
+│    "ownerId":       "CH-PCHOME-001",                    │
+│    "payload": {                                         │
+│      "channelOrderId": "PC-REFUND-55555",               │
+│      "orderStatus":    "REFUNDED",                      │
+│      "refundAmount":   1200,                            │
+│      "refundReason":   "商品瑕疵",                       │
+│      "orderHash":      "sha256:e3b0c44298fc..."         │
+│    },                                                   │
+│    "partitionKey":  "CH-PCHOME-001:M001",               │
+│    "topic":         "order.process",                    │
+│    "schemaVersion": 1                                   │
+│  }                                                      │
+└─────────────────────────────────────────────────────────┘
+  │
+  ▼
+OrderProcessJob
+  │  更新 Redis hash → DB upsert → 狀態有變 → 送 task.backend
+  ▼
+┌─────────────────────────────────────────────────────────┐
+│  Topic: task.backend                                    │
+│  Key:   M001                                            │
+│                                                         │
+│  {                                                      │
+│    "taskAction":    "ORDER_STATUS_CHANGED",             │
+│    "sourceJobType": "order-process-job",                │
+│    "merchantId":    "M001",                             │
+│    "payload": {                                         │
+│      "channelOrderId": "PC-REFUND-55555",               │
+│      "orderStatus":    "REFUNDED",                      │
+│      "refundAmount":   1200                             │
+│    },                                                   │
+│    "partitionKey":  "M001",                             │
+│    "topic":         "task.backend",                     │
+│    "schemaVersion": 1                                   │
+│  }                                                      │
+└─────────────────────────────────────────────────────────┘
+  │
+  ▼
+BackendJob → 更新 DB + 發通知（結束）
+```
+
+> **slow topic 失敗時可以重打：**
+> pchome.slow 失敗 → task.failed → RetryDispatchJob 判斷 retryCount < maxRetry → retryCount++ → 重新送回 pchome.slow
+
+---
+
+### 15.7 檢查平台健康（CHECK_HEALTH）
+
+**事件流：**
+
+```
+SchedulerJob 排程觸發（每 10 分鐘）
+  │  對每個啟用的通路各發一則
+  ▼
+┌─────────────────────────────────────────────────────────┐
+│  Topic: momo.fast                                       │
+│  Key:   CH-MOMO-001（同通路健康檢查排隊）                  │
+│                                                         │
+│  {                                                      │
+│    "taskAction":    "CHECK_HEALTH",                     │
+│    "sourceJobType": "scheduler-job",                    │
+│    "merchantId":    "M001",                             │
+│    "ownerId":       "CH-MOMO-001",                      │
+│    "payload": {                                         │
+│      "channelId":   "CH-MOMO-001",                      │
+│      "channelType": "MOMO"                              │
+│    },                                                   │
+│    "partitionKey":  "CH-MOMO-001",                      │
+│    "topic":         "momo.fast",                        │
+│    "schemaVersion": 1                                   │
+│  }                                                      │
+└─────────────────────────────────────────────────────────┘
+  │
+  ▼
+ChannelJob (simpleec-channel-momo-fast)
+  │  CheckHealthActionService:
+  │    setting()          → 取得 channelId
+  │    getPlatformTokens()→ 從 DB 取得 momo token
+  │    verifyNeedData()   → 確認 token 存在
+  │    doAction()         → 呼叫 momo API 驗證連線
+  │      ├── API 回應正常 + Token 有效 → health = "OK"         🟢
+  │      ├── API 回應正常 + Token 過期 → health = "TOKEN_INVALID" 🟡
+  │      └── API 無回應               → health = "API_DOWN"    🔴
+  │    寫入 channel_sync_logs（health 欄位）
+  ▼
+（結束，無下游 topic。前端 Dashboard 查 channel_sync_logs 最後一筆）
+```
+
+> **CHECK_HEALTH 是獨立 action**，不附加在其他操作上。每 10 分鐘獨立巡檢一次，結果寫進 DB，前端 Dashboard 查詢顯示三色燈號。
+
+---
+
+### 15.8 接受買家取消（ACCEPT_BUYER_CANCELLATION）
+
+```
+Topic: shopee.fast
+Key:   ORD-20260209-002（同訂單有序）
+
+{
+  "taskAction":    "ACCEPT_BUYER_CANCELLATION",
+  "sourceJobType": "api",
+  "merchantId":    "M001",
+  "ownerId":       "CH-SHOPEE-001",
+  "payload": {
+    "orderId":          "ORD-20260209-002",
+    "channelOrderId":   "SHOPEE-ORD-77777",
+    "buyerName":        "王小明",
+    "orderAmount":      1580,
+    "cancelReason":     "買家要求取消",
+    "orderItems": [
+      {
+        "channelItemId": "SHOPEE-ITEM-002",
+        "productName":   "有機綠茶粉",
+        "specName":      "200g 罐裝",
+        "quantity":      2,
+        "unitPrice":     450
+      }
+    ]
+  },
+  "partitionKey":  "ORD-20260209-002",
+  "topic":         "shopee.fast",
+  "schemaVersion": 1
+}
+```
+
+**事件流：**
+
+```
+API → shopee.fast → ChannelJob → Shopee API (接受取消)
+  ├── 成功 → task.backend (ORDER_STATUS_CHANGED, newStatus=CANCELLED)
+  │            └── BackendJob → 更新 DB + 退庫存 + 通知
+  └── 失敗 → task.failed → task.dlt（fast 不重打）
+```
+
+---
+
+### 15.9 排程心跳 + 分發（scheduler topic）
+
+```
+HeartbeatTimer 每 1 秒發一則
+  │
+  ▼
+┌─────────────────────────────────────────────────────────┐
+│  Topic: scheduler                                       │
+│  Key:   null                                            │
+│                                                         │
+│  {                                                      │
+│    "taskAction":    "TICK",                             │
+│    "sourceJobType": "heartbeat-timer",                  │
+│    "merchantId":    null,                               │
+│    "payload": {                                         │
+│      "tickTime": "2026-02-09T10:30:01Z"                 │
+│    },                                                   │
+│    "topic":         "scheduler",                        │
+│    "schemaVersion": 1                                   │
+│  }                                                      │
+└─────────────────────────────────────────────────────────┘
+  │
+  ▼
+SchedulerJob 消費
+  │  拿 tickTime → 對照 ScheduleConfig 裡的規則
+  │  例：每 300 秒 FETCH_ORDERS，每 600 秒 CHECK_HEALTH
+  │  時間到 → 從 DB 查所有啟用的通路 → 每個通路發一則到對應 topic
+  ▼
+  ├── momo.slow:  { taskAction: "FETCH_ORDERS", ownerId: "CH-MOMO-001", ... }
+  ├── shopee.slow: { taskAction: "FETCH_ORDERS", ownerId: "CH-SHOPEE-001", ... }
+  ├── momo.fast:  { taskAction: "CHECK_HEALTH", ownerId: "CH-MOMO-001", ... }
+  ├── shopee.fast: { taskAction: "CHECK_HEALTH", ownerId: "CH-SHOPEE-001", ... }
+  └── task.backend: { taskAction: "DAILY_STATISTICS", merchantId: "M001", ... }
+      （僅在商家當地時間 00:05~00:10 時觸發）
+```
+
+---
+
+### 15.10 Topic 一覽速查表
+
+| Topic | 消費者 | 典型 Action | Partition Key | 失敗處理 |
+|-------|--------|------------|---------------|---------|
+| `momo.fast` | ChannelJob | MODIFY_PRICE, MODIFY_QUANTITY, START/STOP_SELLING, SHIPPING_CONFIRMED, CHECK_HEALTH, ACCEPT_BUYER_CANCELLATION | sellPackId / orderId / channelId | ❌ 不重打 → DLT |
+| `momo.slow` | ChannelJob | FETCH_ORDERS, FETCH_PRODUCTS, FETCH_REFUND_ORDERS, GET_QUANTITY | null / channelId | ♻️ 可重打 |
+| `shopee.fast` | ChannelJob | 同 momo.fast | 同上 | ❌ 不重打 → DLT |
+| `shopee.slow` | ChannelJob | 同 momo.slow | 同上 | ♻️ 可重打 |
+| `yahoo.fast` | ChannelJob | 同 momo.fast | 同上 | ❌ 不重打 → DLT |
+| `yahoo.slow` | ChannelJob | 同 momo.slow | 同上 | ♻️ 可重打 |
+| `pchome.fast` | ChannelJob | 同 momo.fast | 同上 | ❌ 不重打 → DLT |
+| `pchome.slow` | ChannelJob | 同 momo.slow | 同上 | ♻️ 可重打 |
+| `order.process` | OrderProcessJob | 訂單/退款整理 | channelId:merchantId | ♻️ 可重打 |
+| `task.backend` | BackendJob | ORDER_STATUS_CHANGED, DAILY_STATISTICS, MANAGE_PARTITIONS | merchantId | ♻️ 可重打 |
+| `task.frontend` | FrontendJob | 前台任務 | merchantId | ♻️ 可重打 |
+| `scheduler` | SchedulerJob | TICK | null | — |
+| `task.failed` | RetryDispatchJob | RETRY_DISPATCH | null | 判斷後 → 重打或 DLT |
+| `task.dlt` | 無（人工查看） | 各種死信 | null | 30 天自動清除 |
