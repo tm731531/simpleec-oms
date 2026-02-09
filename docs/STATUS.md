@@ -141,7 +141,8 @@ DTO 設計稿見 `docs/event-flows/DB_ENTITY_GAPS.md` §6。
 
 **業務決策（2026-02-09）：**
 - 正物流 vs 逆物流分離：cancelled 是正物流結束信號，refunding/refunded 是逆物流
-- 部分退貨：orders.status 不變（仍 completed），靠 refund_amount + has_refund 判斷
+- **退貨可從任何狀態觸發**：平台資料有 gap（區間沒覆蓋、webhook 漏接、跳過中間狀態），不做狀態轉換驗證
+- 部分退貨：orders.status 不變（維持當前狀態），靠 refund_amount + has_refund 判斷
 - 全額退貨：refund_amount >= total_amount 時 status 改為 refunded
 - 退款兩邊都記：refund_orders 記明細，orders.refund_amount 記匯總
 - 統計退款記在退款日（不回溯訂單建立日）

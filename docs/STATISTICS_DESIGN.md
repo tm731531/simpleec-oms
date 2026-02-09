@@ -14,21 +14,23 @@
 正物流（Forward Logistics）:
   pending → confirmed → processing → shipped → delivered → completed
                                                               │
-                                                              ├─ cancelled（正物流結束信號，非逆物流）
-                                                              │
-逆物流（Reverse Logistics）:                                    │
-  完成的訂單可能被翻轉 ──────────────────────────────────────────┘
-                              │
-                              ▼
-                        refunding → refunded
-                        （可部分退貨）
+                                                              └─ cancelled（正物流結束信號，非逆物流）
+
+逆物流（Reverse Logistics）:
+  ★ 任何正物流狀態都可能直接跳到退貨（平台資料有 gap）
+  pending ─────────┐
+  confirmed ───────┤
+  processing ──────┤
+  shipped ─────────┤──→ refunding → refunded
+  delivered ───────┤    （可部分退貨）
+  completed ───────┘
 ```
 
 **關鍵認知：**
 - `cancelled` 是正物流的結束信號，不是逆物流
 - 逆物流只有 `refunding` / `refunded`
-- **部分退貨**：一張 $1000 的訂單可能只退 $300，訂單仍是 `completed` 狀態
-- 完成後的訂單可被逆物流翻轉（completed → refunding → refunded）
+- **部分退貨**：一張 $1000 的訂單可能只退 $300，訂單狀態不變
+- **退貨可從任何狀態觸發**：因為我們從平台拉單有 gap（時間區間沒覆蓋、webhook 漏接、平台跳過中間狀態），訂單可能從 confirmed 直接跳到 refunding，不能假設一定經過 completed
 
 ### 1.2 四種角色的統計視角
 
@@ -59,27 +61,30 @@ net_received = received_amount - refund_amount
 ### 1.4 部分退貨的處理
 
 ```
-情境：訂單 ORD-001，total_amount = $1,000，status = completed
+情境：訂單 ORD-001，total_amount = $1,000，status = shipped（任何狀態皆可能發生退貨）
 
 退貨 #1：退 $300（商品 A 瑕疵）
   → refund_orders 新增一筆：refund_amount = 300
   → orders.refund_amount 累加：0 → 300
   → orders.has_refund = true
-  → orders.order_status 不變（仍是 completed）
+  → orders.order_status 不變（仍是 shipped）
 
 退貨 #2：再退 $200（商品 B 不滿意）
   → refund_orders 再新增一筆：refund_amount = 200
   → orders.refund_amount 累加：300 → 500
-  → orders.order_status 不變（仍是 completed）
+  → orders.order_status 不變（仍是 shipped）
 
 全額退貨：退剩餘 $500
   → refund_orders 新增一筆：refund_amount = 500
   → orders.refund_amount 累加：500 → 1000
-  → orders.order_status 改為 refunding → refunded（全退才改狀態）
+  → orders.order_status 改為 refunded（全退才改狀態）
 
 規則：
-  refund_amount < total_amount → 部分退貨 → status 不變
+  refund_amount < total_amount → 部分退貨 → status 不變（維持當前狀態）
   refund_amount >= total_amount → 全額退貨 → status = refunded
+
+★ 退貨可從任何 order_status 發生（pending, confirmed, processing, shipped, delivered, completed）
+  因為平台資料有 gap：區間沒覆蓋、webhook 漏接、平台跳過中間狀態等
 ```
 
 ---
@@ -105,20 +110,26 @@ ALTER TABLE public.orders
 ### 2.2 狀態轉換規則（含逆物流）
 
 ```
-正物流狀態轉換（單向）:
+正物流狀態轉換（理想單向，但平台資料有 gap，可能跳過中間狀態）:
   pending → confirmed → processing → shipped → delivered → completed
                                                   │
                                                   └→ cancelled（任何正物流階段都可取消）
 
-逆物流狀態轉換（僅在 completed 之後觸發）:
-  completed + 部分退貨 → completed（status 不變，refund_amount > 0, has_refund = true）
-  completed + 全額退貨 → refunding → refunded
+逆物流狀態轉換（★ 可從任何正物流狀態觸發，不限 completed）:
+  任何狀態 + 部分退貨 → status 不變，refund_amount > 0, has_refund = true
+  任何狀態 + 全額退貨 → status = refunded
+
+  ★ 為什麼不限 completed？
+    - 平台拉單有時間 gap（區間沒覆蓋到）
+    - Webhook 可能漏接
+    - 平台可能跳過中間狀態（confirmed 直接跳 refunding）
+    - 我們的系統必須容錯，接受任何合法的狀態轉換
 
 判斷邏輯:
   IF orders.refund_amount >= orders.total_amount:
       status = refunded（全退）
   ELSE IF orders.refund_amount > 0:
-      status = completed（部分退，status 不變）
+      status 不變（部分退，維持當前正物流狀態）
       has_refund = true
 ```
 
@@ -319,14 +330,16 @@ OrderStatusChange 事件來源：
 payload = {
     orderId: "ORD-001",
     channelOrderId: "MOMO-ORD-12345",
-    fromStatus: "completed",
-    toStatus: "refunding",      // 或 "refunded"
-    refundOrderId: "RFN-001",   // 如果是退貨觸發的，帶退貨單 ID
-    refundAmount: 300            // 如果是退貨觸發的，帶退款金額
+    fromStatus: "shipped",       // ★ 可以是任何狀態（平台資料有 gap）
+    toStatus: "refunding",       // 或 "refunded"
+    refundOrderId: "RFN-001",    // 如果是退貨觸發的，帶退貨單 ID
+    refundAmount: 300             // 如果是退貨觸發的，帶退款金額
 }
 
 處理邏輯：
   1. 更新 orders.order_status
+     ★ 不驗證 fromStatus → toStatus 是否符合「理想」流程
+       因為平台資料有 gap，任何狀態轉換都可能發生
   2. 寫 order_status_logs
 
   // ★ 退款相關同步
@@ -336,7 +349,7 @@ payload = {
              has_refund = true
          WHERE id = orderId
 
-  // ★ 全退判斷
+  // ★ 全退判斷（不管當前 status 是什麼，只看金額）
   4. IF orders.refund_amount >= orders.total_amount:
        UPDATE orders SET order_status = 'refunded'
 
@@ -352,15 +365,19 @@ payload = {
                     │                                     │
                     │                                     │
   pending ──→ confirmed ──→ processing ──→ shipped ──→ delivered ──→ completed
-                                                                        │
-                                                                        │ (全退時)
-                                                                        ▼
-                                                                    refunding ──→ refunded
+     │            │              │            │            │              │
+     │            │              │            │            │              │
+     └────────────┴──────────────┴────────────┴────────────┴──────────────┘
+                                      │
+                                      │ (退貨：任何狀態都可能)
+                                      ▼
+                               refunding ──→ refunded
 
-  ★ 部分退貨不改 order_status（仍是 completed）
-  ★ 全額退貨（refund_amount >= total_amount）才走 refunding → refunded
-  ★ cancelled 可從 pending / confirmed / processing 觸發（出貨前才能取消）
-  ★ shipped 之後不能 cancel（已發貨，只能走退貨流程）
+  ★ 退貨可從任何正物流狀態觸發（平台資料有 gap，不能假設線性流程）
+  ★ 部分退貨不改 order_status（維持當前狀態）
+  ★ 全額退貨（refund_amount >= total_amount）→ status = refunded
+  ★ cancelled 可從任何正物流階段觸發
+  ★ 不做狀態轉換驗證 — 接受平台給的任何合法狀態
 ```
 
 ---
@@ -377,7 +394,7 @@ payload = {
   shipped      → 已出貨（紫色）
   delivered    → 已送達（綠色）
   completed    → 已完成（綠色）
-  completed + has_refund → 已完成 ⚠️ 部分退貨（綠色 + 橙色小標）
+  任何狀態 + has_refund → 原狀態 ⚠️ 部分退貨（原色 + 橙色小標）
   cancelled    → 已取消（灰色）
   refunding    → 退款中（橙色）
   refunded     → 已退款（紅色）
@@ -386,7 +403,7 @@ payload = {
 ### 6.2 訂單詳情頁
 
 ```
-訂單 ORD-001                     狀態: 已完成 ⚠️ 部分退貨
+訂單 ORD-001                     狀態: 已出貨 ⚠️ 部分退貨
 ──────────────────────────────────
 訂單金額:    $1,000.00
 退款金額:    -$300.00            ← 醒目紅字

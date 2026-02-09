@@ -95,8 +95,9 @@ simpleec-oms/
 
 ### 正逆物流 & 退貨
 - **正物流**：pending → confirmed → processing → shipped → delivered → completed → cancelled
-- **逆物流**：completed 之後才有 refunding → refunded
-- **部分退貨**：orders.status 不變（仍 completed），orders.refund_amount 累加，has_refund = true
+- **逆物流**：refunding → refunded（**可從任何正物流狀態觸發**，不限 completed）
+- **平台資料有 gap**：區間沒覆蓋、webhook 漏接、平台跳過中間狀態 — 不做狀態轉換驗證
+- **部分退貨**：orders.status 不變（維持當前狀態），orders.refund_amount 累加，has_refund = true
 - **全額退貨**：refund_amount >= total_amount 時 status 改為 refunded
 - **兩邊都記**：refund_orders 記明細，orders.refund_amount 記匯總（ORDER_STATUS_CHANGED 觸發同步）
 - **統計退款記在退款日**，不回溯訂單建立日
