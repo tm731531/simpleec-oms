@@ -1,5 +1,9 @@
 # FETCH_ORDERS — 拉單事件流
 
+> **依據: SCHEMA.md v4（2026-02-09）**
+>
+> PK 全部 VARCHAR(20) NanoID | 訂單明細 = orders.items JSONB（無 order_items 獨立表） | SKU 欄位統一為 `sku`
+
 > **這是系統中最重要的事件流：** 3 個 JOB 串接（ChannelJob → OrderProcessJob → BackendJob），
 > 每一步的 payload 必須帶齊下一步所需的所有欄位，不能 miss。
 
@@ -149,15 +153,14 @@ ChannelJob (simpleec-channel-momo-slow)
 │      "paidAt":           "2026-02-09T08:31:00Z",            │
 │      "shippedAt":        null,                               │
 │                                                              │
-│      "orderItems": [                                         │
+│      "items": [                                              │
 │        {                                                     │
+│          "sku":                "HGJ-60-12",                  │
 │          "channelProductId":   "MOMO-SKU-98765",             │
 │          "channelSpecId":      "MOMO-SPEC-98765-A",          │
 │          "channelProductName": "MOMO養生雞精禮盒限定組",        │
 │          "channelSpecName":    "60ml×12入(單盒)",             │
-│          "skuCode":            "HGJ-60-12",                  │
 │          "productName":        "MOMO養生雞精禮盒限定組",        │
-│          "specInfo":           "60ml×12入(單盒)",             │
 │          "quantity":           2,                             │
 │          "unitPrice":          790.00,                        │
 │          "subtotal":           1580.00                        │
@@ -181,25 +184,30 @@ OrderProcessJob (simpleec-order-job)
   │  收到單筆訂單 TaskMessage（已過 Hash Dedup，保證有變動）
   │
   │  Step 1: 提取訂單資料
-  │    從 payload 解析出所有訂單欄位 + orderItems[]
+  │    從 payload 解析出所有訂單欄位 + items[]
   │
   │  Step 2: 查 DB 是否已存在
   │    SELECT * FROM orders
   │    WHERE channel_id = ? AND channel_order_id = ?
   │
   │  Step 3A: 新訂單（不存在）
+  │    ├── 產生 orderId = NanoID()
+  │    ├── 對每個 item 做 sell_pack match:
+  │    │     用 channel_product_id + channel_spec_id 查 sell_pack
+  │    │     → 找到 → item.sellPackId = sell_pack.id
+  │    │              item.productId  = sell_pack.product_id
+  │    │     → 找不到 → item.sellPackId = null
+  │    │                item.productId  = null
+  │    │                （訂單先入庫，商品同步後再補）
+  │    ├── 組裝 items JSONB array
   │    ├── INSERT orders 表（所有欄位見下方對照表）
-  │    ├── 對每個 orderItem:
-  │    │     ├── 用 channel_product_id + channel_spec_id 查 sell_pack
-  │    │     │     → 找到 → 填入 sell_pack_id, product_id
-  │    │     │     → 找不到 → sell_pack_id=null, product_id=null（訂單先入庫，商品後補）
-  │    │     └── INSERT order_items 表
   │    ├── INSERT order_status_logs: from_status=null, to_status=payload.orderStatus
   │    └── statusChanged = true
   │
   │  Step 3B: 既有訂單但狀態變更
   │    ├── UPDATE orders SET order_status=?, updated_at=now()
   │    │   + 其他可能變更的欄位（shippedAt, paidAt 等）
+  │    │   + 更新 items JSONB（如果平台有帶更新的明細）
   │    ├── INSERT order_status_logs: from_status=舊, to_status=新
   │    └── statusChanged = true
   │
@@ -226,7 +234,7 @@ OrderProcessJob (simpleec-order-job)
 │    "sourceJobType": "order-process-job",                     │
 │    "merchantId":    "M001",                                  │
 │    "payload": {                                              │
-│      "orderId":         12345,                               │
+│      "orderId":         "ord_Abc123xYz",                     │
 │      "channelOrderId":  "MOMO-ORD-12345",                   │
 │      "channelId":       "CH-MOMO-001",                       │
 │      "fromStatus":      null,                                │
@@ -252,108 +260,126 @@ BackendJob → ORDER_STATUS_CHANGED handler
 
 ### orders 表 ← payload 直接映射
 
-| DB 欄位 | payload 來源 | 說明 |
-|---------|-------------|------|
-| `id` | 自增 | PK |
-| `merchant_id` | msg.merchantId | |
-| `channel_id` | msg.ownerId | FK → channel |
-| `channel_order_id` | `payload.channelOrderId` | 唯一約束: (channel_id, channel_order_id) |
-| `order_status` | `payload.orderStatus` | pending/confirmed/processing/shipped/delivered/completed/cancelled/refunding/refunded |
-| `buyer_name` | `payload.buyerName` | |
-| `buyer_phone` | `payload.buyerPhone` | |
-| `buyer_email` | `payload.buyerEmail` | |
-| `shipping_address` | `payload.shippingAddress` | |
-| `shipping_method` | `payload.shippingMethod` | |
-| `payment_method` | `payload.paymentMethod` | |
-| `total_amount` | `payload.totalAmount` | |
-| `shipping_fee` | `payload.shippingFee` | |
-| `discount_amount` | `payload.discountAmount` | |
-| `channel_created_at` | `payload.channelCreatedAt` | 平台端建立時間 |
-| `paid_at` | `payload.paidAt` | |
-| `shipped_at` | `payload.shippedAt` | |
-| `created_at` | auto | |
-| `updated_at` | auto | |
+| DB 欄位 | 類型 | payload 來源 | 說明 |
+|---------|------|-------------|------|
+| `id` | VARCHAR(20) | NanoID() | PK（程式端產生） |
+| `merchant_id` | VARCHAR(20) | msg.merchantId | |
+| `channel_id` | VARCHAR(20) | msg.ownerId | FK → channel |
+| `channel_order_id` | VARCHAR(100) | `payload.channelOrderId` | 唯一約束: (channel_id, channel_order_id) |
+| `order_status` | VARCHAR(20) | `payload.orderStatus` | pending/confirmed/processing/shipped/delivered/completed/cancelled/refunding/refunded |
+| `buyer_name` | VARCHAR(256) | `payload.buyerName` | |
+| `buyer_phone` | VARCHAR(50) | `payload.buyerPhone` | |
+| `buyer_email` | VARCHAR(256) | `payload.buyerEmail` | |
+| `shipping_address` | TEXT | `payload.shippingAddress` | |
+| `shipping_method` | VARCHAR(50) | `payload.shippingMethod` | |
+| `payment_method` | VARCHAR(50) | `payload.paymentMethod` | |
+| `total_amount` | DECIMAL(12,2) | `payload.totalAmount` | |
+| `shipping_fee` | DECIMAL(12,2) | `payload.shippingFee` | |
+| `discount_amount` | DECIMAL(12,2) | `payload.discountAmount` | |
+| `items` | JSONB | `payload.items[]` | **訂單明細（見下方 JSONB 結構）** |
+| `channel_created_at` | TIMESTAMPTZ | `payload.channelCreatedAt` | 平台端建立時間 |
+| `paid_at` | TIMESTAMPTZ | `payload.paidAt` | |
+| `shipped_at` | TIMESTAMPTZ | `payload.shippedAt` | |
+| `created_at` | TIMESTAMPTZ | auto | |
+| `updated_at` | TIMESTAMPTZ | auto | |
 
-### order_items 表 ← payload.orderItems[] 映射
+### orders.items JSONB ← payload.items[] 映射
 
-| DB 欄位 | payload.orderItems[i] 來源 | 說明 |
-|---------|--------------------------|------|
-| `id` | 自增 | PK |
-| `order_id` | 新建的 orders.id | FK |
-| `product_id` | **sell_pack 查詢結果** | 透過 channelProductId + channelSpecId → sell_pack → product_id |
-| `sell_pack_id` | **sell_pack 查詢結果** | 透過 channelProductId + channelSpecId 查 sell_pack.id |
-| `sku_code` | `item.skuCode` | |
-| `product_name` | `item.productName` | 平台商品名（存平台給的名稱） |
-| `spec_info` | `item.specInfo` | 平台規格資訊 |
+```json
+[
+  {
+    "sku":                "HGJ-60-12",
+    "channelProductId":   "MOMO-SKU-98765",
+    "channelSpecId":      "MOMO-SPEC-98765-A",
+    "channelProductName": "MOMO養生雞精禮盒限定組",
+    "channelSpecName":    "60ml×12入(單盒)",
+    "productName":        "MOMO養生雞精禮盒限定組",
+    "quantity":           2,
+    "unitPrice":          790.00,
+    "subtotal":           1580.00,
+    "sellPackId":         "sp_abc123",
+    "productId":          "pd_xyz789"
+  }
+]
+```
+
+| JSONB 欄位 | payload.items[i] 來源 | 說明 |
+|------------|----------------------|------|
+| `sku` | `item.sku` | 我方 SKU（平台帶的 skuCode） |
+| `channelProductId` | `item.channelProductId` | 平台商品編號（賣編） |
+| `channelSpecId` | `item.channelSpecId` | 平台規格編號 |
+| `channelProductName` | `item.channelProductName` | 平台商品名 |
+| `channelSpecName` | `item.channelSpecName` | 平台規格名 |
+| `productName` | `item.productName` | 存平台給的名稱（保留原始資訊） |
 | `quantity` | `item.quantity` | |
-| `unit_price` | `item.unitPrice` | |
+| `unitPrice` | `item.unitPrice` | |
 | `subtotal` | `item.subtotal` | |
+| `sellPackId` | **sell_pack 查詢結果** | 透過 channelProductId + channelSpecId 查 sell_pack.id |
+| `productId` | **sell_pack 查詢結果** | 透過 sell_pack → product_id |
 
-**★ order_items 存平台名稱（不是我方商品名）** — 訂單是平台來的，保留原始資訊。
-product_id 和 sell_pack_id 靠 match 填入，找不到就先 null，商品同步後再補。
-
-### order_items → sell_pack 的 match 邏輯
+**★ sellPackId 和 productId 在訂單入庫時嘗試 match：**
 
 ```
-orderItem.channelProductId + orderItem.channelSpecId
+item.channelProductId + item.channelSpecId
   │
   ▼
 SELECT id, product_id FROM sell_pack
 WHERE channel_id = ? AND channel_product_id = ?
-  AND (channel_spec_id = ? OR channel_spec_id IS NULL)
+  AND COALESCE(channel_spec_id, '') = COALESCE(?, '')
   │
-  ├── 找到 → order_items.sell_pack_id = sell_pack.id
-  │           order_items.product_id   = sell_pack.product_id
+  ├── 找到 → item.sellPackId = sell_pack.id
+  │           item.productId  = sell_pack.product_id
   │
-  └── 找不到 → order_items.sell_pack_id = null
-                order_items.product_id   = null
+  └── 找不到 → item.sellPackId = null
+                item.productId  = null
                 （訂單先入庫，後續同步商品後再補關聯）
 ```
 
 ### order_status_logs 表
 
-| DB 欄位 | 來源 | 說明 |
-|---------|------|------|
-| `order_id` | 新建或既有的 orders.id | FK |
-| `from_status` | 新訂單=null, 狀態變更=舊 status | |
-| `to_status` | payload.orderStatus | |
-| `operator` | "SYSTEM" | 自動拉單 |
-| `remark` | "FETCH_ORDERS from {platform}" | |
+| DB 欄位 | 類型 | 來源 | 說明 |
+|---------|------|------|------|
+| `id` | VARCHAR(20) | NanoID() | PK |
+| `order_id` | VARCHAR(20) | 新建或既有的 orders.id | FK |
+| `from_status` | VARCHAR(20) | 新訂單=null, 狀態變更=舊 status | |
+| `to_status` | VARCHAR(20) | payload.orderStatus | |
+| `operator` | VARCHAR(100) | "SYSTEM" | 自動拉單 |
+| `remark` | TEXT | "FETCH_ORDERS from {platform}" | |
+| `created_at` | TIMESTAMPTZ | auto | |
 
 ## 4. Entity 缺口分析
 
-### ❌ Order.java — 類型不一致
+### ❌ Order.java — 所有 ID 型別錯 + 缺 items JSONB
 
-| 欄位 | Entity | DB | 問題 |
-|------|--------|-----|------|
-| `merchantId` | `Long` | `varchar(20)` | **類型不一致！** DB 是 varchar，Entity 是 Long |
-| `channelId` | `Long` | `varchar(20)` | **類型不一致！** DB 是 varchar，Entity 是 Long |
+| 欄位 | Entity 目前 | 應該是 | 問題 |
+|------|-----------|--------|------|
+| `id` | `Long` | `String` | **NanoID** |
+| `merchantId` | `Long` | `String` | **NanoID** |
+| `channelId` | `Long` | `String` | **NanoID** |
+| `items` | 無 | `String` (JSONB) | **缺少！訂單明細存這裡** |
 
-### ❌ OrderItem.java — 缺少平台 ID 欄位
+### ❌ OrderItem.java — 應該刪除
 
-目前 `OrderItem.java` 的 fields:
+Schema v4 移除了 `order_items` 獨立表，改用 `orders.items` JSONB。
+`OrderItem.java` 整個 Entity 類別應該刪除。
+
+### ❌ ChannelAdapter 的 fetchOrders 回傳類型 + 參數類型
+
+目前：
+```java
+List<Order> fetchOrders(Long channelId, LocalDateTime from, LocalDateTime to);
 ```
-id, orderId, productId, sellPackId, skuCode,
-productName, specInfo, quantity, unitPrice, subtotal
+
+應改為：
+```java
+List<ChannelOrder> fetchOrders(String channelId, LocalDateTime from, LocalDateTime to);
 ```
 
-**缺少（payload 有帶但 DB 沒欄位存）：**
+**2 個問題：**
+1. 回傳 `Order` Entity → 應改 `ChannelOrder` DTO（平台原始資料）
+2. `channelId` 是 `Long` → 應改 `String`（NanoID）
 
-| 缺少 | 用途 | 建議 |
-|------|------|------|
-| `channelProductId` | 平台商品編號，用來 match sell_pack | **需要加到 DB + Entity** |
-| `channelSpecId` | 平台規格編號，用來 match sell_pack | **需要加到 DB + Entity** |
-
-**為什麼 order_items 需要存 channelProductId + channelSpecId？**
-1. 訂單入庫時 sell_pack 可能還不存在（還沒同步商品），所以 sell_pack_id 可能是 null
-2. 後續同步商品後，需要用 channelProductId + channelSpecId 來回填 sell_pack_id
-3. 如果只存 sell_pack_id，一旦 sell_pack 被重建（ID 變了），訂單明細就失去關聯
-
-### ❌ ChannelAdapter 的 fetchOrders 回傳類型
-
-目前 `fetchOrders()` 回傳 `List<Order>` — 但 Order Entity 沒有 orderItems，也沒有平台端的商品 ID。
-
-**建議新建 ChannelOrder DTO：**
+### ❌ 需要新建 ChannelOrder DTO
 
 ```java
 /**
@@ -362,7 +388,6 @@ productName, specInfo, quantity, unitPrice, subtotal
  */
 @Data
 public class ChannelOrder {
-    // 訂單主檔
     private String channelOrderId;
     private String orderStatus;
     private String buyerName;
@@ -378,7 +403,6 @@ public class ChannelOrder {
     private LocalDateTime paidAt;
     private LocalDateTime shippedAt;
 
-    // 訂單明細
     private List<ChannelOrderItem> items;
 }
 
@@ -388,16 +412,11 @@ public class ChannelOrderItem {
     private String channelSpecId;         // 平台規格編號
     private String channelProductName;    // 平台商品名
     private String channelSpecName;       // 平台規格名
-    private String skuCode;               // SKU
+    private String sku;                   // 我方 SKU
     private Integer quantity;
     private BigDecimal unitPrice;
     private BigDecimal subtotal;
 }
-```
-
-修改 ChannelAdapter:
-```java
-List<ChannelOrder> fetchOrders(Long channelId, LocalDateTime from, LocalDateTime to);
 ```
 
 ## 5. Hash Dedup 流程圖
@@ -423,7 +442,14 @@ List<ChannelOrder> fetchOrders(Long channelId, LocalDateTime from, LocalDateTime
                      │                              │
                      │                    收到訂單   │
                      │                       │      │
-                     │                    DB upsert  │
+                     │                    match     │
+                     │                    sell_pack │
+                     │                    填 JSONB  │
+                     │                       │      │
+                     │                    INSERT    │
+                     │                    orders    │
+                     │                    (items    │
+                     │                     JSONB)   │
                      │                       │      │
                      │                    ┌───┴───┐  │
                      │                    │成功?  │  │
@@ -491,4 +517,37 @@ BackendJob handle() 拋異常
 同一張訂單的多次更新有序:
   同 channelOrderId 的 hash 一定不同 → 一定會送出
   partition key = channelId:merchantId → 同 partition → 有序
+```
+
+## 9. 資料流完整性驗證矩陣
+
+```
+平台 API → ChannelOrder DTO → Kafka payload → orders 表 (items JSONB) → Order Entity
+
+                     DTO                 payload               DB (orders)            Entity (Order)
+                    ─────               ─────────             ──────────             ─────────────
+channelOrderId  →   channelOrderId  →   channelOrderId    →  channel_order_id    →  channelOrderId     ✅ OK
+orderStatus     →   orderStatus     →   orderStatus       →  order_status        →  orderStatus        ✅ OK
+buyerName       →   buyerName       →   buyerName         →  buyer_name          →  buyerName          ✅ OK
+totalAmount     →   totalAmount     →   totalAmount       →  total_amount        →  totalAmount        ✅ OK
+merchantId      →   (from msg)      →   msg.merchantId    →  merchant_id (varchar) → merchantId        ❌ Entity 是 Long
+channelId       →   (from msg)      →   msg.ownerId       →  channel_id (varchar)  → channelId         ❌ Entity 是 Long
+items           →   items           →   items[]           →  items (JSONB)       →  items              ❌ Entity 缺
+
+                     DTO (item)           payload (item)        orders.items[] JSONB
+                    ─────────            ──────────            ──────────────────
+channelProductId →  channelProductId →   channelProductId  →  channelProductId        ✅ OK
+channelSpecId    →  channelSpecId    →   channelSpecId     →  channelSpecId           ✅ OK
+channelProductName→ channelProductName→  channelProductName→  channelProductName      ✅ OK
+channelSpecName  →  channelSpecName  →   channelSpecName   →  channelSpecName         ✅ OK
+sku              →  sku              →   sku               →  sku                     ✅ OK
+quantity         →  quantity         →   quantity          →  quantity                ✅ OK
+unitPrice        →  unitPrice        →   unitPrice         →  unitPrice               ✅ OK
+subtotal         →  subtotal         →   subtotal          →  subtotal                ✅ OK
+(match sell_pack)→  ---              →   ---               →  sellPackId               ✅ OrderProcessJob 填入
+(match sell_pack)→  ---              →   ---               →  productId                ✅ OrderProcessJob 填入
+
+★ orders.id, order_status_logs.id 都是 VARCHAR(20) NanoID（程式端產生）
+★ 無 order_items 獨立表 — 明細直接存在 orders.items JSONB
+★ sellPackId + productId 由 OrderProcessJob 在入庫時 match 填入
 ```

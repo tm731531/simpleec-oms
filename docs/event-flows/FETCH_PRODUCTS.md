@@ -1,5 +1,9 @@
 # FETCH_PRODUCTS — 同步商品事件流
 
+> **依據: SCHEMA.md v4（2026-02-09）**
+>
+> PK 全部 VARCHAR(20) NanoID | SKU 欄位統一為 `sku` | product = SKU 級別（無 product_spec）
+
 ## 1. 觸發方式
 
 | 觸發源 | 方式 | Topic | Key |
@@ -78,22 +82,24 @@ ChannelJob (simpleec-channel-momo-slow)
   │     │    sellingPrice       ← 售價                           │
   │     │    quantity           ← 庫存                           │
   │     │    status             ← 上架狀態                       │
+  │     │    skuCode            ← 平台的 SKU（對應我方 sku）       │
   │     │    specs[] (如果有規格):                                │
   │     │      channelSpecId    ← 平台規格編號                    │
   │     │      channelSpecName  ← 平台規格名稱                    │
   │     │      specPrice        ← 規格售價                       │
   │     │      specQuantity     ← 規格庫存                       │
-  │     │      skuCode/barcode  ← SKU（如果有）                   │
+  │     │      skuCode/barcode  ← 規格的 SKU（對應我方 sku）       │
   │     │                                                      │
   │     │  Step A: 查 sell_pack                                 │
   │     │    SELECT * FROM sell_pack                            │
   │     │    WHERE channel_id = ? AND channel_product_id = ?    │
-  │     │      AND channel_spec_id = ?                          │
+  │     │      AND COALESCE(channel_spec_id, '') = ?            │
   │     │    (多規: 一個 channelProductId + N 個 channelSpecId)  │
-  │     │    (單規: channelSpecId = null)                       │
+  │     │    (單規: channelSpecId = null → COALESCE = '')        │
   │     │                                                      │
   │     │  Step B: upsert sell_pack                             │
   │     │    ├── 找到 → UPDATE:                                 │
+  │     │    │     sku                  = 平台 skuCode           │
   │     │    │     channel_product_name = 平台商品名              │
   │     │    │     channel_spec_name    = 平台規格名              │
   │     │    │     channel_product_url  = 平台 URL               │
@@ -105,9 +111,11 @@ ChannelJob (simpleec-channel-momo-slow)
   │     │    │     updated_at           = now()                 │
   │     │    │                                                  │
   │     │    └── 找不到 → INSERT sell_pack:                     │
+  │     │          id                   = NanoID()（程式端產生）  │
   │     │          merchant_id          = 從 channel 取          │
   │     │          product_id           = Step C 的結果          │
   │     │          channel_id           = channelId             │
+  │     │          sku                  = 平台 skuCode           │
   │     │          channel_product_id   = 平台賣編               │
   │     │          channel_spec_id      = 平台規格編號            │
   │     │          channel_product_name = 平台商品名              │
@@ -120,28 +128,30 @@ ChannelJob (simpleec-channel-momo-slow)
   │     │          last_sync_at         = now()                 │
   │     │                                                      │
   │     │  Step C: match / auto-create product                  │
-  │     │    用 skuCode (item_number) 查 product:               │
+  │     │    用 sku 查 product:                                  │
   │     │    SELECT * FROM product                              │
-  │     │    WHERE merchant_id = ? AND item_number = ?          │
+  │     │    WHERE merchant_id = ? AND sku = ?                  │
   │     │                                                      │
   │     │    ├── 找到 → sell_pack.product_id = product.id       │
   │     │    │                                                  │
   │     │    └── 找不到 → auto-create:                          │
   │     │          INSERT product:                              │
+  │     │            id              = NanoID()                 │
   │     │            merchant_id     = merchantId               │
-  │     │            item_number     = skuCode or channelProductId │
+  │     │            sku             = skuCode or channelProductId │
   │     │            name            = 平台商品名                │
+  │     │            spec_summary    = channelSpecName（如有）    │
   │     │            status          = 'active'                 │
-  │     │          如果有規格 → INSERT product_spec:              │
+  │     │          如果有 barcode → INSERT product_barcode:       │
+  │     │            id              = NanoID()                 │
   │     │            product_id      = 新建的 product.id        │
-  │     │            sku_code        = skuCode                  │
-  │     │            spec_name       = channelSpecName          │
-  │     │            spec_value      = channelSpecName          │
-  │     │            price           = specPrice                │
-  │     │            quantity        = specQuantity             │
+  │     │            barcode         = barcode                  │
+  │     │            is_primary      = true                     │
   │     │                                                      │
   │     │  ★ sell_pack.product_id 指向 product.id              │
+  │     │  ★ sell_pack.sku = product.sku（冗餘，方便直接查）     │
   │     │  ★ 後續人工可修正自動建立的 product 資料               │
+  │     │  ★ product = SKU 級別，不同規格 = 不同 product        │
   │     └──────────────────────────────────────────────────────┘
   │
   │  ⑤ SyncLog
@@ -161,49 +171,49 @@ ChannelJob (simpleec-channel-momo-slow)
 
 ### sell_pack 表
 
-| DB 欄位 | 來源 | 說明 |
-|---------|------|------|
-| `id` | 自增 | PK |
-| `merchant_id` | channel.merchant_id | 從 channel 表取 |
-| `product_id` | 自動 match / 新建 | FK → product |
-| `channel_id` | msg.ownerId / channelId | FK → channel |
-| `channel_product_id` | **平台 API 回傳** | 平台賣編（商品 ID） |
-| `channel_spec_id` | **平台 API 回傳** | 平台規格編號 |
-| `channel_product_name` | **平台 API 回傳** | 平台顯示的商品名 |
-| `channel_spec_name` | **平台 API 回傳** | 平台顯示的規格名 |
-| `channel_product_url` | **平台 API 回傳** | 平台商品頁 URL |
-| `title` | 平台商品名（初始值，可修改） | 我方自訂的標題 |
-| `selling_price` | **平台 API 回傳** | 售價 |
-| `quantity` | **平台 API 回傳** | 庫存 |
-| `status` | 平台狀態映射 | draft/pending/active/inactive/failed |
-| `last_sync_at` | now() | 同步時間 |
-| `created_at` | auto | |
-| `updated_at` | auto | |
+| DB 欄位 | 類型 | 來源 | 說明 |
+|---------|------|------|------|
+| `id` | VARCHAR(20) | NanoID() | PK |
+| `merchant_id` | VARCHAR(20) | channel.merchant_id | 從 channel 表取 |
+| `product_id` | VARCHAR(20) | 自動 match / 新建 | FK → product |
+| `channel_id` | VARCHAR(20) | msg.ownerId / channelId | FK → channel |
+| `sku` | VARCHAR(100) | **平台 API skuCode** | 我方 SKU（= product.sku，冗餘存此表方便 match） |
+| `channel_product_id` | VARCHAR(256) | **平台 API 回傳** | 平台賣編（商品 ID） |
+| `channel_spec_id` | VARCHAR(256) | **平台 API 回傳** | 平台規格編號 |
+| `channel_product_name` | VARCHAR(512) | **平台 API 回傳** | 平台顯示的商品名 |
+| `channel_spec_name` | VARCHAR(256) | **平台 API 回傳** | 平台顯示的規格名 |
+| `channel_product_url` | VARCHAR(1024) | **平台 API 回傳** | 平台商品頁 URL |
+| `title` | VARCHAR(512) | 平台商品名（初始值，可修改） | 我方自訂的標題 |
+| `selling_price` | DECIMAL(12,2) | **平台 API 回傳** | 售價 |
+| `quantity` | INTEGER | **平台 API 回傳** | 庫存 |
+| `status` | VARCHAR(20) | 平台狀態映射 | draft/pending/active/inactive/failed |
+| `last_sync_at` | TIMESTAMPTZ | now() | 同步時間 |
+| `created_at` | TIMESTAMPTZ | auto | |
+| `updated_at` | TIMESTAMPTZ | auto | |
 
 ### product 表（自動建立時）
 
-| DB 欄位 | 來源 | 說明 |
-|---------|------|------|
-| `merchant_id` | channel.merchant_id | |
-| `item_number` | skuCode or channelProductId | 優先用平台的 SKU，沒有就用賣編 |
-| `name` | 平台商品名 | |
-| `status` | 'active' | 預設 |
+| DB 欄位 | 類型 | 來源 | 說明 |
+|---------|------|------|------|
+| `id` | VARCHAR(20) | NanoID() | PK |
+| `merchant_id` | VARCHAR(20) | channel.merchant_id | |
+| `sku` | VARCHAR(100) | skuCode or channelProductId | 優先用平台的 SKU，沒有就用賣編 |
+| `name` | VARCHAR(512) | 平台商品名 | |
+| `spec_summary` | VARCHAR(256) | channelSpecName | 規格摘要（如有） |
+| `status` | VARCHAR(20) | 'active' | 預設 |
 
-### product_spec 表（自動建立時）
+### product_barcode 表（自動建立時，如果平台有提供 barcode）
 
-| DB 欄位 | 來源 | 說明 |
-|---------|------|------|
-| `product_id` | 新建的 product.id | FK |
-| `sku_code` | skuCode | 平台的 SKU |
-| `spec_name` | channelSpecName | 平台規格名稱 |
-| `spec_value` | channelSpecName | 同 spec_name（初始值） |
-| `price` | specPrice | 規格售價 |
-| `quantity` | specQuantity | 規格庫存 |
-| `barcode` | barcode (如果有) | |
+| DB 欄位 | 類型 | 來源 | 說明 |
+|---------|------|------|------|
+| `id` | VARCHAR(20) | NanoID() | PK |
+| `product_id` | VARCHAR(20) | 新建的 product.id | FK |
+| `barcode` | VARCHAR(50) | 平台的 barcode | |
+| `is_primary` | BOOLEAN | true | 第一筆設為 primary |
 
 ## 4. Entity 缺口分析
 
-### ❌ SellPack.java 缺少 3 個欄位
+### ❌ SellPack.java 缺少 4 個欄位
 
 目前 `SellPack.java` 的 fields:
 ```
@@ -216,9 +226,19 @@ lastSyncAt, createdAt, updatedAt
 
 | 缺少的 field | DB 欄位 | 類型 |
 |-------------|---------|------|
+| `sku` | `sku` | String |
 | `channelSpecId` | `channel_spec_id` | String |
 | `channelProductName` | `channel_product_name` | String |
 | `channelSpecName` | `channel_spec_name` | String |
+
+**另外所有 ID 欄位需改型別：**
+
+| 欄位 | 目前類型 | 應該是 |
+|------|---------|--------|
+| `id` | Long | String (NanoID) |
+| `merchantId` | Long | String |
+| `productId` | Long | String |
+| `channelId` | Long | String |
 
 ### ❌ ChannelAdapter 缺少 fetchProducts 方法
 
@@ -226,8 +246,10 @@ lastSyncAt, createdAt, updatedAt
 
 ```java
 /** 從通路拉取所有商品（含規格） */
-List<ChannelProduct> fetchProducts(Long channelId);
+List<ChannelProduct> fetchProducts(String channelId);
 ```
+
+**注意：** `channelId` 是 `String`（NanoID），不是 `Long`。
 
 需要新建 DTO: `ChannelProduct`（平台回傳的商品 DTO，不是我方的 product Entity）
 
@@ -277,39 +299,71 @@ public class ChannelProductSpec {
 ## 6. 多規 vs 單規
 
 ```
+★ product = SKU 級別。不同規格 = 不同 product = 不同 sell_pack。
+
 單規商品（channel.multi_spec = false 或商品無規格）：
-  1 個平台商品 → 1 個 sell_pack
+  1 個平台商品 → 1 個 sell_pack → 1 個 product
   sell_pack.channel_spec_id = null
   sell_pack.channel_spec_name = null
+  sell_pack.sku = 平台的 skuCode（或用 channelProductId 代替）
 
 多規商品（channel.multi_spec = true 且商品有規格）：
-  1 個平台商品 + N 個規格 → N 個 sell_pack
+  1 個平台商品 + N 個規格 → N 個 sell_pack → N 個 product
   每個 sell_pack 有自己的:
     - channel_spec_id（平台規格編號）
     - channel_spec_name（平台規格名稱）
+    - sku（該規格的 SKU → 對應到該規格的 product.sku）
     - selling_price（該規格的售價）
     - quantity（該規格的庫存）
   共享同一個:
     - channel_product_id（平台賣編）
     - channel_product_name（平台商品名）
-    - product_id（我方商品）
+  各自對應不同的 product:
+    - product_id → 各自的 product.id
+
+★ 同一個 product_group 可以綁多個 product（前端管理用，共享描述/圖片/品牌）
 ```
 
 ## 7. 冪等性保證
 
-- **upsert key**: `(channel_id, channel_product_id, channel_spec_id)`
+- **upsert key**: `(channel_id, channel_product_id, COALESCE(channel_spec_id, ''))`
 - 同一個通路 + 同一個平台賣編 + 同一個規格 = 同一筆 sell_pack
 - 按兩下「同步商品」→ 第二次排在第一次後面（Kafka key = channelId）→ 跑完結果一樣
-- sell_pack 表需要 **唯一約束**：`UNIQUE (channel_id, channel_product_id, channel_spec_id)`
+- sell_pack 表已有 **唯一約束**：
 
-### ❌ DB 缺少唯一約束
-
-目前 `sell_pack` 沒有 `UNIQUE (channel_id, channel_product_id, channel_spec_id)` 約束。
-有 index 但不是 unique：`idx_sellpack_channel_product (channel_id, channel_product_id)`
-
-**需要加：**
 ```sql
-CREATE UNIQUE INDEX idx_sellpack_channel_product_spec
+CREATE UNIQUE INDEX idx_sellpack_upsert_key
     ON public.sell_pack (channel_id, channel_product_id, COALESCE(channel_spec_id, ''));
 ```
+
 （用 COALESCE 處理 null 的 channel_spec_id，確保單規也能唯一）
+
+## 8. 資料流完整性驗證矩陣
+
+```
+平台 API → ChannelProduct DTO → sell_pack 表 → SellPack Entity
+
+平台欄位              DTO 欄位                DB 欄位                  Entity 欄位
+─────────           ──────────            ──────────               ────────────
+product_id    →     channelProductId  →   channel_product_id   →  channelProductId    ✅ OK
+spec_id       →     channelSpecId     →   channel_spec_id      →  channelSpecId       ❌ Entity 缺
+product_name  →     channelProductName→   channel_product_name →  channelProductName  ❌ Entity 缺
+spec_name     →     channelSpecName   →   channel_spec_name    →  channelSpecName     ❌ Entity 缺
+url           →     channelProductUrl →   channel_product_url  →  channelProductUrl   ✅ OK
+sku           →     skuCode           →   sku                  →  sku                 ❌ Entity 缺
+price         →     sellingPrice      →   selling_price        →  sellingPrice        ✅ OK
+qty           →     quantity          →   quantity             →  quantity            ✅ OK
+status        →     status            →   status               →  status              ✅ OK
+
+平台 API → ChannelProduct DTO → product 表 → Product Entity（自動建立時）
+
+平台欄位              DTO 欄位                DB 欄位                  Entity 欄位
+─────────           ──────────            ──────────               ────────────
+sku           →     skuCode           →   sku                  →  sku                 ✅ OK（改名後）
+product_name  →     channelProductName→   name                 →  name                ✅ OK
+spec_name     →     channelSpecName   →   spec_summary         →  specSummary         ✅ OK
+barcode       →     barcode           →   product_barcode 表    →  ProductBarcode      ✅ OK
+
+★ product.id, sell_pack.id 都是 VARCHAR(20) NanoID（程式端產生）
+★ product = SKU 級別，不再有 product_spec 表
+```

@@ -1,127 +1,106 @@
 # DB ↔ Entity ↔ Payload 差異彙整
 
-> 盤點日期: 2026-02-09
-> 依據: `02-new-tables.sql`, `simpleec-core/entity/*.java`, `ChannelAdapter.java`, DESIGN_v2.md §15 payload
+> **依據: SCHEMA.md v4（2026-02-09）**
+>
+> 盤點來源: `SCHEMA.md v4`, `simpleec-core/entity/*.java`, `ChannelAdapter.java`, DESIGN_v2.md §15 payload
 
 ## 差異總覽
 
 | 類別 | 項目 | 嚴重度 | 狀態 |
 |------|------|--------|------|
-| Entity 缺欄位 | SellPack 缺 3 個平台欄位 | 🔴 高 | 待修 |
-| Entity 缺欄位 | OrderItem 缺 2 個平台 ID | 🔴 高 | 待修 |
-| 類型不一致 | Order.merchantId Long vs varchar(20) | 🔴 高 | 待修 |
-| 類型不一致 | Order.channelId Long vs varchar(20) | 🔴 高 | 待修 |
-| DB 缺欄位 | order_items 缺 channel_product_id, channel_spec_id | 🔴 高 | 待修 |
-| DB 缺約束 | sell_pack 缺 UNIQUE 約束 | 🟡 中 | 待修 |
+| PK 型別 | 所有 Entity 的 id 還是 Long → 應改 String (NanoID) | 🔴 高 | 待修 |
+| Entity 缺欄位 | SellPack 缺 4 個欄位 (sku + 3 個平台欄位) | 🔴 高 | 待修 |
+| Entity 缺欄位 | Order 缺 items JSONB 欄位 | 🔴 高 | 待修 |
+| Entity 型別不一致 | Order.merchantId/channelId Long vs String | 🔴 高 | 待修 |
+| Entity 應刪除 | OrderItem.java 應刪除（無 order_items 表） | 🔴 高 | 待修 |
 | Adapter 缺方法 | ChannelAdapter 缺 fetchProducts() | 🟡 中 | 待修 |
-| Adapter 回傳型 | fetchOrders 回傳 Order 應改 ChannelOrder | 🟡 中 | 待修 |
+| Adapter 回傳型 | fetchOrders 回傳 Order → 應改 ChannelOrder | 🟡 中 | 待修 |
+| Adapter 參數型 | channelId 是 Long → 應改 String | 🟡 中 | 待修 |
 | DTO 缺少 | ChannelProduct, ChannelOrder 等 DTO | 🟡 中 | 待建 |
 
 ---
 
-## 1. SellPack.java — 缺 3 個欄位
+## 1. 全局：所有 Entity 的 PK 型別
+
+**SCHEMA v4 規則：所有表的 PK 都是 VARCHAR(20) NanoID，程式端產生。**
+
+目前所有 Entity 的 `id` 都是 `Long`，需要統一改成 `String`。
+所有 FK 引用（如 `merchantId`, `channelId`, `productId`, `orderId`）也都要改成 `String`。
+
+| Entity | 需改的 ID 欄位 | 目前 | 應改為 |
+|--------|--------------|------|--------|
+| Order | id, merchantId, channelId | Long | String |
+| SellPack | id, merchantId, productId, channelId | Long | String |
+| Product | id, merchantId, productGroupId | Long | String |
+| Channel | id, platformId, merchantId | Long | String |
+| Platform | id | Long | String |
+| Merchant | id | Long | String |
+| Account | id, merchantId | Long | String |
+
+---
+
+## 2. SellPack.java — 缺 4 個欄位
 
 **DB 有，Entity 沒有：**
 
 ```diff
   // SellPack.java 需要新增:
-+ private String channelSpecId;        // channel_spec_id — 平台規格編號
-+ private String channelProductName;   // channel_product_name — 平台商品名
-+ private String channelSpecName;      // channel_spec_name — 平台規格名
++ private String sku;                    // sku — 我方 SKU（= product.sku，冗餘方便 match）
++ private String channelSpecId;          // channel_spec_id — 平台規格編號
++ private String channelProductName;     // channel_product_name — 平台商品名
++ private String channelSpecName;        // channel_spec_name — 平台規格名
 ```
 
 **影響範圍:**
-- FETCH_PRODUCTS 同步時無法寫入平台規格/名稱
+- FETCH_PRODUCTS 同步時無法寫入 sku / 平台規格 / 名稱
 - 改價/改量/上下架 payload 組裝時無法從 DB 讀取這些欄位
 - §15 payload 的 `channelProductName`, `channelSpecName` 無法從 sell_pack 帶出
+- 無 `sku` 欄位 → 無法從 sell_pack 直接 match product
 
 ---
 
-## 2. OrderItem.java — 缺 2 個平台 ID
+## 3. Order.java — 型別不一致 + 缺 items
 
-**payload 有帶，但 DB + Entity 都沒有：**
+### 型別不一致
 
-```diff
-  // order_items 表需要加:
-+ channel_product_id character varying(256),   -- 平台商品編號
-+ channel_spec_id character varying(256),      -- 平台規格編號
+| 欄位 | Entity 目前 | DB 型別 (v4) | 應改為 |
+|------|-----------|-------------|--------|
+| `id` | `Long` | `VARCHAR(20)` | `String` |
+| `merchantId` | `Long` | `VARCHAR(20)` | `String` |
+| `channelId` | `Long` | `VARCHAR(20)` | `String` |
 
-  // OrderItem.java 需要加:
-+ private String channelProductId;
-+ private String channelSpecId;
-```
+### 缺 items JSONB
 
-**為什麼必須存？**
-1. 訂單入庫時 sell_pack 可能不存在（尚未同步商品）→ sell_pack_id = null
-2. 後續同步商品後，需要用 channelProductId + channelSpecId 回填 sell_pack_id
-3. 訂單明細應保留平台原始資訊，即使 sell_pack 被重建（ID 變了）也能重新關聯
-
----
-
-## 3. Order.java — 類型不一致
-
-| 欄位 | Entity 類型 | DB 類型 | 正確應該是 |
-|------|-----------|---------|-----------|
-| `merchantId` | `Long` | `character varying(20)` | `String` |
-| `channelId` | `Long` | `character varying(20)` | `String` |
-
-**原因:** DB schema 沿用舊系統的 varchar ID 格式（如 "M001", "CH-MOMO-001"），但 Entity 寫成了 Long。
-
-**修正方案:**
+Schema v4 訂單明細存在 `orders.items` JSONB 欄位（無 order_items 獨立表）。
+Order.java 需要新增 items 欄位：
 
 ```diff
-  // Order.java
-- private Long merchantId;
-+ private String merchantId;
-- private Long channelId;
-+ private String channelId;
+  // Order.java 需要新增:
++ private String items;  // JSONB，使用 @Column(columnDefinition = "jsonb")
 ```
 
 **連鎖影響:**
-- OrderMapper 的查詢條件型別
+- OrderMapper 的查詢/寫入邏輯
+- OrderProcessJob 裡建立 Order 時需組裝 items JSONB
 - OrderService / OrderController 的參數型別
-- OrderProcessJob 裡 `msg.getMerchantId()` 和 `msg.getOwnerId()` 是 String → 對了
-- 其他可能引用 Order.merchantId / channelId 的地方
 
 ---
 
-## 4. sell_pack 表 — 缺 UNIQUE 約束
+## 4. OrderItem.java — 應刪除
 
-**現有 index（不是 UNIQUE）：**
-```sql
-CREATE INDEX idx_sellpack_channel_product ON public.sell_pack (channel_id, channel_product_id);
-CREATE INDEX idx_sellpack_channel_spec ON public.sell_pack (channel_id, channel_spec_id);
-```
+Schema v4 移除了 `order_items` 獨立表。
+訂單明細改存在 `orders.items` JSONB。
 
-**需要加:**
-```sql
-CREATE UNIQUE INDEX idx_sellpack_channel_product_spec
-    ON public.sell_pack (channel_id, channel_product_id, COALESCE(channel_spec_id, ''));
-```
+**`OrderItem.java` 整個 Entity 類別應該刪除。**
 
-**為什麼用 COALESCE?**
-- 單規商品 channel_spec_id = null
-- PostgreSQL 裡 `null != null`，所以 UNIQUE 約束對 null 不生效
-- COALESCE 將 null 轉為空字串，確保 `(channel_id, channelProductId, null)` 也是唯一的
+關聯影響：
+- OrderItemMapper（如有）應刪除
+- OrderItemRepository（如有）應刪除
+- OrderProcessJob 裡寫 order_items 的邏輯 → 改為組裝 items JSONB
 
 ---
 
-## 5. order_items 表 — 缺平台 ID 欄位
-
-```sql
--- 需要加:
-ALTER TABLE public.order_items ADD COLUMN channel_product_id character varying(256);
-ALTER TABLE public.order_items ADD COLUMN channel_spec_id character varying(256);
-
-COMMENT ON COLUMN public.order_items.channel_product_id IS '平台商品編號（賣編）';
-COMMENT ON COLUMN public.order_items.channel_spec_id IS '平台規格編號';
-
-CREATE INDEX idx_order_items_channel_product ON public.order_items (channel_product_id);
-```
-
----
-
-## 6. ChannelAdapter — 缺方法 + 回傳型別問題
+## 5. ChannelAdapter — 缺方法 + 型別問題
 
 ### 缺 fetchProducts
 
@@ -130,23 +109,27 @@ CREATE INDEX idx_order_items_channel_product ON public.order_items (channel_prod
       // ... 現有方法 ...
 
 +     /** 從通路拉取所有商品（含規格） */
-+     List<ChannelProduct> fetchProducts(Long channelId);
++     List<ChannelProduct> fetchProducts(String channelId);
   }
 ```
 
-### fetchOrders 回傳型別
+### fetchOrders 回傳型別 + 參數型別
 
 ```diff
 - List<Order> fetchOrders(Long channelId, LocalDateTime from, LocalDateTime to);
-+ List<ChannelOrder> fetchOrders(Long channelId, LocalDateTime from, LocalDateTime to);
++ List<ChannelOrder> fetchOrders(String channelId, LocalDateTime from, LocalDateTime to);
 ```
+
+**2 個問題：**
+1. 回傳 `Order` Entity → 應改 `ChannelOrder` DTO（平台原始資料）
+2. `channelId` 是 `Long` → 應改 `String`（NanoID）
 
 **原因:** Adapter 層回傳的是平台原始資料（含 channelProductId, channelSpecId），不是我方 Entity。
 需要 DataMapper 在 Adapter 內部做轉換：`平台 JSON → ChannelOrder DTO`
 
 ---
 
-## 7. 需要新建的 DTO
+## 6. 需要新建的 DTO
 
 ### ChannelProduct（平台商品）
 
@@ -161,7 +144,7 @@ public class ChannelProduct {
     private BigDecimal sellingPrice;
     private Integer quantity;
     private String status;
-    private String skuCode;
+    private String skuCode;               // 平台的 SKU → 對應我方 product.sku
     private List<ChannelProductSpec> specs;
 }
 
@@ -171,7 +154,7 @@ public class ChannelProductSpec {
     private String channelSpecName;
     private BigDecimal price;
     private Integer quantity;
-    private String skuCode;
+    private String skuCode;               // 規格的 SKU → 對應我方 product.sku
     private String barcode;
 }
 ```
@@ -206,7 +189,7 @@ public class ChannelOrderItem {
     private String channelSpecId;
     private String channelProductName;
     private String channelSpecName;
-    private String skuCode;
+    private String sku;                   // 我方 SKU
     private Integer quantity;
     private BigDecimal unitPrice;
     private BigDecimal subtotal;
@@ -215,66 +198,88 @@ public class ChannelOrderItem {
 
 ---
 
-## 8. 修正優先順序
+## 7. 修正優先順序
 
 ```
 Phase 1 — 必須先修（影響所有事件流）:
-  1. Order.java merchantId/channelId 類型改 String
-  2. SellPack.java 加 3 個平台欄位
-  3. OrderItem.java 加 2 個平台 ID
-  4. order_items 表加 channel_product_id, channel_spec_id
+  1. 全局 PK/FK 型別: 所有 Entity 的 id/merchantId/channelId/productId 改 String
+  2. Order.java 加 items (JSONB) 欄位
+  3. 刪除 OrderItem.java + 相關 Mapper/Repository
+  4. SellPack.java 加 4 個欄位 (sku, channelSpecId, channelProductName, channelSpecName)
 
 Phase 2 — Adapter 層重構:
   5. 新建 ChannelProduct, ChannelOrder 等 DTO
-  6. ChannelAdapter 加 fetchProducts()
-  7. ChannelAdapter.fetchOrders() 改回傳 ChannelOrder
+  6. ChannelAdapter 加 fetchProducts(String channelId)
+  7. ChannelAdapter.fetchOrders() 改回傳 ChannelOrder, 參數改 String
   8. 各平台 Adapter 實作 fetchProducts + 修改 fetchOrders
 
-Phase 3 — 完整性:
-  9. sell_pack 加 UNIQUE 約束
-  10. 驗證所有 §15 payload 的欄位都能從 DB 組裝出來
+Phase 3 — 驗證:
+  9. 驗證所有 §15 payload 的欄位都能從 DB 組裝出來
+  10. 驗證 FETCH_PRODUCTS / FETCH_ORDERS 事件流的完整性
 ```
 
 ---
 
-## 9. 資料流完整性驗證矩陣
+## 8. 資料流完整性驗證矩陣
 
 ### FETCH_PRODUCTS 流向
 
 ```
 平台 API → ChannelProduct DTO → sell_pack 表 → SellPack Entity
 
-平台欄位              DTO 欄位                DB 欄位                 Entity 欄位
-─────────           ──────────            ──────────              ────────────
-product_id    →     channelProductId  →   channel_product_id  →  channelProductId    ❌ Entity 缺
-spec_id       →     channelSpecId     →   channel_spec_id     →  channelSpecId       ❌ Entity 缺
-product_name  →     channelProductName→   channel_product_name→  channelProductName  ❌ Entity 缺
-spec_name     →     channelSpecName   →   channel_spec_name   →  channelSpecName     ❌ Entity 缺
-url           →     channelProductUrl →   channel_product_url →  channelProductUrl   ✅ OK
-price         →     sellingPrice      →   selling_price       →  sellingPrice        ✅ OK
-qty           →     quantity          →   quantity            →  quantity            ✅ OK
-status        →     status            →   status              →  status              ✅ OK
+平台欄位              DTO 欄位                DB 欄位                  Entity 欄位
+─────────           ──────────            ──────────               ────────────
+product_id    →     channelProductId  →   channel_product_id   →  channelProductId    ✅ OK
+spec_id       →     channelSpecId     →   channel_spec_id      →  channelSpecId       ❌ Entity 缺
+product_name  →     channelProductName→   channel_product_name →  channelProductName  ❌ Entity 缺
+spec_name     →     channelSpecName   →   channel_spec_name    →  channelSpecName     ❌ Entity 缺
+url           →     channelProductUrl →   channel_product_url  →  channelProductUrl   ✅ OK
+sku           →     skuCode           →   sku                  →  sku                 ❌ Entity 缺
+price         →     sellingPrice      →   selling_price        →  sellingPrice        ✅ OK
+qty           →     quantity          →   quantity             →  quantity            ✅ OK
+status        →     status            →   status               →  status              ✅ OK
 ```
 
 ### FETCH_ORDERS 流向
 
 ```
-平台 API → ChannelOrder DTO → Kafka payload → orders/order_items 表 → Order/OrderItem Entity
+平台 API → ChannelOrder DTO → Kafka payload → orders 表 (items JSONB) → Order Entity
 
-                     DTO                 payload               DB (orders)         Entity (Order)
-                    ─────               ─────────             ──────────          ─────────────
-channelOrderId  →   channelOrderId  →   channelOrderId    →  channel_order_id →  channelOrderId     ✅ OK
-orderStatus     →   orderStatus     →   orderStatus       →  order_status     →  orderStatus        ✅ OK
-buyerName       →   buyerName       →   buyerName         →  buyer_name       →  buyerName          ✅ OK
-totalAmount     →   totalAmount     →   totalAmount       →  total_amount     →  totalAmount        ✅ OK
-merchantId      →   (from msg)      →   msg.merchantId    →  merchant_id (varchar) → merchantId (Long) ❌ 類型錯
-channelId       →   (from msg)      →   msg.ownerId       →  channel_id (varchar)  → channelId (Long)  ❌ 類型錯
+                     DTO                 payload               DB (orders)            Entity (Order)
+                    ─────               ─────────             ──────────             ─────────────
+channelOrderId  →   channelOrderId  →   channelOrderId    →  channel_order_id    →  channelOrderId     ✅ OK
+orderStatus     →   orderStatus     →   orderStatus       →  order_status        →  orderStatus        ✅ OK
+buyerName       →   buyerName       →   buyerName         →  buyer_name          →  buyerName          ✅ OK
+totalAmount     →   totalAmount     →   totalAmount       →  total_amount        →  totalAmount        ✅ OK
+merchantId      →   (from msg)      →   msg.merchantId    →  merchant_id (varchar) → merchantId        ❌ Entity 是 Long
+channelId       →   (from msg)      →   msg.ownerId       →  channel_id (varchar)  → channelId         ❌ Entity 是 Long
+items           →   items           →   items[]           →  items (JSONB)       →  items              ❌ Entity 缺
 
-                     DTO (item)           payload (item)        DB (order_items)    Entity (OrderItem)
-                    ─────────            ──────────            ──────────          ─────────────
-channelProductId →  channelProductId →   channelProductId  →  ❌ DB 缺           →  ❌ Entity 缺
-channelSpecId    →  channelSpecId    →   channelSpecId     →  ❌ DB 缺           →  ❌ Entity 缺
-productName      →  channelProductName→  productName       →  product_name      →  productName         ✅ OK
-quantity         →  quantity          →  quantity           →  quantity           →  quantity            ✅ OK
-unitPrice        →  unitPrice         →  unitPrice          →  unit_price        →  unitPrice           ✅ OK
+                     DTO (item)           payload (item)        orders.items[] JSONB
+                    ─────────            ──────────            ──────────────────
+channelProductId →  channelProductId →   channelProductId  →  channelProductId        ✅ OK (JSONB 可存任意結構)
+channelSpecId    →  channelSpecId    →   channelSpecId     →  channelSpecId           ✅ OK
+channelProductName→ channelProductName→  channelProductName→  channelProductName      ✅ OK
+channelSpecName  →  channelSpecName  →   channelSpecName   →  channelSpecName         ✅ OK
+sku              →  sku              →   sku               →  sku                     ✅ OK
+quantity         →  quantity         →   quantity          →  quantity                ✅ OK
+unitPrice        →  unitPrice        →   unitPrice         →  unitPrice               ✅ OK
+subtotal         →  subtotal         →   subtotal          →  subtotal                ✅ OK
+(match sell_pack)→  ---              →   ---               →  sellPackId               ✅ OrderProcessJob 填入
+(match sell_pack)→  ---              →   ---               →  productId                ✅ OrderProcessJob 填入
 ```
+
+---
+
+## 9. 與舊版差異摘要（v3 → v4）
+
+| 項目 | v3 (舊) | v4 (新) |
+|------|---------|---------|
+| PK | 混用 Long/varchar | **全部 VARCHAR(20) NanoID** |
+| 訂單明細 | order_items 獨立表 + OrderItem Entity | **orders.items JSONB，刪除 OrderItem** |
+| 退款明細 | refund_order_items 獨立表 | **refund_orders.items JSONB** |
+| 商品規格 | product_spec 獨立表 | **移除（product = SKU 級別）** |
+| sell_pack.sku | 無 | **新增（match product 必須）** |
+| SKU 欄位名 | item_number / sku_code | **統一為 sku** |
+| 統計表 channel_id | null = 全通路 | **'_ALL_' sentinel（走 index）** |
+| category | 有 | **移除** |
