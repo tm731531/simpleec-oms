@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -20,6 +21,36 @@ public class OrderService {
 
     private final OrderMapper orderMapper;
     private final OrderStatusLogMapper orderStatusLogMapper;
+
+    public Order getById(String merchantId, String orderId) {
+        EncryptionContext.setMerchantId(merchantId);
+        try {
+            Order order = orderMapper.selectById(orderId);
+            if (order == null || !merchantId.equals(order.getMerchantId())) {
+                throw new IllegalArgumentException("Order not found: " + orderId);
+            }
+            return order;
+        } finally {
+            EncryptionContext.clear();
+        }
+    }
+
+    public List<Order> listForExport(String merchantId, String status,
+                                     LocalDateTime startDate, LocalDateTime endDate) {
+        EncryptionContext.setMerchantId(merchantId);
+        try {
+            return orderMapper.selectList(
+                    new LambdaQueryWrapper<Order>()
+                            .eq(Order::getMerchantId, merchantId)
+                            .eq(status != null, Order::getOrderStatus, status)
+                            .ge(startDate != null, Order::getCreatedAt, startDate)
+                            .le(endDate != null, Order::getCreatedAt, endDate)
+                            .orderByDesc(Order::getCreatedAt)
+            );
+        } finally {
+            EncryptionContext.clear();
+        }
+    }
 
     public PageResult<Order> list(String merchantId, int page, int size) {
         EncryptionContext.setMerchantId(merchantId);
