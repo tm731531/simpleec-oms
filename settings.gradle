@@ -1,7 +1,16 @@
-rootProject.name = 'oneec-oms'
+rootProject.name = 'simpleec-oms'
 
-include 'oneec-common'
-include 'oneec-core'
-include 'oneec-channel'
-include 'oneec-web'
-include 'oneec-app'
+// Shared libraries
+include 'simpleec-common'
+include 'simpleec-core'
+include 'simpleec-channel'
+
+// Boot applications
+include 'simpleec-api'
+include 'simpleec-gateway'
+include 'simpleec-channel-job'
+include 'simpleec-order-job'
+include 'simpleec-scheduler-job'
+include 'simpleec-backend-job'
+include 'simpleec-frontend-job'
+include 'simpleec-retry-job'

@@ -113,7 +113,7 @@
 | # | 修正重點 | 影響範圍 |
 |---|---------|---------|
 | 25 | **各 JOB 獨立 Spring Boot**：不是所有 JOB 在同一個 process。ChannelJob 是唯一「同 CODE 不同設定」的（參考舊系統），其他 JOB 各自獨立 Spring Boot application。API 和 JOB 之間唯一耦合是 Kafka topic | §2, §5, §9, §10, §11 全文 |
-| 26 | **API 角色明確**：oneec-api 只做「看平台、塞設定、看資料、丟事件」，不消費 Kafka，不直接呼叫 JOB。後端 JOB 不是 API 的後流，中間都透過 Kafka topic 介接 | §2.1 新增, §5.7 改寫, §9 改寫 |
+| 26 | **API 角色明確**：simpleec-api 只做「看平台、塞設定、看資料、丟事件」，不消費 Kafka，不直接呼叫 JOB。後端 JOB 不是 API 的後流，中間都透過 Kafka topic 介接 | §2.1 新增, §5.7 改寫, §9 改寫 |
 | 27 | **Gradle 模組結構重建**：共用 3 module (common/core/channel) + 8 個 Boot module (api + 7 JOB) + 前端。docker-compose 16 個 container | §2.2 改寫, §9.1 全面改寫, §9.3 新增, §10 改寫 |
 
 ## 第四輪修改的內容
@@ -137,7 +137,7 @@
 | 28 | **沒有 channel-fast，一定是 per-channel per-speed**：每個 ChannelJob instance = 一個平台 × 一個速度（momo-fast, momo-slow, shopee-fast, shopee-slow...）。不存在「吃所有平台 fast」的 instance。8 個 ChannelJob instance（4 平台 × 2 速度），docker-compose 總計 19 container | §3.2, §3.5, §5.1, §5.3.1, §5.6, §9.1, §9.3, §10 全文 |
 
 ## 第四輪追加修改的內容
-- 消除所有 `oneec-channel-fast` / `channel-job-fast` / `momo.fast,shopee.fast` 混合寫法
+- 消除所有 `simpleec-channel-fast` / `channel-job-fast` / `momo.fast,shopee.fast` 混合寫法
 - §3.2 快慢分離範例改為 8 個 instance（per-channel × per-speed）
 - §3.5 並行度管理改為單平台 topic 範例
 - §5.1 ChannelJob 說明改為「每個 instance = 一個平台 × 一個速度」
@@ -152,14 +152,14 @@
 
 | # | 修正重點 | 影響範圍 |
 |---|---------|---------|
-| 29 | **專案改名 SimpleEC**：oneec → simpleec，目標是讓 EC 簡化。ONEEC 有商標問題 | 全文 177 處 |
+| 29 | **專案改名 SimpleEC**：simpleec → simpleec，目標是讓 EC 簡化。SimpleEC 有商標問題 | 全文 177 處 |
 | 30 | **SchedulerJob + TaskDispatchJob 二合一**：SchedulerJob 收到心跳後直接查 DB 已啟用通路→發到各目標 topic。不需要 task.dispatch topic 和 TaskDispatchJob。少一支 JOB、少一個 topic | §2.2, §3.3, §3.5, §5.2, §5.3.3-5.3.5, §5.6, §5.7, §6.2, §6.4, §6.5, §9.1, §9.2, §9.3, §10, §11 |
 | 31 | **失敗超過 maxRetry → 寫 DB LOG 表**：不是直接丟掉，而是寫入 DB 的 failed_task_logs 表，供 RD 定時查看、定時清理 | §5.3.5 RetryDispatchJob, §11 |
 | 32 | **ChannelJob DB 讀寫範圍擴大**：不只讀 channels 表，依 action 不同可能讀 products、product_spec、sell_pack、orders 等 | §5.3.1 |
 | 33 | **orders + order_items 合併**：不再拆 order_items。訂單就是訂單，含商品明細 JSONB。項次拆分是出貨階段的事 | §1.1, §1.2, §5.3.2, Entity |
 
 ## 第五輪修改的內容
-- 全文 `oneec` → `simpleec`（177 處），含 module 名、package 名、service 名、DB 名
+- 全文 `simpleec` → `simpleec`（177 處），含 module 名、package 名、service 名、DB 名
 - 刪除 simpleec-dispatch-job module（§2.2 Gradle 結構）
 - 刪除 task.dispatch topic（§3.3 Topic 清單、§3.5 KafkaConfig）
 - 刪除 TaskDispatchJob 整段程式碼和說明（§5.3.4 原本是 TaskDispatchJob → 改為 BackendJob）
@@ -183,7 +183,7 @@
 - task.dispatch topic
 - order_items 表（合併入 orders）
 - OrderItem entity
-- oneec 名稱（改為 simpleec）
+- simpleec 名稱（改為 simpleec）
 
 ## 第五輪追加修正（1 點）— 已完成
 
@@ -339,7 +339,7 @@
 
 | # | 修正重點 | 影響範圍 |
 |---|---------|---------|
-| 51 | **全文整理**：移除 4 個 stale `← NEW` 標記。全文掃描確認：命名一致性（channel_setting=平台、channel=通路）✓、container 數量全文 19 ✓、章節編號 §0–§12 連續 ✓、交叉引用全部有效 ✓、Kafka topic 13 個 ✓、JOB 6 支 ✓、無殘留 oneec 命名 ✓ | §5.4 |
+| 51 | **全文整理**：移除 4 個 stale `← NEW` 標記。全文掃描確認：命名一致性（channel_setting=平台、channel=通路）✓、container 數量全文 19 ✓、章節編號 §0–§12 連續 ✓、交叉引用全部有效 ✓、Kafka topic 13 個 ✓、JOB 6 支 ✓、無殘留 simpleec 命名 ✓ | §5.4 |
 
 ## 全文整理掃描結果
 - ✅ 命名一致：channel_setting（平台）→ channel（通路）全文一致
@@ -348,7 +348,7 @@
 - ✅ 交叉引用：所有「見 §x.x」引用驗證通過，無斷鏈
 - ✅ Kafka Topics：13 個（8 channel fast/slow + order.process + scheduler + task.backend/frontend/failed）
 - ✅ JOB 數量：6 支（ChannelJob, OrderProcessJob, SchedulerJob, BackendJob, FrontendJob, RetryDispatchJob）
-- ✅ 無殘留 oneec 命名（全部 simpleec）
+- ✅ 無殘留 simpleec 命名（全部 simpleec）
 - ✅ 無 channel_type 與 channel_setting_id 衝突
 - 🔧 移除：4 個 `← NEW` 殘留標記（§5.4 路由表）
 
@@ -448,4 +448,4 @@
 ### Skill 檔案
 - Plugin: `/home/tom/.claude/plugins/local/simpleec-oms/.claude-plugin/plugin.json`
 - Skill: `/home/tom/.claude/plugins/local/simpleec-oms/skills/simpleec-oms-design/SKILL.md`
-- 觸發關鍵字：SimpleEC, OMS, 通路, 平台, 拉單, 訂單管理, 電商, channel job, oneec-oms
+- 觸發關鍵字：SimpleEC, OMS, 通路, 平台, 拉單, 訂單管理, 電商, channel job, simpleec-oms

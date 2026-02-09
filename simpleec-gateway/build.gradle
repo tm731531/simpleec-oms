@@ -1,0 +1,22 @@
+plugins {
+    id 'org.springframework.boot'
+}
+
+dependencies {
+    implementation project(':simpleec-common')
+    implementation project(':simpleec-core')
+    implementation project(':simpleec-channel')
+
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    implementation 'com.baomidou:mybatis-plus-spring-boot3-starter:3.5.7'
+
+    runtimeOnly 'org.postgresql:postgresql'
+}
+
+bootJar {
+    archiveFileName = 'simpleec-gateway.jar'
+    mainClass = 'com.simpleec.gateway.SimpleecGatewayApplication'
+}

@@ -1,6 +1,6 @@
-# ONEEC OMS — 最簡完整設計文件
+# SimpleEC OMS — 最簡完整設計文件
 
-> 基於現有 oneec-oms 骨架，補齊所有缺口的完整設計
+> 基於現有 simpleec-oms 骨架，補齊所有缺口的完整設計
 > 目標：登入 → 通路設定 → 三大表（訂單/商品/賣場）+ MQ + JOB + Cache
 
 ---
@@ -99,23 +99,23 @@ channel_api_versions (API 版本)
 ### 2.1 模組總覽（現有 + 需補）
 
 ```
-oneec-oms/
-├── oneec-common/          ✅ 已有 — enum, dto, exception
-├── oneec-core/            ✅ 已有 — entity, mapper, service（需補 SellPack/Channel service）
-├── oneec-channel/         ✅ 已有 — adapter 骨架（需補 4 家實作）
-├── oneec-web/             ✅ 已有 — controller（需補 auth/sellpack/channel）
-├── oneec-app/             ✅ 已有 — config（需補 JWT filter + Timer/Dispatcher + Redis config）
-└── oneec-admin/           ❌ 需新建 — Vue 3 前端
+simpleec-oms/
+├── simpleec-common/          ✅ 已有 — enum, dto, exception
+├── simpleec-core/            ✅ 已有 — entity, mapper, service（需補 SellPack/Channel service）
+├── simpleec-channel/         ✅ 已有 — adapter 骨架（需補 4 家實作）
+├── simpleec-web/             ✅ 已有 — controller（需補 auth/sellpack/channel）
+├── simpleec-app/             ✅ 已有 — config（需補 JWT filter + Timer/Dispatcher + Redis config）
+└── simpleec-admin/           ❌ 需新建 — Vue 3 前端
 ```
 
 ### 2.2 需補的後端 Code
 
-#### 2.2.1 JWT 認證（oneec-web + oneec-app）
+#### 2.2.1 JWT 認證（simpleec-web + simpleec-app）
 
 **新增檔案：**
 
 ```
-oneec-web/src/main/java/com/oneec/web/
+simpleec-web/src/main/java/com/simpleec/web/
 ├── controller/AuthController.java       # 登入 API
 └── security/
     ├── JwtTokenProvider.java            # JWT 生成/驗證
@@ -182,12 +182,12 @@ public class AuthController {
 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
 ```
 
-#### 2.2.2 SellPack CRUD（oneec-core + oneec-web）
+#### 2.2.2 SellPack CRUD（simpleec-core + simpleec-web）
 
 **新增：**
 
 ```java
-// oneec-core
+// simpleec-core
 public class SellPackService {
     PageResult<SellPack> list(merchantId, channelId, status, page, size)
     SellPack getById(id)
@@ -196,7 +196,7 @@ public class SellPackService {
     List<SellPack> getByProductId(productId)
 }
 
-// oneec-web
+// simpleec-web
 @RestController
 @RequestMapping("/api/v1/sell-packs")
 public class SellPackController {
@@ -209,12 +209,12 @@ public class SellPackController {
 }
 ```
 
-#### 2.2.3 Channel 管理（oneec-core + oneec-web）
+#### 2.2.3 Channel 管理（simpleec-core + simpleec-web）
 
 **新增：**
 
 ```java
-// oneec-core
+// simpleec-core
 public class ChannelService {
     List<Channel> listByMerchant(merchantId)
     Channel getById(channelId)
@@ -222,7 +222,7 @@ public class ChannelService {
     boolean testConnection(channelId)   // 呼叫 adapter.validateConnection
 }
 
-// oneec-web
+// simpleec-web
 @RestController
 @RequestMapping("/api/v1/channels")
 public class ChannelController {
@@ -601,7 +601,7 @@ spring:
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
       properties:
-        spring.json.trusted.packages: "com.oneec.*"
+        spring.json.trusted.packages: "com.simpleec.*"
 ```
 
 ---
@@ -642,7 +642,7 @@ OMS 的讀取熱點：
 ### 4.4 Spring Boot 實作
 
 ```java
-// oneec-app/config/RedisConfig.java（需新增）
+// simpleec-app/config/RedisConfig.java（需新增）
 @Configuration
 @EnableCaching
 public class RedisConfig {
@@ -1639,7 +1639,7 @@ public interface ChannelAdapter {
 ### 6.3 每家 Adapter 結構（以 momo 為例，已有骨架）
 
 ```
-oneec-channel/src/main/java/com/oneec/channel/
+simpleec-channel/src/main/java/com/simpleec/channel/
 ├── ChannelAdapter.java              ← 介面
 ├── ChannelAdapterFactory.java       ← 工廠（自動注冊）
 ├── ChannelActionMessage.java        ← MQ 訊息
@@ -1740,7 +1740,7 @@ syncLogService.log(msg, "success", null);
 ### 7.2 專案結構
 
 ```
-oneec-admin/
+simpleec-admin/
 ├── index.html
 ├── vite.config.ts
 ├── tsconfig.json
@@ -1810,7 +1810,7 @@ oneec-admin/
 ```
 ┌──────────────────────────────┐
 │                              │
-│         ONEEC OMS            │
+│         SimpleEC OMS            │
 │                              │
 │    ┌──────────────────┐      │
 │    │ 帳號             │      │
@@ -2109,14 +2109,14 @@ services:
     image: postgres:16-alpine
     ports: ["5433:5432"]
     environment:
-      POSTGRES_DB: oneec
-      POSTGRES_USER: oneec
-      POSTGRES_PASSWORD: oneec123
+      POSTGRES_DB: simpleec
+      POSTGRES_USER: simpleec
+      POSTGRES_PASSWORD: simpleec123
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./docker/init-db:/docker-entrypoint-initdb.d
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U oneec"]
+      test: ["CMD-SHELL", "pg_isready -U simpleec"]
 
   redis:
     image: redis:7-alpine
@@ -2165,7 +2165,7 @@ services:
     image: nginx:alpine
     ports: ["80:80"]
     volumes:
-      - ../oneec-admin/dist:/usr/share/nginx/html
+      - ../simpleec-admin/dist:/usr/share/nginx/html
       - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf
     depends_on: [app]
 
@@ -2243,7 +2243,7 @@ volumes:
 ### Phase 0：環境驗證（1 天）
 
 - [ ] `docker-compose up` 確認 PG + Redis + Kafka 正常
-- [ ] `./gradlew :oneec-app:bootRun` 確認 Spring Boot 啟動
+- [ ] `./gradlew :simpleec-app:bootRun` 確認 Spring Boot 啟動
 - [ ] 打 `/api/v1/health` 確認回應
 - [ ] 確認 Kafka broker 可連（`kafka-topics.sh --list`）
 
