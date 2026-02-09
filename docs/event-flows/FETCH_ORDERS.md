@@ -12,11 +12,118 @@
 | 觸發源 | 方式 | Topic | Key |
 |--------|------|-------|-----|
 | 排程 | SchedulerJob 每 N 分鐘觸發（如：每 5 分鐘） | `{platform}.slow` | `null`（round-robin，最大吞吐） |
-| 手動 | 前端「手動拉單」按鈕（未來） | `{platform}.slow` | `null` |
+| 手動（未來） | 前端「手動拉單」按鈕 | `{platform}.slow` | `null` |
 
 **為什麼拉單不需要 key？**
 拉單由排程觸發，每個通路一支定時 → 本身就不會衝突。
 整理訂單時才需要 key（在 order.process 用 `channelId:merchantId` 排序）。
+
+### 1.1 排程自動觸發（主要方式）
+
+```
+SchedulerJob (simpleec-scheduler)
+  │
+  │  HeartbeatTimer 每秒 tick
+  │  判斷 FETCH_ORDERS 規則：每 5 分鐘執行一次
+  │
+  │  到期時:
+  │    SELECT * FROM channel WHERE actived=true AND enable_sync=true
+  │    對每個 channel:
+  │      1. 取得 platformType（channel → platform）
+  │      2. 計算 fromDate = channel.last_sync_time ?? (now - 1 hour)
+  │      3. 計算 toDate = now()
+  │      4. 組裝 TaskMessage (taskAction=FETCH_ORDERS)
+  │      5. 發送到 {platformType}.slow topic, key=null
+  │      6. UPDATE channel SET last_sync_time = now()
+  │
+  │  ★ enable_sync=false 的通路不會觸發
+  │  ★ 新建的通路要手動啟用 enable_sync
+  │  ★ 首次同步可用 first_sync_start_time/first_sync_end_time 做較大範圍拉取
+```
+
+### 1.2 手動拉單 API（未來）
+
+```
+POST /api/v1/channels/{channelId}/sync-orders
+
+Headers:
+  Authorization: Bearer {jwt}
+
+Path:
+  channelId — 通路 ID（NanoID）
+
+Body:
+{
+  "fromDate": "2026-02-09T00:00:00Z",
+  "toDate":   "2026-02-09T23:59:59Z"
+}
+
+Response: 202 Accepted
+{
+  "messageId": "uuid-...",
+  "message": "拉單任務已送出"
+}
+
+Error:
+  401 — 未登入
+  403 — 無此通路權限
+  404 — 通路不存在
+```
+
+**後端邏輯（ChannelController）：**
+1. 從 JWT 取得 merchantId
+2. 查 `channel` 表確認 channelId 屬於此 merchant 且 actived=true
+3. 查 `channel → platform` 取得 platformType
+4. 組裝 TaskMessage（taskAction=FETCH_ORDERS, payload 帶 fromDate/toDate）
+5. 發送到 `{platformType}.slow` topic，key=null
+6. 回傳 202 + messageId
+
+### 1.3 前端呈現
+
+```
+訂單列表頁: OrderListView.vue
+  │
+  │  資料來源:
+  │    GET /api/v1/orders?merchantId=xxx&status=xxx&page=0&size=20
+  │
+  │  篩選條件:
+  │    ├── 通路（channelId）
+  │    ├── 狀態（order_status）
+  │    ├── 日期區間（channel_created_at）
+  │    └── 搜尋（buyer_name / channel_order_id）
+  │
+  │  列表欄位:
+  │    平台訂單編號 | 買家 | 金額 | 狀態 badge | 平台建立時間
+  │
+  │  狀態 badge 映射:
+  │    pending    → 待處理（黃色）
+  │    confirmed  → 已確認（藍色）
+  │    processing → 處理中（藍色）
+  │    shipped    → 已出貨（紫色）
+  │    delivered  → 已送達（綠色）
+  │    completed  → 已完成（綠色）
+  │    cancelled  → 已取消（灰色）
+  │    refunding  → 退款中（橙色）
+  │    refunded   → 已退款（紅色）
+  │
+  ▼
+訂單詳情頁: OrderDetailView.vue
+  │
+  │  資料來源:
+  │    GET /api/v1/orders/{orderId}
+  │
+  │  顯示區塊:
+  │    ├── 訂單基本資訊（訂單編號、狀態、金額）
+  │    ├── 買家資訊（姓名、電話、Email、地址）
+  │    ├── 商品明細（items JSONB → 表格顯示）
+  │    │     SKU | 商品名 | 規格名 | 數量 | 單價 | 小計
+  │    ├── 物流資訊（出貨記錄、追蹤號碼）
+  │    └── 狀態變更歷史（order_status_logs → timeline）
+  │
+  │  操作按鈕:
+  │    ├── 出貨確認 → POST /api/v1/orders/{id}/ship
+  │    └── 取消訂單 → POST /api/v1/orders/{id}/cancel
+```
 
 ## 2. 端到端事件流（3 階段）
 

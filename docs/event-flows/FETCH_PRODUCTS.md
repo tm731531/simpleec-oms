@@ -11,6 +11,61 @@
 | 前端按鈕 | `POST /api/v1/channels/{channelId}/sync-products` → API 發 TaskMessage | `{platform}.slow` | `channelId`（同通路排隊，不能並行跑兩次） |
 | 排程（未來） | SchedulerJob 定時觸發（尚未實作） | `{platform}.slow` | `channelId` |
 
+### 1.1 API 端點
+
+```
+POST /api/v1/channels/{channelId}/sync-products
+
+Headers:
+  Authorization: Bearer {jwt}
+
+Path:
+  channelId — 通路 ID（NanoID）
+
+Response: 202 Accepted
+{
+  "messageId": "uuid-...",
+  "message": "商品同步任務已送出"
+}
+
+Error:
+  401 — 未登入
+  403 — 無此通路權限
+  404 — 通路不存在
+  409 — 同步進行中（前次尚未完成）
+```
+
+**後端邏輯（ChannelController）：**
+1. 從 JWT 取得 merchantId
+2. 查 `channel` 表確認 channelId 屬於此 merchant 且 actived=true
+3. 查 `channel → platform` 取得 platformType（momo/shopee/...）
+4. 組裝 TaskMessage（taskAction=FETCH_PRODUCTS）
+5. 發送到 `{platformType}.slow` topic，key=channelId
+6. 回傳 202 + messageId
+
+### 1.2 前端觸發
+
+```
+頁面: ChannelListView.vue → 通路列表頁
+元件: ChannelCard.vue → 每張通路卡片
+按鈕: 「同步商品」按鈕（圖示: sync icon）
+
+呼叫:
+  channelApi.syncProducts(channelId)
+  → POST /api/v1/channels/{channelId}/sync-products
+
+UI 回饋:
+  ├── 點擊後按鈕 loading 狀態
+  ├── 成功 → Toast「商品同步任務已送出，請稍候查看結果」
+  ├── 409  → Toast「同步進行中，請稍後再試」
+  └── 其他 → Toast 顯示錯誤訊息
+
+結果查看:
+  通路詳情頁 → 同步歷史 tab
+  GET /api/v1/channels/{channelId}/sync-logs?type=FETCH_PRODUCTS
+  → 顯示 channel_sync_logs 列表（時間、狀態、錯誤訊息）
+```
+
 ## 2. 端到端事件流
 
 ```
