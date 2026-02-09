@@ -122,7 +122,7 @@ DTO 設計稿見 `docs/event-flows/DB_ENTITY_GAPS.md` §6。
 | # | 項目 | 模組 | 狀態 |
 |---|------|------|------|
 | 1 | OrderProcessJob — DB upsert (match sell_pack → 填 sellPackId/productId) | order-job | ❌ |
-| 2 | DailyStatistics 聚合 | backend-job | ❌ skeleton |
+| 2 | DailyStatistics 多角色聚合（業務/老闆/財務/RMA） | backend-job | ❌ skeleton → 設計完成 |
 | 3 | ManagePartitions — 分區表管理 | backend-job | ❌ skeleton |
 | 4 | FailedTaskLog 持久化 | retry-job | ❌ skeleton |
 | 5 | SchedulerJob — 從 DB 讀 channel 列表 | scheduler-job | ❌ skeleton |
@@ -130,6 +130,34 @@ DTO 設計稿見 `docs/event-flows/DB_ENTITY_GAPS.md` §6。
 | 7 | FetchOrdersActionService — 拉單 | channel-job | ❌ |
 | 8 | Redis Hash Dedup — 訂單去重 | channel-job | ❌ |
 | 9 | JWT 認證 — login / token / refresh | api | ❌ |
+| 10 | ORDER_STATUS_CHANGED — 退款同步 orders.refund_amount | backend-job | ❌ |
+| 11 | Statistics API — /summary, /daily, /by-channel + view 參數 | api | ❌ |
+
+---
+
+## 統計設計 ✅ 設計完成
+
+> 詳見 `docs/STATISTICS_DESIGN.md`
+
+**業務決策（2026-02-09）：**
+- 正物流 vs 逆物流分離：cancelled 是正物流結束信號，refunding/refunded 是逆物流
+- 部分退貨：orders.status 不變（仍 completed），靠 refund_amount + has_refund 判斷
+- 全額退貨：refund_amount >= total_amount 時 status 改為 refunded
+- 退款兩邊都記：refund_orders 記明細，orders.refund_amount 記匯總
+- 統計退款記在退款日（不回溯訂單建立日）
+
+**Schema 異動：**
+- orders 加 `refund_amount` + `has_refund`
+- daily_statistics 從 6 欄改為 13 欄（多角色視角）
+
+**四種統計視角：**
+
+| 視角 | 口徑 |
+|------|------|
+| 業務 | 當日新增訂單數 + 金額 |
+| 老闆 | 營業額 = 排除 cancelled 的全部 |
+| 財務 | 實收（confirmed 以上）- 退款 = 淨收 |
+| RMA | 退款筆數 + 金額 + 取消筆數 |
 
 ---
 
@@ -219,6 +247,9 @@ DTO 設計稿見 `docs/event-flows/DB_ENTITY_GAPS.md` §6。
 
 3. Level 3 — 核心業務邏輯
    → OrderProcessJob DB upsert（最高優先）
+   → ORDER_STATUS_CHANGED 退款同步
+   → DailyStatistics 多角色聚合（設計完成）
+   → Statistics API（4 角色視角）
    → FetchOrders/FetchProducts ActionService
    → Redis Hash Dedup
    → JWT 認證
@@ -245,4 +276,5 @@ DTO 設計稿見 `docs/event-flows/DB_ENTITY_GAPS.md` §6。
 | `docs/event-flows/FETCH_ORDERS.md` | 拉單事件流（3-JOB chain） |
 | `docs/event-flows/FETCH_PRODUCTS.md` | 同步商品事件流 |
 | `docs/event-flows/DB_ENTITY_GAPS.md` | Entity ↔ Schema 差異追蹤 |
+| `docs/STATISTICS_DESIGN.md` | 統計設計（多角色 × 正逆物流 × 退貨） |
 | `docs/event-flows/README.md` | 事件流一致性 checklist |

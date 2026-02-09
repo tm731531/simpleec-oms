@@ -385,6 +385,8 @@ CREATE TABLE public.orders (
     total_amount      DECIMAL(12,2) NOT NULL DEFAULT 0,
     shipping_fee      DECIMAL(12,2) NOT NULL DEFAULT 0,
     discount_amount   DECIMAL(12,2) NOT NULL DEFAULT 0,
+    refund_amount     DECIMAL(12,2) NOT NULL DEFAULT 0,  -- 累計退款金額（每次退貨累加）
+    has_refund        BOOLEAN       NOT NULL DEFAULT false, -- 是否有退貨（快速篩選）
     items             JSONB         NOT NULL DEFAULT '[]',
     channel_created_at TIMESTAMPTZ,
     paid_at           TIMESTAMPTZ,
@@ -400,6 +402,7 @@ CREATE UNIQUE INDEX idx_order_channel_order ON public.orders (channel_id, channe
 CREATE INDEX idx_order_merchant_status ON public.orders (merchant_id, order_status);
 CREATE INDEX idx_order_created ON public.orders (created_at DESC);
 CREATE INDEX idx_order_items ON public.orders USING GIN (items);
+CREATE INDEX idx_order_has_refund ON public.orders (merchant_id, has_refund) WHERE has_refund = true;
 ```
 
 **★ PII 加密說明：**
@@ -557,12 +560,30 @@ CREATE TABLE public.daily_statistics (
     platform_id     VARCHAR(20)   NOT NULL,      -- 平台（全通路加總時只到平台級）
     channel_id      VARCHAR(20)   NOT NULL,      -- 通路（全平台加總時填 '_ALL_'）
     stat_date       DATE          NOT NULL,
-    order_count     INTEGER       DEFAULT 0,
-    total_amount    NUMERIC(15,2) DEFAULT 0,
-    shipped_count   INTEGER       DEFAULT 0,
-    completed_count INTEGER       DEFAULT 0,
-    cancelled_count INTEGER       DEFAULT 0,
-    refund_count    INTEGER       DEFAULT 0,
+
+    -- ★ 業務視角：當日新增訂單（不分狀態，只看 created_at 在當天的）
+    new_order_count     INTEGER       DEFAULT 0,
+    new_order_amount    NUMERIC(15,2) DEFAULT 0,
+
+    -- ★ 老闆視角：營業額（排除 cancelled 的全部訂單）
+    gross_order_count   INTEGER       DEFAULT 0,
+    gross_amount        NUMERIC(15,2) DEFAULT 0,
+
+    -- ★ 財務視角：實收（confirmed 以上狀態）- 退款
+    received_count      INTEGER       DEFAULT 0,
+    received_amount     NUMERIC(15,2) DEFAULT 0,
+    refund_count        INTEGER       DEFAULT 0,     -- 退款筆數（refund_orders 當日新增）
+    refund_amount       NUMERIC(15,2) DEFAULT 0,     -- 退款金額
+    net_amount          NUMERIC(15,2) DEFAULT 0,     -- 淨收 = received - refund
+
+    -- ★ 物流視角：各狀態計數
+    shipped_count       INTEGER       DEFAULT 0,
+    completed_count     INTEGER       DEFAULT 0,
+    cancelled_count     INTEGER       DEFAULT 0,
+
+    -- ★ 商品統計
+    item_sold_count     INTEGER       DEFAULT 0,     -- 售出件數
+
     created_at      TIMESTAMPTZ   DEFAULT now(),
     updated_at      TIMESTAMPTZ   DEFAULT now(),
     PRIMARY KEY (id, stat_date)
@@ -571,6 +592,8 @@ CREATE TABLE public.daily_statistics (
 CREATE UNIQUE INDEX idx_daily_stats_unique
     ON public.daily_statistics (merchant_id, platform_id, channel_id, stat_date);
 ```
+
+> 詳細聚合規則與多角色視角定義見 [docs/STATISTICS_DESIGN.md](STATISTICS_DESIGN.md)。
 
 **統計粒度:**
 - 每通路: `merchant_id='M001', platform_id='momo', channel_id='CH-MOMO-001'`

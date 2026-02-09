@@ -15,6 +15,7 @@
 | 看詳細修改歷史 | `REWRITE_PLAN.md`（16 輪演進） |
 | 看事件流設計 | `docs/event-flows/FETCH_ORDERS.md`, `FETCH_PRODUCTS.md` |
 | 看 Entity↔Schema 差異 | `docs/event-flows/DB_ENTITY_GAPS.md` |
+| 看統計設計 | `docs/STATISTICS_DESIGN.md`（多角色統計 + 退貨流程） |
 | Docker 操作 | `docs/DOCKER_GUIDE.md` |
 | Kafka 維運 | `docs/OPERATIONS_RUNBOOK.md` |
 
@@ -92,6 +93,21 @@ simpleec-oms/
 - `DefaultErrorHandler` + `FixedBackOff(0L, 0L)` 跳過 poison pill
 - 失敗訊息 → `task.failed` → `RetryDispatchJob` → 重試或 `task.dlt`
 
+### 正逆物流 & 退貨
+- **正物流**：pending → confirmed → processing → shipped → delivered → completed → cancelled
+- **逆物流**：completed 之後才有 refunding → refunded
+- **部分退貨**：orders.status 不變（仍 completed），orders.refund_amount 累加，has_refund = true
+- **全額退貨**：refund_amount >= total_amount 時 status 改為 refunded
+- **兩邊都記**：refund_orders 記明細，orders.refund_amount 記匯總（ORDER_STATUS_CHANGED 觸發同步）
+- **統計退款記在退款日**，不回溯訂單建立日
+
+### 統計（4 角色視角）
+- **業務**：新增訂單（看 created_at）
+- **老闆**：營業額 = 排除 cancelled 的 total_amount
+- **財務**：實收（confirmed 以上）- 退款 = 淨收
+- **RMA**：退款筆數 + 金額
+- 詳見 `docs/STATISTICS_DESIGN.md`
+
 ---
 
 ## 下一步工作
@@ -109,7 +125,9 @@ simpleec-oms/
 
 **Level 3（業務邏輯）— 待做：**
 - OrderProcessJob DB upsert
-- DailyStatistics 聚合
+- DailyStatistics 多角色聚合（設計完成，見 `docs/STATISTICS_DESIGN.md`）
+- ORDER_STATUS_CHANGED 退款同步（orders.refund_amount ↔ refund_orders）
+- Statistics API（/summary, /daily, /by-channel + view 參數）
 - SchedulerJob 從 DB 讀 channel 列表
 
 ---
