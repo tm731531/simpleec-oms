@@ -288,11 +288,16 @@ BackendJob (simpleec-backend-job)
   │    }                                                        │
   │                                                            │
   │  routeNext:                                                 │
-  │    ★ payload 加上 productId → 接力送 CREATE_SELL_PACK      │
-  │    → taskProducer.send("task.backend",                     │
-  │        同一個 key,                                          │
-  │        TaskMessage{ action="CREATE_SELL_PACK",              │
-  │          payload += productId })                            │
+  │    // ★ 條件式：payload 帶 channelId 才接力建 sell_pack    │
+  │    //   FETCH_PRODUCTS 觸發 → 帶 channelId → 接力          │
+  │    //   CSV 匯入觸發 → 不帶 channelId → 到此結束           │
+  │    if (channelId != null) {                                 │
+  │      payload += productId                                   │
+  │      → taskProducer.send("task.backend",                   │
+  │          同一個 key,                                        │
+  │          TaskMessage{ action="CREATE_SELL_PACK",            │
+  │            payload += productId })                          │
+  │    }                                                        │
   │                                                            │
   └─────────────────────────┬──────────────────────────────────┘
                             │

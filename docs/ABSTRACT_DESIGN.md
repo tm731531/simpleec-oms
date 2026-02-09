@@ -47,8 +47,11 @@
                                                      ──→ task.frontend ──→ FrontendJob (WebSocket)
 
 同步商品後的建立/更新:
-  ChannelJob ──→ task.backend ──→ BackendJob (CREATE_PRODUCT → routeNext → CREATE_SELL_PACK)
+  ChannelJob ──→ task.backend ──→ BackendJob (CREATE_PRODUCT → 條件式 routeNext → CREATE_SELL_PACK)
                                ──→ BackendJob (CREATE_SELL_PACK)
+
+商品匯入（CSV）:
+  simpleec-api ──→ task.backend ──→ BackendJob (CREATE_PRODUCT，無 routeNext)
 
 失敗處理:
   任何 JOB ──→ task.failed ──→ RetryDispatchJob
@@ -482,7 +485,7 @@ public interface BackendActionService {
 | Action | 觸發來源 | 職責 |
 |--------|---------|------|
 | `ORDER_STATUS_CHANGED` | OrderProcessJob | 退款同步 + 全退判斷 + 前端通知 |
-| `CREATE_PRODUCT` | ChannelJob (FETCH_PRODUCTS) | 建立 product（+ barcode），routeNext → CREATE_SELL_PACK |
+| `CREATE_PRODUCT` | ChannelJob (FETCH_PRODUCTS) / API (CSV 匯入) | 建立 product（+ barcode），條件式 routeNext → CREATE_SELL_PACK |
 | `CREATE_SELL_PACK` | ChannelJob / CREATE_PRODUCT routeNext | 建立或更新 sell_pack，掛上 productId |
 | `DAILY_STATISTICS` | SchedulerJob (cron) | 多角色統計聚合 |
 | `MANAGE_PARTITIONS` | SchedulerJob (cron) | daily_statistics 分區管理 |
@@ -615,15 +618,24 @@ execute(msg):
 
 ### 4.7 CreateProductActionService — 合約
 
-> ChannelJob FETCH_PRODUCTS 發現 product 不存在時觸發。
-> Kafka key = `channelId:channelProductId:channelSpecId` → 同商品有序。
+> **觸發來源（多種）：**
+> 1. ChannelJob FETCH_PRODUCTS — 發現 product 不存在時
+> 2. API — 客戶 CSV 匯入商品（只建 product，不建 sell_pack）
+> 3. 未來可能的其他來源
+>
+> **routeNext 是條件式的** — 只有 payload 帶有 sell_pack 相關欄位時才接力發 CREATE_SELL_PACK。
+> CSV 匯入只建商品，不需要建 sell_pack。
 
 ```
 setting(msg):
   │  從 payload 取:
+  │    // ★ product 建立必要欄位
   │    merchantId, sku, name, specSummary, barcode (nullable)
-  │    channelId, channelProductId, channelSpecId
-  │    以及建立 sell_pack 所需的完整商品明細（price, qty, url, status...）
+  │
+  │    // ★ sell_pack 相關欄位（可選 — CSV 匯入時不帶）
+  │    channelId (nullable), channelProductId (nullable), channelSpecId (nullable)
+  │    channelProductName, channelSpecName, channelProductUrl
+  │    sellingPrice, quantity, status
 
 verify(msg):
   │  確認 merchantId 有效
@@ -653,7 +665,15 @@ execute(msg):
   │  return product;  // 帶 productId 給 routeNext
 
 routeNext(producer, msg, result):
-  │  // ★ 接力發 CREATE_SELL_PACK（此時已有 productId）
+  │  // ★ 條件式：只有 payload 帶 channelId 時才接力建 sell_pack
+  │  //   來源 1: FETCH_PRODUCTS → 帶 channelId → 接力 CREATE_SELL_PACK
+  │  //   來源 2: CSV 匯入 → 不帶 channelId → 到此結束
+  │
+  │  String channelId = payload.get("channelId");
+  │  if (channelId == null) {
+  │    return;  // 純建商品，不需建 sell_pack
+  │  }
+  │
   │  Product product = (Product) result;
   │  Map payload = msg.getPayload();
   │  payload.put("productId", product.getId());
@@ -1024,6 +1044,7 @@ public interface ChannelAdapter {
 | POST | `/api/v1/auth/refresh` | Token 刷新 | refreshToken → newToken |
 | POST | `/api/v1/channels/{id}/sync-orders` | 手動拉單 | → {platform}.slow (FETCH_ORDERS) |
 | POST | `/api/v1/channels/{id}/sync-products` | 手動同步商品 | → {platform}.slow (FETCH_PRODUCTS) |
+| POST | `/api/v1/products/import` | CSV 匯入商品 | 解析 CSV → 逐筆發 task.backend (CREATE_PRODUCT，不帶 channelId) |
 | GET | `/api/v1/statistics/summary` | 統計摘要 | ?view=sales/revenue/finance/rma |
 | GET | `/api/v1/statistics/daily` | 每日趨勢 | 折線圖用 |
 | GET | `/api/v1/statistics/by-channel` | 通路對比 | 對比表格用 |
