@@ -6,6 +6,8 @@
 
 > **這是系統中最重要的事件流：** 3 個 JOB 串接（ChannelJob → OrderProcessJob → BackendJob），
 > 每一步的 payload 必須帶齊下一步所需的所有欄位，不能 miss。
+>
+> **平台抓取策略**（時間窗口、狀態分段、物流類型、刷新頻率）見 [`FETCH_STRATEGY.md`](FETCH_STRATEGY.md)。
 
 ## 1. 觸發方式
 
@@ -196,8 +198,11 @@ ChannelJob (simpleec-channel-momo-slow)
   │     - 確認認證有效
   │     - 確認 fromDate, toDate 合理
   │
-  │  ④ doAction()
-  │     - 呼叫 adapter.fetchOrders(channelId, from, to)
+  │  ④ doAction()  ★ 抓取策略在這裡（見 FETCH_STRATEGY.md）
+  │     - 根據 requestTime.getMinute() 判斷要跑「快速刷新」還是「慢速刷新」
+  │     - 根據平台特性，對不同 (狀態, 時間窗, 物流類型) 組合各呼叫一次 adapter
+  │     - 例如 Shopee: fetch(UNPAID, 1hr) + fetch(READY_TO_SHIP, 3d) + ...
+  │     - 例如 Momo:   fetchCompany(pending, 1hr) + fetchStores(pending, 1hr) + ...
   │     - 平台 API 回傳 List<ChannelOrder>（可能 1~1000+ 筆）
   │     - 對每筆訂單做 Hash Dedup：
   │

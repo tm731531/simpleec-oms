@@ -277,6 +277,7 @@ DTO 設計稿見 `docs/event-flows/DB_ENTITY_GAPS.md` §6。
 | `docs/OPERATIONS_RUNBOOK.md` | Kafka 營運手冊 |
 | `docs/IMPLEMENTATION_PLAN.md` | Level 1 + 1.5 詳細實作紀錄 |
 | `docs/event-flows/FETCH_ORDERS.md` | 拉單事件流（3-JOB chain） |
+| `docs/event-flows/FETCH_STRATEGY.md` | 各平台抓取策略（時間窗口 × 狀態 × 物流 × 刷新頻率） |
 | `docs/event-flows/FETCH_PRODUCTS.md` | 同步商品事件流 |
 | `docs/event-flows/DB_ENTITY_GAPS.md` | Entity ↔ Schema 差異追蹤 |
 | `docs/STATISTICS_DESIGN.md` | 統計設計（多角色 × 正逆物流 × 退貨） |

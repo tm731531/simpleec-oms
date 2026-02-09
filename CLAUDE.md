@@ -14,6 +14,7 @@
 | 看目前完成到哪 | **`docs/STATUS.md`**（唯一進度真相來源） |
 | 看詳細修改歷史 | `REWRITE_PLAN.md`（16 輪演進） |
 | 看事件流設計 | `docs/event-flows/FETCH_ORDERS.md`, `FETCH_PRODUCTS.md` |
+| 看各平台抓取策略 | `docs/event-flows/FETCH_STRATEGY.md`（時間窗口 × 狀態 × 物流） |
 | 看 Entity↔Schema 差異 | `docs/event-flows/DB_ENTITY_GAPS.md` |
 | 看統計設計 | `docs/STATISTICS_DESIGN.md`（多角色統計 + 退貨流程） |
 | Docker 操作 | `docs/DOCKER_GUIDE.md` |
@@ -98,6 +99,12 @@ simpleec-oms/
 - **平台資料有 gap**：拉單有時間差/快取、webhook 漏接、平台根本不給某些狀態的訂單、平台跳過中間狀態
 - **不做狀態轉換驗證** — 接受平台給的任何狀態，不檢查 from→to 是否合理
 - **所有訂單處理邏輯都必須容錯** — 訂單可能從任何狀態跳到任何狀態
+
+### ★ 抓取策略：三層分工
+- **SchedulerJob** = 時鐘（平台無關，只負責「幾分鐘觸發一次 FETCH_ORDERS」）
+- **FetchOrdersActionService.doAction()** = 大腦（每個平台各自實作，決定 狀態×時間窗×物流類型×刷新頻率）
+- **ChannelAdapter** = 手（純 HTTP 客戶端，照參數打 API，不決定策略）
+- 詳見 `docs/event-flows/FETCH_STRATEGY.md`
 
 ### 正逆物流 & 退貨
 - **正物流**：pending → confirmed → processing → shipped → delivered → completed → cancelled
