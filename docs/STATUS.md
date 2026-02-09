@@ -140,8 +140,10 @@ DTO 設計稿見 `docs/event-flows/DB_ENTITY_GAPS.md` §6。
 > 詳見 `docs/STATISTICS_DESIGN.md`
 
 **業務決策（2026-02-09）：**
+- **核心前提：我們是被動同步方** — 平台給什麼就收什麼，不假設資料完整性（拉單時間差、webhook 漏接、平台不給某些狀態、跳過中間狀態）
+- **不做狀態轉換驗證** — 任何狀態跳任何狀態都接受
 - 正物流 vs 逆物流分離：cancelled 是正物流結束信號，refunding/refunded 是逆物流
-- **退貨可從任何狀態觸發**：平台資料有 gap（區間沒覆蓋、webhook 漏接、跳過中間狀態），不做狀態轉換驗證
+- 退貨可從任何狀態觸發（不限 completed）
 - 部分退貨：orders.status 不變（維持當前狀態），靠 refund_amount + has_refund 判斷
 - 全額退貨：refund_amount >= total_amount 時 status 改為 refunded
 - 退款兩邊都記：refund_orders 記明細，orders.refund_amount 記匯總
