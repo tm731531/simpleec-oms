@@ -17,8 +17,8 @@
 | **simpleec-gateway** | 閘道 | — | 路由 + 安全（未來） |
 | **simpleec-channel-job** | 通路操作執行器 | `{platform}.fast`, `{platform}.slow` | 8 個 instance (4 平台 × fast/slow) |
 | **simpleec-order-job** | 訂單整理入庫 | `order.process` | 接收 ChannelJob 的訂單 → DB upsert |
-| **simpleec-backend-job** | 後台任務 | `task.backend` | 統計聚合、退款同步、分區管理 |
-| **simpleec-frontend-job** | 前端通知 | `task.frontend` | WebSocket/SSE 推送通知 |
+| **simpleec-backend-job** | 後台任務 | `task.backend` | 商品/SellPack 建立、退款同步、統計聚合、分區管理 |
+| **simpleec-frontend-job** | 前端通知 | `task.frontend` | WebSocket 推送通知 |
 | **simpleec-scheduler-job** | 排程觸發器 | `scheduler` | HeartbeatTimer 產生 tick → 判斷排程規則 → 發任務 |
 
 ### 1.2 十四個 Kafka Topic
@@ -44,7 +44,11 @@
 
 拉單後的訂單處理:
   ChannelJob ──→ order.process ──→ OrderProcessJob ──→ task.backend ──→ BackendJob
-                                                     ──→ task.frontend ──→ FrontendJob
+                                                     ──→ task.frontend ──→ FrontendJob (WebSocket)
+
+同步商品後的建立/更新:
+  ChannelJob ──→ task.backend ──→ BackendJob (CREATE_PRODUCT → routeNext → CREATE_SELL_PACK)
+                               ──→ BackendJob (CREATE_SELL_PACK)
 
 失敗處理:
   任何 JOB ──→ task.failed ──→ RetryDispatchJob
@@ -65,7 +69,7 @@
 | `pchome.slow` | 8 | SchedulerJob, API | ChannelJob (pchome-slow) | PChome 重操作 |
 | `pchome.fast` | 8 | SchedulerJob, API | ChannelJob (pchome-fast) | PChome 即時操作 |
 | `order.process` | 8 | ChannelJob | OrderProcessJob | 訂單入庫處理 |
-| `task.backend` | 8 | OrderProcessJob, SchedulerJob | BackendJob | 後台任務 |
+| `task.backend` | 8 | OrderProcessJob, ChannelJob, SchedulerJob | BackendJob | 後台任務（商品建立、退款同步、統計） |
 | `task.frontend` | 8 | BackendJob | FrontendJob | 前端通知 |
 | `scheduler` | 4 | HeartbeatTimer | SchedulerJob | 排程心跳 |
 | `task.failed` | 4 | 任何 JOB | RetryDispatchJob | 失敗重打調度 |
@@ -201,32 +205,48 @@ public interface ActionService {
 ### 2.5 FetchProductsActionService — 合約
 
 > 端到端事件流見 `FETCH_PRODUCTS.md`。
+>
+> **★ 重要設計**：ChannelJob 不直接 upsert 商品。
+> ChannelJob 負責拉取 + 查 DB 判斷路由 → 送 task.backend → BackendJob 負責建立/更新。
+> 這是為了**唯一性保證**：分散架構下多個 worker 可能同時處理同一商品，
+> 用 Kafka key 排隊確保同一商品有序寫入，避免併發衝突。
 
 ```
 ④ doAction()
    │
-   │  // Step 1: 拉取全量商品
-   │  List<ChannelProduct> products = adapter.fetchProducts(channelId);
+   │  // Step 1: 取列表（GET LIST）
+   │  //   一般平台: adapter.fetchProductList(channelId) → 商品編號 + 規格編號 列表
+   │  //   Yahoo 特殊: API 請求 + 附帶 callbackUrl → Yahoo 異步回打 CSV
+   │  //              callbackUrl 帶 merchantId: /webhook/yahoo/{merchantId}
+   │  //              從 URI path 識別是誰的商品 → 解析 CSV → 商品編號列表
+   │  List<ChannelProductRef> productRefs = adapter.fetchProductList(channelId);
    │
-   │  // Step 2: 逐筆 upsert sell_pack
-   │  for (ChannelProduct cp : products) {
-   │    // 多規: 一個 cp → N 個 sell_pack
-   │    // 單規: 一個 cp → 1 個 sell_pack
+   │  // Step 2: 逐筆取明細（GET DETAIL）
+   │  for (ChannelProductRef ref : productRefs) {
+   │    ChannelProduct detail = adapter.fetchProductDetail(
+   │      channelId, ref.channelProductId, ref.channelSpecId);
+   │
+   │    // 多規: 一個 product → N 個 spec → 各自處理
+   │    // 單規: 一個 product → 1 筆處理
    │
    │    for (每個規格或整體) {
-   │      SellPack existing = sellPackService.findByChannelAndProductSpec(
-   │        channelId, cp.channelProductId, spec.channelSpecId);
    │
-   │      if (existing != null) {
-   │        // UPDATE: 更新 name, price, quantity, url, status, lastSyncAt
+   │      // Step 3: 查 DB 判斷路由
+   │      Product product = productService.findByMerchantAndSku(merchantId, sku);
+   │
+   │      if (product == null) {
+   │        // ★ 沒有 product → 送 CREATE_PRODUCT
+   │        //   BackendJob 建好 product 後，routeNext 接著發 CREATE_SELL_PACK
+   │        taskProducer.send("task.backend",
+   │          channelId + ":" + channelProductId + ":" + channelSpecId,
+   │          TaskMessage{ action=CREATE_PRODUCT, payload={sku, name, specSummary,
+   │            barcode, channelId, channelProductId, channelSpecId, ...商品明細} });
    │      } else {
-   │        // Step 3: match product by sku
-   │        Product product = productService.findByMerchantAndSku(merchantId, sku);
-   │        if (product == null) {
-   │          // auto-create product (sku, name, specSummary)
-   │          // auto-create product_barcode (if barcode available)
-   │        }
-   │        // INSERT sell_pack (含 product_id)
+   │        // ★ 有 product → 直接送 CREATE_SELL_PACK
+   │        taskProducer.send("task.backend",
+   │          channelId + ":" + channelProductId + ":" + channelSpecId,
+   │          TaskMessage{ action=CREATE_SELL_PACK, payload={productId=product.id,
+   │            channelId, channelProductId, channelSpecId, ...商品明細} });
    │      }
    │    }
    │  }
@@ -234,6 +254,12 @@ public interface ActionService {
    │  // Step 4: SyncLog
    │  syncLogService.log(msg, "SUCCESS")
 ```
+
+**要點:**
+- **ChannelJob 不寫 DB**（sell_pack/product 的建立都由 BackendJob 負責）
+- **Kafka key = `channelId:channelProductId:channelSpecId`** → 同一商品+規格在同一 partition → 有序 → 不併發衝突
+- **Yahoo 特殊**: fetchProductList() 走「請求 → webhook 回打 CSV」模式，其他平台走正常 API
+- **兩段式 API**: GET LIST（列表）→ GET DETAIL（明細），前端跳提示「同步中，請稍候」
 
 ### 2.6 FetchRefundOrdersActionService — 合約
 
@@ -456,6 +482,8 @@ public interface BackendActionService {
 | Action | 觸發來源 | 職責 |
 |--------|---------|------|
 | `ORDER_STATUS_CHANGED` | OrderProcessJob | 退款同步 + 全退判斷 + 前端通知 |
+| `CREATE_PRODUCT` | ChannelJob (FETCH_PRODUCTS) | 建立 product（+ barcode），routeNext → CREATE_SELL_PACK |
+| `CREATE_SELL_PACK` | ChannelJob / CREATE_PRODUCT routeNext | 建立或更新 sell_pack，掛上 productId |
 | `DAILY_STATISTICS` | SchedulerJob (cron) | 多角色統計聚合 |
 | `MANAGE_PARTITIONS` | SchedulerJob (cron) | daily_statistics 分區管理 |
 
@@ -583,6 +611,127 @@ execute(msg):
   │  // 如果未來 3 個月的分區不存在 → 自動建立
   │  // CREATE TABLE daily_statistics_y2026m03 PARTITION OF daily_statistics
   │  //   FOR VALUES FROM ('2026-03-01') TO ('2026-04-01');
+```
+
+### 4.7 CreateProductActionService — 合約
+
+> ChannelJob FETCH_PRODUCTS 發現 product 不存在時觸發。
+> Kafka key = `channelId:channelProductId:channelSpecId` → 同商品有序。
+
+```
+setting(msg):
+  │  從 payload 取:
+  │    merchantId, sku, name, specSummary, barcode (nullable)
+  │    channelId, channelProductId, channelSpecId
+  │    以及建立 sell_pack 所需的完整商品明細（price, qty, url, status...）
+
+verify(msg):
+  │  確認 merchantId 有效
+
+execute(msg):
+  │
+  │  // 1. 再次查 product（可能在排隊期間已被建立）
+  │  Product product = productService.findByMerchantAndSku(merchantId, sku);
+  │
+  │  if (product == null) {
+  │    // 2. 建立 product
+  │    product = new Product();
+  │    product.id = NanoID();
+  │    product.merchantId = merchantId;
+  │    product.sku = sku;
+  │    product.name = name;
+  │    product.specSummary = specSummary;
+  │    product.status = "active";
+  │    productService.insert(product);
+  │
+  │    // 3. 建立 barcode（如果有）
+  │    if (barcode != null) {
+  │      productBarcodeService.insert(product.id, barcode, true);
+  │    }
+  │  }
+  │
+  │  return product;  // 帶 productId 給 routeNext
+
+routeNext(producer, msg, result):
+  │  // ★ 接力發 CREATE_SELL_PACK（此時已有 productId）
+  │  Product product = (Product) result;
+  │  Map payload = msg.getPayload();
+  │  payload.put("productId", product.getId());
+  │
+  │  TaskMessage spMsg = TaskMessage.builder()
+  │    .taskAction("CREATE_SELL_PACK")
+  │    .merchantId(msg.getMerchantId())
+  │    .payload(payload)
+  │    .build();
+  │  producer.send("task.backend",
+  │    msg.getPartitionKey(),  // 同一個 key → 同 partition → 有序
+  │    spMsg);
+```
+
+### 4.8 CreateSellPackActionService — 合約
+
+> 兩種觸發來源：
+> 1. ChannelJob 發現 product 已存在 → 直接送 CREATE_SELL_PACK
+> 2. CreateProductActionService.routeNext → 建完 product 後接力送來
+>
+> Kafka key 保證同一商品+規格有序，不會併發建出重複的 sell_pack。
+
+```
+setting(msg):
+  │  從 payload 取:
+  │    merchantId, productId, channelId
+  │    channelProductId, channelSpecId
+  │    channelProductName, channelSpecName, channelProductUrl
+  │    sku, sellingPrice, quantity, status
+
+verify(msg):
+  │  確認 productId 存在（防禦性檢查）
+  │  確認 channelId 存在
+
+execute(msg):
+  │
+  │  // 1. 查 sell_pack 是否已存在
+  │  SellPack existing = sellPackService.findByChannelAndProductSpec(
+  │    channelId, channelProductId, channelSpecId);
+  │
+  │  if (existing != null) {
+  │    // 2A. 更新
+  │    existing.channelProductName = channelProductName;
+  │    existing.channelSpecName = channelSpecName;
+  │    existing.channelProductUrl = channelProductUrl;
+  │    existing.sellingPrice = sellingPrice;
+  │    existing.quantity = quantity;
+  │    existing.status = status;
+  │    existing.lastSyncAt = now();
+  │    // ★ 補上 productId（如果之前是 null）
+  │    if (existing.productId == null) {
+  │      existing.productId = productId;
+  │    }
+  │    sellPackService.update(existing);
+  │  } else {
+  │    // 2B. 建立
+  │    SellPack sp = new SellPack();
+  │    sp.id = NanoID();
+  │    sp.merchantId = merchantId;
+  │    sp.productId = productId;
+  │    sp.channelId = channelId;
+  │    sp.sku = sku;
+  │    sp.channelProductId = channelProductId;
+  │    sp.channelSpecId = channelSpecId;
+  │    sp.channelProductName = channelProductName;
+  │    sp.channelSpecName = channelSpecName;
+  │    sp.channelProductUrl = channelProductUrl;
+  │    sp.sellingPrice = sellingPrice;
+  │    sp.quantity = quantity;
+  │    sp.status = status;
+  │    sp.lastSyncAt = now();
+  │    sellPackService.insert(sp);
+  │  }
+  │
+  │  return existing != null ? "updated" : "created";
+
+routeNext(producer, msg, result):
+  │  // 無下游（商品同步終點）
 ```
 
 ---
@@ -732,9 +881,9 @@ FrontendJob.handle(TaskMessage msg)
   │
   ├─ 根據 taskAction 分發通知
   │
-  ├─ NOTIFY_STATUS_CHANGE → WebSocket/SSE 推送
-  ├─ NOTIFY_SYNC_COMPLETE → WebSocket/SSE 推送
-  └─ NOTIFY_SYNC_FAILED   → WebSocket/SSE 推送
+  ├─ NOTIFY_STATUS_CHANGE → WebSocket 推送
+  ├─ NOTIFY_SYNC_COMPLETE → WebSocket 推送
+  └─ NOTIFY_SYNC_FAILED   → WebSocket 推送
 ```
 
 **現有程式碼**: `simpleec-frontend-job/.../FrontendJob.java` (skeleton，只 log + ack)
@@ -747,11 +896,27 @@ FrontendJob.handle(TaskMessage msg)
 | `NOTIFY_SYNC_COMPLETE` | ChannelJob (FETCH_PRODUCTS 結束) | 「Momo 冷凍館 商品同步完成，共 150 筆」 |
 | `NOTIFY_SYNC_FAILED` | ChannelJob (任務失敗) | 「Shopee 同步失敗: Token 過期」 |
 
-### 7.3 推送機制（待設計）
+### 7.3 推送機制 — WebSocket
 
-- **方案 A**: Server-Sent Events (SSE) — 簡單、單向
-- **方案 B**: WebSocket — 雙向，較複雜
-- **方案 C**: 前端輪詢 — 最簡單，但即時性差
+> **確認使用 WebSocket**（過去專案已實作過此模式）。
+> FrontendJob 是專門的 JOB，職責：收 `task.frontend` topic → 轉 WebSocket 推送。
+
+```
+架構:
+  FrontendJob (Spring Boot 應用)
+    ├─ Kafka consumer: 監聽 task.frontend
+    ├─ WebSocket server: 管理前端連線
+    └─ 收到 Kafka msg → 根據 merchantId 找到對應 WebSocket session → 推送
+
+前端:
+  WebSocket client 連線到 FrontendJob
+  → 收到推送 → UI 即時更新（Toast 通知、列表刷新等）
+
+連線管理:
+  ├─ 用 merchantId 做 session 分組
+  ├─ 前端登入後建立 WebSocket 連線
+  └─ 斷線自動重連（前端 heartbeat）
+```
 
 ---
 
@@ -790,8 +955,13 @@ public interface ChannelAdapter {
     ChannelType getChannelType();
     boolean validateConnection(Map<String, String> credentials);
 
-    // ==================== 商品 ====================
-    List<ChannelProduct> fetchProducts(String channelId);              // ← 新增
+    // ==================== 商品（兩段式 API）====================
+    /** Step 1: 取商品列表（編號 + 規格編號） */
+    List<ChannelProductRef> fetchProductList(String channelId);        // ← 新增
+    /** Step 2: 取單一商品明細（含完整資料） */
+    ChannelProduct fetchProductDetail(String channelId,               // ← 新增
+                                      String channelProductId);
+
     String createListing(String channelId, SellPack sp, Map<String, Object> extra);
     void updateListing(String channelId, SellPack sp, Map<String, Object> extra);
     void updatePrice(String channelId, String channelProductId, BigDecimal price);
@@ -808,6 +978,18 @@ public interface ChannelAdapter {
     String getShippingLabel(String channelId, String channelOrderId);
 }
 ```
+
+**為什麼是兩段式而非 `fetchProducts()` 一次拉完？**
+1. 多數平台的 LIST API 只回傳商品編號，不含完整明細
+2. 需要逐筆 GET DETAIL 才能取得 SKU、價格、庫存等完整資料
+3. Yahoo 更特殊：LIST 走 webhook 回打 CSV，DETAIL 走正常 API
+
+**Yahoo 特殊處理（在 `fetchProductList()` 內部）：**
+- API 請求 + 附帶 callbackUrl（`/webhook/yahoo/{merchantId}`）
+- Yahoo 異步處理後，回打 CSV 到 webhook
+- 從 URI path 的 `{merchantId}` 識別商品歸屬
+- 解析 CSV → `List<ChannelProductRef>`
+- 對調用方而言，結果與其他平台一致
 
 ### 8.3 Adapter 的職責邊界
 
@@ -1036,7 +1218,14 @@ public class ChannelOrderItem {
 ```
 
 ```java
-// 平台商品（Adapter 回傳）
+// 平台商品列表項（Step 1: fetchProductList 回傳）
+@Data
+public class ChannelProductRef {
+    String channelProductId;
+    List<String> channelSpecIds;  // 有些平台列表 API 也回傳規格編號
+}
+
+// 平台商品明細（Step 2: fetchProductDetail 回傳）
 @Data
 public class ChannelProduct {
     String channelProductId, channelProductName, channelProductUrl;

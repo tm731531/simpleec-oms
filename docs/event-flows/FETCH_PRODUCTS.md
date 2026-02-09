@@ -68,6 +68,11 @@ UI 回饋:
 
 ## 2. 端到端事件流
 
+> **★ 三個 JOB 協作**：API → ChannelJob（拉取 + 路由）→ BackendJob（建立/更新）
+> ChannelJob 不直接寫 DB，而是查 DB 判斷路由，再送 task.backend 讓 BackendJob 有序寫入。
+> 這是為了**唯一性保證**：分散架構下多個 worker 可能同時處理同一商品，
+> 用 Kafka key 排隊確保同一商品有序寫入，避免併發衝突。
+
 ```
 前端「同步商品」按鈕
   │
@@ -106,13 +111,17 @@ simpleec-api
 └──────────────────────────────────────────────────────────────┘
   │
   ▼
+═══════════════════════════════════════════════════════════════
+ 第一段：ChannelJob — 拉取 + 查 DB + 路由
+═══════════════════════════════════════════════════════════════
+
 ChannelJob (simpleec-channel-momo-slow)
   │
   │  FetchProductsActionService — 4 步生命週期：
   │
   │  ① setting(resource)
   │     - 從 msg 取得 channelId, merchantId
-  │     - 從 resource 取得 adapter, taskProducer, redis
+  │     - 從 resource 取得 adapter, taskProducer, productService
   │
   │  ② getPlatformTokens()
   │     - 查 DB: platform.credential1~N  (平台級認證)
@@ -123,90 +132,106 @@ ChannelJob (simpleec-channel-momo-slow)
   │     - 確認 channel.actived = true
   │     - 確認認證資訊有效
   │
-  │  ④ doAction()
-  │     - 呼叫平台 API 拉取該 channel 的所有商品（分頁拉完）
-  │     - 對每個平台商品，做以下處理：
+  │  ④ doAction()  ★ 兩段式拉取 + 路由
   │
   │     ┌──────────────────────────────────────────────────────┐
-  │     │  每個平台商品的處理邏輯                                 │
+  │     │  Step 1: 取列表（GET LIST）                            │
   │     │                                                      │
-  │     │  平台 API 回傳的資料（每筆商品）:                        │
-  │     │    channelProductId   ← 平台賣編                       │
-  │     │    channelProductName ← 平台顯示的商品名                 │
-  │     │    channelProductUrl  ← 平台商品頁 URL                  │
-  │     │    sellingPrice       ← 售價                           │
-  │     │    quantity           ← 庫存                           │
-  │     │    status             ← 上架狀態                       │
-  │     │    skuCode            ← 平台的 SKU（對應我方 sku）       │
-  │     │    specs[] (如果有規格):                                │
-  │     │      channelSpecId    ← 平台規格編號                    │
-  │     │      channelSpecName  ← 平台規格名稱                    │
-  │     │      specPrice        ← 規格售價                       │
-  │     │      specQuantity     ← 規格庫存                       │
-  │     │      skuCode/barcode  ← 規格的 SKU（對應我方 sku）       │
+  │     │  一般平台:                                             │
+  │     │    adapter.fetchProductList(channelId)                │
+  │     │    → 回傳商品編號 + 規格編號列表                        │
+  │     │    → List<ChannelProductRef>                          │
   │     │                                                      │
-  │     │  Step A: 查 sell_pack                                 │
-  │     │    SELECT * FROM sell_pack                            │
-  │     │    WHERE channel_id = ? AND channel_product_id = ?    │
-  │     │      AND COALESCE(channel_spec_id, '') = ?            │
-  │     │    (多規: 一個 channelProductId + N 個 channelSpecId)  │
-  │     │    (單規: channelSpecId = null → COALESCE = '')        │
+  │     │  ★ Yahoo 特殊:                                       │
+  │     │    API 請求 + 附帶 callbackUrl                        │
+  │     │    → Yahoo 異步處理後回打 CSV 到 webhook               │
+  │     │    callbackUrl = /webhook/yahoo/{merchantId}          │
+  │     │    → 從 URI path 識別是誰的商品                        │
+  │     │    → 解析 CSV → 商品編號列表                           │
+  │     │    （對 ActionService 而言結果相同:                     │
+  │     │     都是得到 List<ChannelProductRef>）                 │
+  │     └──────────────────────────────────────────────────────┘
+  │     │
+  │     ▼
+  │     ┌──────────────────────────────────────────────────────┐
+  │     │  Step 2: 逐筆取明細（GET DETAIL）                      │
   │     │                                                      │
-  │     │  Step B: upsert sell_pack                             │
-  │     │    ├── 找到 → UPDATE:                                 │
-  │     │    │     sku                  = 平台 skuCode           │
-  │     │    │     channel_product_name = 平台商品名              │
-  │     │    │     channel_spec_name    = 平台規格名              │
-  │     │    │     channel_product_url  = 平台 URL               │
-  │     │    │     selling_price        = 售價                   │
-  │     │    │     quantity             = 庫存                   │
-  │     │    │     status               = 上架狀態映射            │
-  │     │    │     title                = 平台商品名(初始值)       │
-  │     │    │     last_sync_at         = now()                 │
-  │     │    │     updated_at           = now()                 │
-  │     │    │                                                  │
-  │     │    └── 找不到 → INSERT sell_pack:                     │
-  │     │          id                   = NanoID()（程式端產生）  │
-  │     │          merchant_id          = 從 channel 取          │
-  │     │          product_id           = Step C 的結果          │
-  │     │          channel_id           = channelId             │
-  │     │          sku                  = 平台 skuCode           │
-  │     │          channel_product_id   = 平台賣編               │
-  │     │          channel_spec_id      = 平台規格編號            │
-  │     │          channel_product_name = 平台商品名              │
-  │     │          channel_spec_name    = 平台規格名              │
-  │     │          channel_product_url  = 平台 URL               │
-  │     │          title                = 平台商品名              │
-  │     │          selling_price        = 售價                   │
-  │     │          quantity             = 庫存                   │
-  │     │          status               = 上架狀態映射            │
-  │     │          last_sync_at         = now()                 │
+  │     │  for (ChannelProductRef ref : productRefs) {          │
+  │     │    ChannelProduct detail =                            │
+  │     │      adapter.fetchProductDetail(                      │
+  │     │        channelId, ref.channelProductId);              │
   │     │                                                      │
-  │     │  Step C: match / auto-create product                  │
-  │     │    用 sku 查 product:                                  │
-  │     │    SELECT * FROM product                              │
-  │     │    WHERE merchant_id = ? AND sku = ?                  │
+  │     │    回傳的明細包含:                                     │
+  │     │      channelProductId   ← 平台賣編                    │
+  │     │      channelProductName ← 平台顯示的商品名              │
+  │     │      channelProductUrl  ← 平台商品頁 URL               │
+  │     │      sellingPrice       ← 售價                        │
+  │     │      quantity           ← 庫存                        │
+  │     │      status             ← 上架狀態                    │
+  │     │      skuCode            ← 平台的 SKU                  │
+  │     │      specs[] (如果有規格):                              │
+  │     │        channelSpecId    ← 平台規格編號                 │
+  │     │        channelSpecName  ← 平台規格名稱                 │
+  │     │        specPrice        ← 規格售價                    │
+  │     │        specQuantity     ← 規格庫存                    │
+  │     │        skuCode/barcode  ← 規格的 SKU / 條碼           │
+  │     └──────────────────────────────────────────────────────┘
+  │     │
+  │     ▼
+  │     ┌──────────────────────────────────────────────────────┐
+  │     │  Step 3: 查 DB 判斷路由 + 發 task.backend             │
   │     │                                                      │
-  │     │    ├── 找到 → sell_pack.product_id = product.id       │
-  │     │    │                                                  │
-  │     │    └── 找不到 → auto-create:                          │
-  │     │          INSERT product:                              │
-  │     │            id              = NanoID()                 │
-  │     │            merchant_id     = merchantId               │
-  │     │            sku             = skuCode or channelProductId │
-  │     │            name            = 平台商品名                │
-  │     │            spec_summary    = channelSpecName（如有）    │
-  │     │            status          = 'active'                 │
-  │     │          如果有 barcode → INSERT product_barcode:       │
-  │     │            id              = NanoID()                 │
-  │     │            product_id      = 新建的 product.id        │
-  │     │            barcode         = barcode                  │
-  │     │            is_primary      = true                     │
+  │     │  ★ 多規: 一個 product → N 個 spec → 各自判斷路由       │
+  │     │  ★ 單規: 一個 product → 1 筆判斷路由                   │
   │     │                                                      │
-  │     │  ★ sell_pack.product_id 指向 product.id              │
-  │     │  ★ sell_pack.sku = product.sku（冗餘，方便直接查）     │
-  │     │  ★ 後續人工可修正自動建立的 product 資料               │
-  │     │  ★ product = SKU 級別，不同規格 = 不同 product        │
+  │     │  for (每個規格或整體) {                                 │
+  │     │    String sku = spec.skuCode ?? detail.skuCode         │
+  │     │                 ?? detail.channelProductId;            │
+  │     │                                                      │
+  │     │    // 查 DB: 這個 SKU 在我方有沒有對應的 product？      │
+  │     │    Product product = productService                    │
+  │     │      .findByMerchantAndSku(merchantId, sku);          │
+  │     │                                                      │
+  │     │    // Kafka key = channelId:channelProductId:channelSpecId
+  │     │    // → 同一商品+規格在同一 partition → 有序寫入        │
+  │     │    String key = channelId + ":"                        │
+  │     │      + detail.channelProductId + ":"                   │
+  │     │      + (spec.channelSpecId ?? "");                     │
+  │     │                                                      │
+  │     │    if (product == null) {                              │
+  │     │      // ★ 沒有 product → 送 CREATE_PRODUCT            │
+  │     │      //   BackendJob 建好 product 後                   │
+  │     │      //   routeNext 接著發 CREATE_SELL_PACK            │
+  │     │      taskProducer.send("task.backend", key,            │
+  │     │        TaskMessage{                                    │
+  │     │          action = "CREATE_PRODUCT",                    │
+  │     │          payload = {                                   │
+  │     │            sku, name, specSummary, barcode,            │
+  │     │            channelId, channelProductId,                │
+  │     │            channelSpecId, channelProductName,          │
+  │     │            channelSpecName, channelProductUrl,         │
+  │     │            sellingPrice, quantity, status              │
+  │     │          }                                             │
+  │     │        });                                             │
+  │     │                                                      │
+  │     │    } else {                                            │
+  │     │      // ★ 有 product → 直接送 CREATE_SELL_PACK        │
+  │     │      taskProducer.send("task.backend", key,            │
+  │     │        TaskMessage{                                    │
+  │     │          action = "CREATE_SELL_PACK",                  │
+  │     │          payload = {                                   │
+  │     │            productId = product.id,                     │
+  │     │            channelId, channelProductId,                │
+  │     │            channelSpecId, channelProductName,          │
+  │     │            channelSpecName, channelProductUrl,         │
+  │     │            sku, sellingPrice, quantity, status          │
+  │     │          }                                             │
+  │     │        });                                             │
+  │     │    }                                                   │
+  │     │  }                                                     │
+  │     │                                                      │
+  │     │  ★ ChannelJob 不寫 sell_pack / product                │
+  │     │  ★ 全部送 task.backend，由 BackendJob 有序寫入         │
   │     └──────────────────────────────────────────────────────┘
   │
   │  ⑤ SyncLog
@@ -214,12 +239,173 @@ ChannelJob (simpleec-channel-momo-slow)
   │     - 失敗 → channel_sync_logs: sync_type='FETCH_PRODUCTS', status='failed', error_message=...
   │
   ▼
-（結束，無下游 topic。同步商品是一步到位的。）
+═══════════════════════════════════════════════════════════════
+ 第二段：BackendJob — 建立 Product / SellPack
+═══════════════════════════════════════════════════════════════
+
+┌──────────────────────────────────────────────────────────────┐
+│  Topic: task.backend                                         │
+│  Key:   CH-MOMO-001:PROD-123:SPEC-A                         │
+│  → 同一商品+規格在同一 partition，有序處理                      │
+└──────────────────────────────────────────────────────────────┘
+  │
+  ▼
+BackendJob (simpleec-backend-job)
+
+  ┌─ 路由 A: CREATE_PRODUCT（product 不存在時）────────────────┐
+  │                                                            │
+  │  CreateProductActionService — 4 步生命週期:                  │
+  │                                                            │
+  │  setting(msg):                                              │
+  │    從 payload 取 merchantId, sku, name, specSummary,        │
+  │    barcode, channelId, channelProductId, channelSpecId,     │
+  │    channelProductName, channelSpecName, channelProductUrl,  │
+  │    sellingPrice, quantity, status                           │
+  │                                                            │
+  │  verify(msg):                                               │
+  │    確認 merchantId 有效                                     │
+  │                                                            │
+  │  execute(msg):                                              │
+  │    // 1. 再查一次（排隊期間可能已被建立）                     │
+  │    Product product = productService                         │
+  │      .findByMerchantAndSku(merchantId, sku);               │
+  │                                                            │
+  │    if (product == null) {                                   │
+  │      // 2. 建立 product                                    │
+  │      product = new Product();                               │
+  │      product.id = NanoID();                                 │
+  │      product.merchantId = merchantId;                       │
+  │      product.sku = sku;                                     │
+  │      product.name = name;                                   │
+  │      product.specSummary = specSummary;                     │
+  │      product.status = "active";                             │
+  │      productService.insert(product);                        │
+  │                                                            │
+  │      // 3. 建立 barcode（如果有）                            │
+  │      if (barcode != null) {                                 │
+  │        productBarcodeService.insert(product.id, barcode);   │
+  │      }                                                      │
+  │    }                                                        │
+  │                                                            │
+  │  routeNext:                                                 │
+  │    ★ payload 加上 productId → 接力送 CREATE_SELL_PACK      │
+  │    → taskProducer.send("task.backend",                     │
+  │        同一個 key,                                          │
+  │        TaskMessage{ action="CREATE_SELL_PACK",              │
+  │          payload += productId })                            │
+  │                                                            │
+  └─────────────────────────┬──────────────────────────────────┘
+                            │
+                            ▼
+  ┌─ 路由 B: CREATE_SELL_PACK ─────────────────────────────────┐
+  │  （來源 1: ChannelJob 直送 — product 已存在時）              │
+  │  （來源 2: CREATE_PRODUCT routeNext — 建完 product 後接力） │
+  │                                                            │
+  │  CreateSellPackActionService — 4 步生命週期:                 │
+  │                                                            │
+  │  setting(msg):                                              │
+  │    從 payload 取 merchantId, productId, channelId,          │
+  │    channelProductId, channelSpecId,                         │
+  │    channelProductName, channelSpecName, channelProductUrl,  │
+  │    sku, sellingPrice, quantity, status                      │
+  │                                                            │
+  │  verify(msg):                                               │
+  │    確認 productId 存在（防禦性檢查）                         │
+  │    確認 channelId 存在                                      │
+  │                                                            │
+  │  execute(msg):                                              │
+  │    // 1. 查 sell_pack 是否已存在                             │
+  │    SellPack existing = sellPackService                      │
+  │      .findByChannelAndProductSpec(                          │
+  │        channelId, channelProductId, channelSpecId);         │
+  │                                                            │
+  │    if (existing != null) {                                  │
+  │      // 2A. 更新                                            │
+  │      existing.channelProductName = channelProductName;      │
+  │      existing.channelSpecName = channelSpecName;            │
+  │      existing.channelProductUrl = channelProductUrl;        │
+  │      existing.sku = sku;                                    │
+  │      existing.sellingPrice = sellingPrice;                  │
+  │      existing.quantity = quantity;                           │
+  │      existing.status = 上架狀態映射;                         │
+  │      existing.lastSyncAt = now();                           │
+  │      // ★ 補上 productId（如果之前是 null）                 │
+  │      if (existing.productId == null) {                      │
+  │        existing.productId = productId;                      │
+  │      }                                                      │
+  │      sellPackService.update(existing);                      │
+  │                                                            │
+  │    } else {                                                 │
+  │      // 2B. 建立                                            │
+  │      SellPack sp = new SellPack();                          │
+  │      sp.id = NanoID();                                      │
+  │      sp.merchantId = merchantId;                            │
+  │      sp.productId = productId;                              │
+  │      sp.channelId = channelId;                              │
+  │      sp.sku = sku;                                          │
+  │      sp.channelProductId = channelProductId;                │
+  │      sp.channelSpecId = channelSpecId;                      │
+  │      sp.channelProductName = channelProductName;            │
+  │      sp.channelSpecName = channelSpecName;                  │
+  │      sp.channelProductUrl = channelProductUrl;              │
+  │      sp.title = channelProductName;                         │
+  │      sp.sellingPrice = sellingPrice;                        │
+  │      sp.quantity = quantity;                                 │
+  │      sp.status = 上架狀態映射;                               │
+  │      sp.lastSyncAt = now();                                 │
+  │      sellPackService.insert(sp);                            │
+  │    }                                                        │
+  │                                                            │
+  │  routeNext:                                                 │
+  │    （無下游 — 商品同步終點）                                 │
+  │                                                            │
+  │  ★ sell_pack.product_id 指向 product.id                    │
+  │  ★ sell_pack.sku = product.sku（冗餘，方便直接查）           │
+  │  ★ 後續人工可修正自動建立的 product 資料                     │
+  │  ★ product = SKU 級別，不同規格 = 不同 product              │
+  └────────────────────────────────────────────────────────────┘
 
 失敗時:
-  → task.failed → RetryDispatchJob
-    ├── slow topic → 可重打（retryCount < maxRetry）→ retryCount++ → 重新送回 momo.slow
-    └── 超過 maxRetry → task.dlt
+  ChannelJob 失敗:
+    → task.failed → RetryDispatchJob
+      ├── slow topic → 可重打（retryCount < maxRetry）→ retryCount++ → 重新送回 momo.slow
+      └── 超過 maxRetry → task.dlt
+
+  BackendJob 失敗:
+    → task.failed → RetryDispatchJob
+      ├── 可重打 → retryCount++ → 重新送回 task.backend（同 key → 同 partition）
+      └── 超過 maxRetry → task.dlt
+```
+
+### 2.1 流程摘要圖
+
+```
+前端 → API → {platform}.slow → ChannelJob
+                                  │
+                                  ├─ fetchProductList()  ← Step 1: 取列表
+                                  ├─ fetchProductDetail() ← Step 2: 取明細
+                                  ├─ 查 DB: product 存在嗎？
+                                  │
+                                  ├─ 不存在 → task.backend (CREATE_PRODUCT)
+                                  │             │
+                                  │             ▼
+                                  │           BackendJob
+                                  │             │ 建 product + barcode
+                                  │             │ routeNext ↓
+                                  │             ▼
+                                  │           task.backend (CREATE_SELL_PACK)
+                                  │             │
+                                  │             ▼
+                                  │           BackendJob
+                                  │             │ upsert sell_pack (掛上 productId)
+                                  │             └─ 完成
+                                  │
+                                  └─ 存在 → task.backend (CREATE_SELL_PACK)
+                                              │
+                                              ▼
+                                            BackendJob
+                                              │ upsert sell_pack (掛上 productId)
+                                              └─ 完成
 ```
 
 ## 3. DB 欄位對照表
@@ -295,24 +481,40 @@ lastSyncAt, createdAt, updatedAt
 | `productId` | Long | String |
 | `channelId` | Long | String |
 
-### ❌ ChannelAdapter 缺少 fetchProducts 方法
+### ❌ ChannelAdapter 缺少商品拉取方法（兩段式 API）
 
-目前 `ChannelAdapter.java` 沒有 `fetchProducts()` 方法。需要新增：
+目前 `ChannelAdapter.java` 沒有商品拉取方法。需要新增**兩個**方法：
 
 ```java
-/** 從通路拉取所有商品（含規格） */
-List<ChannelProduct> fetchProducts(String channelId);
+/** Step 1: 取商品列表（編號 + 規格編號） */
+List<ChannelProductRef> fetchProductList(String channelId);
+
+/** Step 2: 取單一商品明細（含完整資料） */
+ChannelProduct fetchProductDetail(String channelId, String channelProductId);
 ```
 
 **注意：** `channelId` 是 `String`（NanoID），不是 `Long`。
 
-需要新建 DTO: `ChannelProduct`（平台回傳的商品 DTO，不是我方的 product Entity）
+**Yahoo 特殊**: `fetchProductList()` 內部走「API 請求 + callbackUrl → webhook 回打 CSV」模式。
+callbackUrl = `/webhook/yahoo/{merchantId}`，從 URI path 識別商品歸屬。
+對調用方而言，結果與其他平台一致（都回傳 `List<ChannelProductRef>`）。
 
-### ❌ 需要新建 ChannelProduct DTO
+### ❌ 需要新建 DTO
 
 ```java
 /**
- * 平台回傳的商品資料 DTO（Adapter 層使用）
+ * 商品列表項（Step 1 回傳）
+ * 只有編號，不含完整資料
+ */
+@Data
+public class ChannelProductRef {
+    private String channelProductId;      // 平台商品編號
+    // 有些平台列表 API 也回傳規格編號列表
+    private List<String> channelSpecIds;  // 平台規格編號（可能為空）
+}
+
+/**
+ * 平台回傳的商品完整資料 DTO（Step 2 回傳）
  * 不是我方的 Product Entity
  */
 @Data
@@ -396,29 +598,40 @@ CREATE UNIQUE INDEX idx_sellpack_upsert_key
 ## 8. 資料流完整性驗證矩陣
 
 ```
-平台 API → ChannelProduct DTO → sell_pack 表 → SellPack Entity
+完整資料流:
+  平台 API → ChannelProductRef (LIST) → ChannelProduct (DETAIL)
+  → ChannelJob 查 DB → task.backend payload
+  → BackendJob → sell_pack 表 / product 表
 
-平台欄位              DTO 欄位                DB 欄位                  Entity 欄位
+═══════ sell_pack 資料流 ═══════
+
+平台 API → ChannelProduct DTO → task.backend payload → BackendJob → sell_pack 表
+
+平台欄位              DTO 欄位                payload 欄位             DB 欄位
 ─────────           ──────────            ──────────               ────────────
-product_id    →     channelProductId  →   channel_product_id   →  channelProductId    ✅ OK
-spec_id       →     channelSpecId     →   channel_spec_id      →  channelSpecId       ❌ Entity 缺
-product_name  →     channelProductName→   channel_product_name →  channelProductName  ❌ Entity 缺
-spec_name     →     channelSpecName   →   channel_spec_name    →  channelSpecName     ❌ Entity 缺
-url           →     channelProductUrl →   channel_product_url  →  channelProductUrl   ✅ OK
-sku           →     skuCode           →   sku                  →  sku                 ❌ Entity 缺
-price         →     sellingPrice      →   selling_price        →  sellingPrice        ✅ OK
-qty           →     quantity          →   quantity             →  quantity            ✅ OK
-status        →     status            →   status               →  status              ✅ OK
+product_id    →     channelProductId  →   channelProductId     →  channel_product_id      ✅
+spec_id       →     channelSpecId     →   channelSpecId        →  channel_spec_id         ✅
+product_name  →     channelProductName→   channelProductName   →  channel_product_name    ✅
+spec_name     →     channelSpecName   →   channelSpecName      →  channel_spec_name       ✅
+url           →     channelProductUrl →   channelProductUrl    →  channel_product_url     ✅
+sku           →     skuCode           →   sku                  →  sku                     ✅
+price         →     sellingPrice      →   sellingPrice         →  selling_price           ✅
+qty           →     quantity          →   quantity             →  quantity                ✅
+status        →     status            →   status               →  status                  ✅
+(ChannelJob)  →     ---               →   productId            →  product_id              ✅ (查DB或CREATE_PRODUCT帶入)
 
-平台 API → ChannelProduct DTO → product 表 → Product Entity（自動建立時）
+═══════ product 資料流（自動建立時）═══════
 
-平台欄位              DTO 欄位                DB 欄位                  Entity 欄位
+平台 API → ChannelProduct DTO → task.backend payload → BackendJob → product 表
+
+平台欄位              DTO 欄位                payload 欄位             DB 欄位
 ─────────           ──────────            ──────────               ────────────
-sku           →     skuCode           →   sku                  →  sku                 ✅ OK（改名後）
-product_name  →     channelProductName→   name                 →  name                ✅ OK
-spec_name     →     channelSpecName   →   spec_summary         →  specSummary         ✅ OK
-barcode       →     barcode           →   product_barcode 表    →  ProductBarcode      ✅ OK
+sku           →     skuCode           →   sku                  →  sku                     ✅
+product_name  →     channelProductName→   name                 →  name                    ✅
+spec_name     →     channelSpecName   →   specSummary          →  spec_summary            ✅
+barcode       →     barcode           →   barcode              →  product_barcode 表       ✅
 
 ★ product.id, sell_pack.id 都是 VARCHAR(20) NanoID（程式端產生）
 ★ product = SKU 級別，不再有 product_spec 表
+★ ChannelJob 不直接寫 DB，全部透過 task.backend → BackendJob 寫入
 ```
