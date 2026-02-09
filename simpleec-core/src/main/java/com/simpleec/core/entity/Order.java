@@ -10,11 +10,11 @@ import java.time.LocalDateTime;
 @TableName("orders")
 public class Order {
 
-    @TableId(type = IdType.AUTO)
-    private Long id;
+    @TableId(type = IdType.ASSIGN_UUID)
+    private String id;
 
-    private Long merchantId;
-    private Long channelId;
+    private String merchantId;
+    private String channelId;
     private String channelOrderId;
     private String orderStatus;
     private String buyerName;
@@ -27,6 +27,9 @@ public class Order {
     private BigDecimal totalAmount;
     private BigDecimal shippingFee;
     private BigDecimal discountAmount;
+
+    /** JSONB — 訂單明細 */
+    private String items;
 
     private LocalDateTime channelCreatedAt;
     private LocalDateTime paidAt;

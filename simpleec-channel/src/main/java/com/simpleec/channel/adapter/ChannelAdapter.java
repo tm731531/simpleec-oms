@@ -22,34 +22,34 @@ public interface ChannelAdapter {
     // ==================== 商品相關 ====================
 
     /** 上架商品到通路 */
-    String createListing(Long channelId, SellPack sellPack, Map<String, Object> extraData);
+    String createListing(String channelId, SellPack sellPack, Map<String, Object> extraData);
 
     /** 更新通路上的商品資訊 */
-    void updateListing(Long channelId, SellPack sellPack, Map<String, Object> extraData);
+    void updateListing(String channelId, SellPack sellPack, Map<String, Object> extraData);
 
     /** 更新價格 */
-    void updatePrice(Long channelId, String channelProductId, java.math.BigDecimal price);
+    void updatePrice(String channelId, String channelProductId, java.math.BigDecimal price);
 
     /** 更新庫存 */
-    void updateQuantity(Long channelId, String channelProductId, int quantity);
+    void updateQuantity(String channelId, String channelProductId, int quantity);
 
     /** 開賣 */
-    void startSelling(Long channelId, String channelProductId);
+    void startSelling(String channelId, String channelProductId);
 
     /** 停售 */
-    void stopSelling(Long channelId, String channelProductId);
+    void stopSelling(String channelId, String channelProductId);
 
     // ==================== 訂單相關 ====================
 
     /** 從通路拉取訂單 */
-    List<Order> fetchOrders(Long channelId, java.time.LocalDateTime from, java.time.LocalDateTime to);
+    List<Order> fetchOrders(String channelId, java.time.LocalDateTime from, java.time.LocalDateTime to);
 
     /** 確認出貨 */
-    void confirmShipment(Long channelId, String channelOrderId, String trackingNumber, String logisticsCompany);
+    void confirmShipment(String channelId, String channelOrderId, String trackingNumber, String logisticsCompany);
 
     /** 接受買家取消 */
-    void acceptCancellation(Long channelId, String channelOrderId);
+    void acceptCancellation(String channelId, String channelOrderId);
 
     /** 取得出貨編號 / 物流單號 */
-    String getShippingLabel(Long channelId, String channelOrderId);
+    String getShippingLabel(String channelId, String channelOrderId);
 }

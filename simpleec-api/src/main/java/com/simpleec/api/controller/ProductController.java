@@ -16,14 +16,14 @@ public class ProductController {
 
     @GetMapping
     public ApiResponse<PageResult<Product>> list(
-            @RequestParam Long merchantId,
+            @RequestParam String merchantId,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size) {
         return ApiResponse.ok(productService.list(merchantId, page, size));
     }
 
     @GetMapping("/{id}")
-    public ApiResponse<Product> get(@PathVariable Long id) {
+    public ApiResponse<Product> get(@PathVariable String id) {
         return ApiResponse.ok(productService.getById(id));
     }
 
@@ -34,7 +34,7 @@ public class ProductController {
     }
 
     @PutMapping("/{id}")
-    public ApiResponse<Product> update(@PathVariable Long id, @RequestBody Product product) {
+    public ApiResponse<Product> update(@PathVariable String id, @RequestBody Product product) {
         product.setId(id);
         productService.save(product);
         return ApiResponse.ok(product);

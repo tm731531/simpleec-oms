@@ -16,7 +16,7 @@ public class OrderController {
 
     @GetMapping
     public ApiResponse<PageResult<Order>> list(
-            @RequestParam Long merchantId,
+            @RequestParam String merchantId,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size) {
         return ApiResponse.ok(orderService.list(merchantId, page, size));
@@ -24,7 +24,7 @@ public class OrderController {
 
     @PostMapping("/{id}/status")
     public ApiResponse<Void> updateStatus(
-            @PathVariable Long id,
+            @PathVariable String id,
             @RequestParam String toStatus,
             @RequestParam(required = false) String remark) {
         orderService.updateStatus(id, null, toStatus, "system", remark);

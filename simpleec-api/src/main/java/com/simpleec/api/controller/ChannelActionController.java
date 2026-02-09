@@ -20,8 +20,8 @@ public class ChannelActionController {
 
     @PostMapping("/send")
     public ApiResponse<String> sendAction(
-            @RequestParam Long merchantId,
-            @RequestParam Long channelId,
+            @RequestParam String merchantId,
+            @RequestParam String channelId,
             @RequestParam String channelType,
             @RequestParam String actionType,
             @RequestBody Map<String, Object> payload) {
@@ -37,9 +37,9 @@ public class ChannelActionController {
                 .taskType("channel_action")
                 .taskAction(actionType)
                 .sourceJobType("simpleec-api")
-                .merchantId(String.valueOf(merchantId))
+                .merchantId(merchantId)
                 .ownerType("channel")
-                .ownerId(String.valueOf(channelId))
+                .ownerId(channelId)
                 .payload(payload)
                 .createdAt(Instant.now())
                 .retryCount(0)

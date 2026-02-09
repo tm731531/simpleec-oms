@@ -9,10 +9,10 @@ import java.time.LocalDateTime;
 @TableName("order_status_logs")
 public class OrderStatusLog {
 
-    @TableId(type = IdType.AUTO)
-    private Long id;
+    @TableId(type = IdType.ASSIGN_UUID)
+    private String id;
 
-    private Long orderId;
+    private String orderId;
     private String fromStatus;
     private String toStatus;
     private String operator;

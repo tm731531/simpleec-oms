@@ -10,23 +10,19 @@ import java.time.LocalDateTime;
 @TableName("product")
 public class Product {
 
-    @TableId(type = IdType.AUTO)
-    private Long id;
+    @TableId(type = IdType.ASSIGN_UUID)
+    private String id;
 
-    private Long merchantId;
-
-    @TableField("item_number")
-    private String itemNumber;
-
+    private String merchantId;
+    private String productGroupId;
+    private String sku;
     private String name;
-    private String description;
-    private String brand;
-    private String mainImageUrl;
+    private String specSummary;
     private BigDecimal costPrice;
     private BigDecimal suggestPrice;
-    private Integer totalQuantity;
+    private Integer quantity;
     private Integer safetyQuantity;
-    private String status; // active, inactive, deleted
+    private String status;
 
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdAt;

@@ -10,18 +10,22 @@ import java.time.LocalDateTime;
 @TableName("sell_pack")
 public class SellPack {
 
-    @TableId(type = IdType.AUTO)
-    private Long id;
+    @TableId(type = IdType.ASSIGN_UUID)
+    private String id;
 
-    private Long merchantId;
-    private Long productId;
-    private Long channelId;
+    private String merchantId;
+    private String productId;
+    private String channelId;
+    private String sku;
     private String channelProductId;
+    private String channelSpecId;
+    private String channelProductName;
+    private String channelSpecName;
     private String channelProductUrl;
     private String title;
     private BigDecimal sellingPrice;
     private Integer quantity;
-    private String status; // draft, pending, active, inactive, failed
+    private String status;
 
     private LocalDateTime lastSyncAt;
 

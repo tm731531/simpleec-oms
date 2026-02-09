@@ -36,59 +36,59 @@ public class MomoChannelAdapter implements ChannelAdapter {
     }
 
     @Override
-    public String createListing(Long channelId, SellPack sellPack, Map<String, Object> extraData) {
+    public String createListing(String channelId, SellPack sellPack, Map<String, Object> extraData) {
         // TODO: call momo GoodsStartSelling API
         log.info("[momo] createListing for channelId={}, product={}", channelId, sellPack.getTitle());
         return "MOMO_PRODUCT_ID_PLACEHOLDER";
     }
 
     @Override
-    public void updateListing(Long channelId, SellPack sellPack, Map<String, Object> extraData) {
+    public void updateListing(String channelId, SellPack sellPack, Map<String, Object> extraData) {
         log.info("[momo] updateListing for channelId={}", channelId);
     }
 
     @Override
-    public void updatePrice(Long channelId, String channelProductId, BigDecimal price) {
+    public void updatePrice(String channelId, String channelProductId, BigDecimal price) {
         // TODO: call momo GoodsPriceModify API
         log.info("[momo] updatePrice channelProductId={}, price={}", channelProductId, price);
     }
 
     @Override
-    public void updateQuantity(Long channelId, String channelProductId, int quantity) {
+    public void updateQuantity(String channelId, String channelProductId, int quantity) {
         log.info("[momo] updateQuantity channelProductId={}, qty={}", channelProductId, quantity);
     }
 
     @Override
-    public void startSelling(Long channelId, String channelProductId) {
+    public void startSelling(String channelId, String channelProductId) {
         // TODO: call momo GoodsStartSelling API
         log.info("[momo] startSelling channelProductId={}", channelProductId);
     }
 
     @Override
-    public void stopSelling(Long channelId, String channelProductId) {
+    public void stopSelling(String channelId, String channelProductId) {
         // TODO: call momo GoodsStopSelling API
         log.info("[momo] stopSelling channelProductId={}", channelProductId);
     }
 
     @Override
-    public List<Order> fetchOrders(Long channelId, LocalDateTime from, LocalDateTime to) {
+    public List<Order> fetchOrders(String channelId, LocalDateTime from, LocalDateTime to) {
         // TODO: call momo order query API
         log.info("[momo] fetchOrders channelId={}, from={}, to={}", channelId, from, to);
         return List.of();
     }
 
     @Override
-    public void confirmShipment(Long channelId, String channelOrderId, String trackingNumber, String logisticsCompany) {
+    public void confirmShipment(String channelId, String channelOrderId, String trackingNumber, String logisticsCompany) {
         log.info("[momo] confirmShipment orderId={}, tracking={}", channelOrderId, trackingNumber);
     }
 
     @Override
-    public void acceptCancellation(Long channelId, String channelOrderId) {
+    public void acceptCancellation(String channelId, String channelOrderId) {
         log.info("[momo] acceptCancellation orderId={}", channelOrderId);
     }
 
     @Override
-    public String getShippingLabel(Long channelId, String channelOrderId) {
+    public String getShippingLabel(String channelId, String channelOrderId) {
         log.info("[momo] getShippingLabel orderId={}", channelOrderId);
         return null;
     }

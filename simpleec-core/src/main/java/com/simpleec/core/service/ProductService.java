@@ -14,7 +14,7 @@ public class ProductService {
 
     private final ProductMapper productMapper;
 
-    public PageResult<Product> list(Long merchantId, int page, int size) {
+    public PageResult<Product> list(String merchantId, int page, int size) {
         Page<Product> result = productMapper.selectPage(
                 new Page<>(page, size),
                 new LambdaQueryWrapper<Product>()
@@ -25,7 +25,7 @@ public class ProductService {
         return PageResult.of(result.getRecords(), result.getTotal(), page, size);
     }
 
-    public Product getById(Long id) {
+    public Product getById(String id) {
         return productMapper.selectById(id);
     }
 
@@ -37,11 +37,11 @@ public class ProductService {
         }
     }
 
-    public Product getByItemNumber(Long merchantId, String itemNumber) {
+    public Product getBySku(String merchantId, String sku) {
         return productMapper.selectOne(
                 new LambdaQueryWrapper<Product>()
                         .eq(Product::getMerchantId, merchantId)
-                        .eq(Product::getItemNumber, itemNumber)
+                        .eq(Product::getSku, sku)
         );
     }
 }
