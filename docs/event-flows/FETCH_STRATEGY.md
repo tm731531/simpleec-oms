@@ -1,6 +1,6 @@
 # FETCH_STRATEGY — 各平台抓取策略設計
 
-> **依據**: `oneec-consuming-action-job` 參考架構 + 業務討論（2026-02-09）
+> **依據**: 多平台電商系統實戰經驗 + 業務討論（2026-02-09）
 >
 > **本文定義**：FetchOrdersActionService / FetchRefundOrdersActionService 的 `doAction()` 內部如何決定
 > 「要抓哪些狀態 × 多長時間 × 什麼物流類型 × 多久跑一次」。
@@ -350,14 +350,14 @@ void doAction() {
 
 ---
 
-## 7. 參考架構來源
+## 7. 設計模式來源
 
-本設計參考 `oneec-consuming-action-job-ga`（路徑: `/home/tom/ONEEC/ONEEC/oneec-consuming-action-job-ga/`）：
+本設計基於過去多平台電商系統的實戰經驗，核心模式：
 
-- 19 個平台 × ~25 個 Action = ~500 個 ServiceImpl
-- `ActionFactory`: switch-case 路由 (topic, action) → ServiceImpl
-- `ActionService` 介面: `setting()`, `getPlatformTokens()`, `verifyNeedData()`, `doAction()`
-- 時間窗口邏輯嵌入在每個平台的 `GetOrderServiceImpl.doAction()` 中
+- 每平台各自實作 ActionService，各自定義抓取策略
+- `ActionFactory`: 路由 (topic, action) → 對應的 ServiceImpl
+- `ActionService` 4-step 生命週期: `setting()`, `getPlatformTokens()`, `verifyNeedData()`, `doAction()`
+- 時間窗口邏輯嵌入在每個平台的 `doAction()` 中
 - 分鐘條件: `getMinute() % 10 >= 5` (快速刷新) / `getMinute() > 53` (慢速刷新)
 
 SimpleEC OMS 已經有相同的 4-step 生命週期（ActionService.java），架構一致。
