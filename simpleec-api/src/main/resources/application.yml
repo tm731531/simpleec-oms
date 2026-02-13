@@ -47,6 +47,17 @@ mybatis-plus:
     map-underscore-to-camel-case: true
     log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
 
+simpleec:
+  kafka:
+    retention:
+      channel: 1d
+      order-process: 1d
+      task-backend: 1d
+      task-frontend: 1d
+      scheduler: 1d
+      task-failed: 1d
+      task-dlt: 30d
+
 logging:
   level:
     com.simpleec: DEBUG
