@@ -62,24 +62,26 @@
 
 ### 1.3 Topic 清單
 
-| Topic | Partitions | 生產者 | 消費者 | 用途 |
-|-------|-----------|--------|--------|------|
-| `momo.slow` | 8 | SchedulerJob, API | ChannelJob (momo-slow) | Momo 重操作 |
-| `momo.fast` | 8 | SchedulerJob, API | ChannelJob (momo-fast) | Momo 即時操作 |
-| `shopee.slow` | 8 | SchedulerJob, API | ChannelJob (shopee-slow) | Shopee 重操作 |
-| `shopee.fast` | 8 | SchedulerJob, API | ChannelJob (shopee-fast) | Shopee 即時操作 |
-| `yahoo.slow` | 8 | SchedulerJob, API | ChannelJob (yahoo-slow) | Yahoo 重操作 |
-| `yahoo.fast` | 8 | SchedulerJob, API | ChannelJob (yahoo-fast) | Yahoo 即時操作 |
-| `pchome.slow` | 8 | SchedulerJob, API | ChannelJob (pchome-slow) | PChome 重操作 |
-| `pchome.fast` | 8 | SchedulerJob, API | ChannelJob (pchome-fast) | PChome 即時操作 |
-| `cyberbiz.slow` | 8 | SchedulerJob, API | ChannelJob (cyberbiz-slow) | Cyberbiz 重操作 |
-| `cyberbiz.fast` | 8 | SchedulerJob, API | ChannelJob (cyberbiz-fast) | Cyberbiz 即時操作 |
-| `order.process` | 8 | ChannelJob | OrderProcessJob | 訂單入庫處理 |
-| `task.backend` | 8 | OrderProcessJob, ChannelJob, SchedulerJob | BackendJob | 後台任務（商品建立、退款同步、統計） |
-| `task.frontend` | 8 | BackendJob | FrontendJob | 前端通知 |
-| `scheduler` | 4 | HeartbeatTimer | SchedulerJob | 排程心跳 |
-| `task.failed` | 4 | 任何 JOB | RetryDispatchJob | 失敗重打調度 |
-| `task.dlt` | 4 | RetryDispatchJob, 任何 JOB | — (不消費) | 死信 (30天 retention) |
+| Topic | Partitions | Retention | 生產者 | 消費者 | 用途 |
+|-------|-----------|-----------|--------|--------|------|
+| `momo.slow` | 8 | 1d | SchedulerJob, API | ChannelJob (momo-slow) | Momo 重操作 |
+| `momo.fast` | 8 | 1d | SchedulerJob, API | ChannelJob (momo-fast) | Momo 即時操作 |
+| `shopee.slow` | 8 | 1d | SchedulerJob, API | ChannelJob (shopee-slow) | Shopee 重操作 |
+| `shopee.fast` | 8 | 1d | SchedulerJob, API | ChannelJob (shopee-fast) | Shopee 即時操作 |
+| `yahoo.slow` | 8 | 1d | SchedulerJob, API | ChannelJob (yahoo-slow) | Yahoo 重操作 |
+| `yahoo.fast` | 8 | 1d | SchedulerJob, API | ChannelJob (yahoo-fast) | Yahoo 即時操作 |
+| `pchome.slow` | 8 | 1d | SchedulerJob, API | ChannelJob (pchome-slow) | PChome 重操作 |
+| `pchome.fast` | 8 | 1d | SchedulerJob, API | ChannelJob (pchome-fast) | PChome 即時操作 |
+| `cyberbiz.slow` | 8 | 1d | SchedulerJob, API | ChannelJob (cyberbiz-slow) | Cyberbiz 重操作 |
+| `cyberbiz.fast` | 8 | 1d | SchedulerJob, API | ChannelJob (cyberbiz-fast) | Cyberbiz 即時操作 |
+| `order.process` | 8 | 1d | ChannelJob | OrderProcessJob | 訂單入庫處理 |
+| `task.backend` | 8 | 1d | OrderProcessJob, ChannelJob, SchedulerJob | BackendJob | 後台任務（商品建立、退款同步、統計） |
+| `task.frontend` | 8 | 1d | BackendJob | FrontendJob | 前端通知 |
+| `scheduler` | 4 | 1d | HeartbeatTimer | SchedulerJob | 排程心跳 |
+| `task.failed` | 4 | 1d | 任何 JOB | RetryDispatchJob | 失敗重打調度 |
+| `task.dlt` | 4 | 30d | RetryDispatchJob, 任何 JOB | — (不消費) | 死信 |
+
+> Retention 可透過 `simpleec.kafka.retention.*` 設定覆寫（`@ConfigurationProperties`，支援 `1d`、`2h`、`30m` 格式）。
 
 ---
 

@@ -112,16 +112,18 @@ docker compose up -d
 
 ## Kafka Topics（16 個）
 
-| Topic | 用途 |
-|-------|------|
-| `{platform}.fast` | 即時操作（出貨確認、商品列表同步、庫存更新） |
-| `{platform}.slow` | 排程操作（拉單、退貨同步、商品明細抓取） |
-| `order.process` | 訂單整理入庫 |
-| `task.backend` | 後台任務（統計、通知） |
-| `task.frontend` | 前台任務 |
-| `scheduler` | 排程心跳 |
-| `task.failed` | 失敗重試佇列 |
-| `task.dlt` | 死信佇列（30 天保留） |
+| Topic | 用途 | 預設保留 |
+|-------|------|---------|
+| `{platform}.fast` | 即時操作（出貨確認、商品列表同步、庫存更新） | 1 天 |
+| `{platform}.slow` | 排程操作（拉單、退貨同步、商品明細抓取） | 1 天 |
+| `order.process` | 訂單整理入庫 | 1 天 |
+| `task.backend` | 後台任務（統計、通知） | 1 天 |
+| `task.frontend` | 前台任務 | 1 天 |
+| `scheduler` | 排程心跳 | 1 天 |
+| `task.failed` | 失敗重試佇列 | 1 天 |
+| `task.dlt` | 死信佇列 | 30 天 |
+
+> 保留時間可透過 `simpleec.kafka.retention.*` 設定覆寫，支援 Spring Boot Duration 格式（`1d`、`2h`、`30m`）。
 
 > `{platform}` = momo / shopee / yahoo / pchome / cyberbiz
 

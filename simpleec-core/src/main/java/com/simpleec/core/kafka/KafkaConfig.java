@@ -17,33 +17,44 @@ import org.springframework.kafka.support.serializer.JsonDeserializer;
 import org.springframework.kafka.support.serializer.JsonSerializer;
 import org.springframework.util.backoff.FixedBackOff;
 import org.apache.kafka.clients.admin.NewTopic;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 
 @Configuration
+@RequiredArgsConstructor
 @Slf4j
 public class KafkaConfig {
 
     @Value("${spring.kafka.bootstrap-servers:localhost:9092}")
     private String bootstrapServers;
 
-    // ===== Per-channel Topics (8 partitions each) =====
-    @Bean public NewTopic momoFast()    { return channelTopic("momo.fast"); }
-    @Bean public NewTopic momoSlow()    { return channelTopic("momo.slow"); }
-    @Bean public NewTopic shopeeFast()  { return channelTopic("shopee.fast"); }
-    @Bean public NewTopic shopeeSlow()  { return channelTopic("shopee.slow"); }
-    @Bean public NewTopic yahooFast()   { return channelTopic("yahoo.fast"); }
-    @Bean public NewTopic yahooSlow()   { return channelTopic("yahoo.slow"); }
-    @Bean public NewTopic pchomeFast()  { return channelTopic("pchome.fast"); }
-    @Bean public NewTopic pchomeSlow()  { return channelTopic("pchome.slow"); }
+    private final KafkaRetentionProperties retention;
+
+    private String retentionMs(Duration duration) {
+        return String.valueOf(duration.toMillis());
+    }
+
+    // ===== Per-channel Topics (8 partitions each, 5 platforms × fast/slow = 10) =====
+    @Bean public NewTopic momoFast()       { return channelTopic("momo.fast"); }
+    @Bean public NewTopic momoSlow()       { return channelTopic("momo.slow"); }
+    @Bean public NewTopic shopeeFast()     { return channelTopic("shopee.fast"); }
+    @Bean public NewTopic shopeeSlow()     { return channelTopic("shopee.slow"); }
+    @Bean public NewTopic yahooFast()      { return channelTopic("yahoo.fast"); }
+    @Bean public NewTopic yahooSlow()      { return channelTopic("yahoo.slow"); }
+    @Bean public NewTopic pchomeFast()     { return channelTopic("pchome.fast"); }
+    @Bean public NewTopic pchomeSlow()     { return channelTopic("pchome.slow"); }
+    @Bean public NewTopic cyberbizFast()   { return channelTopic("cyberbiz.fast"); }
+    @Bean public NewTopic cyberbizSlow()   { return channelTopic("cyberbiz.slow"); }
 
     private NewTopic channelTopic(String name) {
         return TopicBuilder.name(name)
             .partitions(8)
             .replicas(1)
-            .config(TopicConfig.RETENTION_MS_CONFIG, "-1")
+            .config(TopicConfig.RETENTION_MS_CONFIG, retentionMs(retention.getChannel()))
             .build();
     }
 
@@ -52,7 +63,7 @@ public class KafkaConfig {
     public NewTopic orderProcess() {
         return TopicBuilder.name("order.process")
             .partitions(8).replicas(1)
-            .config(TopicConfig.RETENTION_MS_CONFIG, "-1")
+            .config(TopicConfig.RETENTION_MS_CONFIG, retentionMs(retention.getOrderProcess()))
             .build();
     }
 
@@ -60,7 +71,7 @@ public class KafkaConfig {
     public NewTopic taskBackend() {
         return TopicBuilder.name("task.backend")
             .partitions(8).replicas(1)
-            .config(TopicConfig.RETENTION_MS_CONFIG, "-1")
+            .config(TopicConfig.RETENTION_MS_CONFIG, retentionMs(retention.getTaskBackend()))
             .build();
     }
 
@@ -68,7 +79,7 @@ public class KafkaConfig {
     public NewTopic taskFrontend() {
         return TopicBuilder.name("task.frontend")
             .partitions(8).replicas(1)
-            .config(TopicConfig.RETENTION_MS_CONFIG, "-1")
+            .config(TopicConfig.RETENTION_MS_CONFIG, retentionMs(retention.getTaskFrontend()))
             .build();
     }
 
@@ -77,7 +88,7 @@ public class KafkaConfig {
     public NewTopic scheduler() {
         return TopicBuilder.name("scheduler")
             .partitions(4).replicas(1)
-            .config(TopicConfig.RETENTION_MS_CONFIG, "-1")
+            .config(TopicConfig.RETENTION_MS_CONFIG, retentionMs(retention.getScheduler()))
             .build();
     }
 
@@ -86,17 +97,16 @@ public class KafkaConfig {
     public NewTopic taskFailed() {
         return TopicBuilder.name("task.failed")
             .partitions(4).replicas(1)
-            .config(TopicConfig.RETENTION_MS_CONFIG, "-1")
+            .config(TopicConfig.RETENTION_MS_CONFIG, retentionMs(retention.getTaskFailed()))
             .build();
     }
 
-    // ===== Dead Letter Topic (30 day retention) =====
+    // ===== Dead Letter Topic (30 day retention by default) =====
     @Bean
     public NewTopic taskDlt() {
         return TopicBuilder.name("task.dlt")
             .partitions(4).replicas(1)
-            .config(TopicConfig.RETENTION_MS_CONFIG,
-                    String.valueOf(30L * 24 * 60 * 60 * 1000))
+            .config(TopicConfig.RETENTION_MS_CONFIG, retentionMs(retention.getTaskDlt()))
             .build();
     }
 
