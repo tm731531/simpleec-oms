@@ -8,8 +8,18 @@
 
 | 觸發源 | 方式 | Topic | Key |
 |--------|------|-------|-----|
-| 前端按鈕 | `POST /api/v1/channels/{channelId}/sync-products` → API 發 TaskMessage | `{platform}.slow` | `channelId`（同通路排隊，不能並行跑兩次） |
-| 排程（未來） | SchedulerJob 定時觸發（尚未實作） | `{platform}.slow` | `channelId` |
+| 前端按鈕（唯一觸發方式） | `POST /api/v1/channels/{channelId}/sync-products` → API 發 TaskMessage | `{platform}.fast` | `channelId`（同通路排隊，不能並行跑兩次） |
+
+> **設計決策：商品同步僅手動觸發，不走排程。**
+> - 客戶自行決定何時同步哪個通路，逐通路操作
+> - 避免系統同時對多平台發起大量 API 請求造成壓力
+> - 訂單同步 (`FETCH_ORDERS`) 和退貨同步 (`FETCH_REFUND_ORDERS`) 才是排程自動觸發
+>
+> **Topic 為 fast（非 slow）：**
+> - 列表 + diff 很快（一次分頁 API + Redis SET 比對）
+> - 用戶期望立即看到結果（新增 N、移除 M）
+> - 慢的 detail 抓取發散到 `{platform}.slow` topic 背景處理
+> - 詳見 `multi-channel-architecture-design.md` Part 5
 
 ### 1.1 API 端點
 
@@ -40,7 +50,7 @@ Error:
 2. 查 `channel` 表確認 channelId 屬於此 merchant 且 actived=true
 3. 查 `channel → platform` 取得 platformType（momo/shopee/...）
 4. 組裝 TaskMessage（taskAction=FETCH_PRODUCTS）
-5. 發送到 `{platformType}.slow` topic，key=channelId
+5. 發送到 `{platformType}.fast` topic，key=channelId
 6. 回傳 202 + messageId
 
 ### 1.2 前端觸發

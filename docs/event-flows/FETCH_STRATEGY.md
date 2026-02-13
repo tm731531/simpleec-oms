@@ -26,8 +26,8 @@
 
 | Topic | 用途 | 特性 | 範例 action |
 |-------|------|------|------------|
-| `{platform}.slow` | 重操作（拉單、同步商品） | 一次可能打幾百個 API call，耗時長 | FETCH_ORDERS, FETCH_PRODUCTS, FETCH_REFUND_ORDERS |
-| `{platform}.fast` | 輕操作（即時回應） | 單筆操作，需要立即執行 | SHIPPING_CONFIRMED, ORDER_CANCELED, MODIFY_PRICE, MODIFY_QUANTITY |
+| `{platform}.slow` | 重操作（拉單 + 商品明細） | 一次可能打幾百個 API call，耗時長 | FETCH_ORDERS (排程自動), FETCH_REFUND_ORDERS (排程自動), FETCH_PRODUCT_DETAIL (由 FETCH_PRODUCTS 發散) |
+| `{platform}.fast` | 輕操作 + 快速回應 | 單筆操作或快速 diff，需要立即執行 | SHIPPING_CONFIRMED, ORDER_CANCELED, MODIFY_PRICE, FETCH_PRODUCTS (手動觸發，列表+diff 快速完成) |
 
 **為什麼不能共用一個 topic？**
 
@@ -340,7 +340,15 @@ void doAction() {
 
 ## 6. 退貨/退款單抓取策略
 
-退貨單（`FETCH_REFUND_ORDERS`）和訂單抓取獨立：
+退貨單（`FETCH_REFUND_ORDERS`）和訂單抓取獨立，但同為 **SchedulerJob 排程自動觸發**（非手動）：
+
+> **觸發模式總覽：**
+> | Action | 觸發方式 | Topic | 說明 |
+> |--------|---------|-------|------|
+> | `FETCH_ORDERS` | **排程自動** (SchedulerJob) | `{platform}.slow` | 每 5-10 分鐘自動拉單 |
+> | `FETCH_REFUND_ORDERS` | **排程自動** (SchedulerJob) | `{platform}.slow` | 多層時間窗口自動抓取退貨/退款 |
+> | `FETCH_PRODUCTS` | **手動觸發** (前端按鈕) | `{platform}.fast` | 客戶逐通路點擊同步（列表+diff），不走排程 |
+> | `FETCH_PRODUCT_DETAIL` | **自動** (由 FETCH_PRODUCTS 發散) | `{platform}.slow` | 逐筆抓取商品明細 |
 
 | 平台 | 策略 | 說明 |
 |------|------|------|

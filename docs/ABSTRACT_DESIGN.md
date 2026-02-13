@@ -15,13 +15,13 @@
 |------|------|-----------|------|
 | **simpleec-api** | REST API 入口 | — | 接收前端 HTTP 請求，發 Kafka 任務 |
 | **simpleec-gateway** | 閘道 | — | 路由 + 安全（未來） |
-| **simpleec-channel-job** | 通路操作執行器 | `{platform}.fast`, `{platform}.slow` | 8 個 instance (4 平台 × fast/slow) |
+| **simpleec-channel-job** | 通路操作執行器 | `{platform}.fast`, `{platform}.slow` | 10 個 instance (5 平台 × fast/slow) |
 | **simpleec-order-job** | 訂單整理入庫 | `order.process` | 接收 ChannelJob 的訂單 → DB upsert |
 | **simpleec-backend-job** | 後台任務 | `task.backend` | 商品/SellPack 建立、退款同步、統計聚合、分區管理 |
 | **simpleec-frontend-job** | 前端通知 | `task.frontend` | WebSocket 推送通知 |
 | **simpleec-scheduler-job** | 排程觸發器 | `scheduler` | HeartbeatTimer 產生 tick → 判斷排程規則 → 發任務 |
 
-### 1.2 十四個 Kafka Topic
+### 1.2 十六個 Kafka Topic
 
 ```
               ┌─────── scheduler ────────┐
@@ -46,9 +46,10 @@
   ChannelJob ──→ order.process ──→ OrderProcessJob ──→ task.backend ──→ BackendJob
                                                      ──→ task.frontend ──→ FrontendJob (WebSocket)
 
-同步商品後的建立/更新:
-  ChannelJob ──→ task.backend ──→ BackendJob (CREATE_PRODUCT → 條件式 routeNext → CREATE_SELL_PACK)
-                               ──→ BackendJob (CREATE_SELL_PACK)
+同步商品後的明細抓取+建立/更新:
+  ChannelJob (FETCH_PRODUCTS on fast) ──→ {platform}.slow (FETCH_PRODUCT_DETAIL)
+  ChannelJob (FETCH_PRODUCT_DETAIL on slow) ──→ task.backend (CREATE_PRODUCT → routeNext → CREATE_SELL_PACK)
+                                             ──→ task.backend (CREATE_SELL_PACK)
 
 商品匯入（CSV）:
   simpleec-api ──→ task.backend ──→ BackendJob (CREATE_PRODUCT，無 routeNext)
@@ -71,6 +72,8 @@
 | `yahoo.fast` | 8 | SchedulerJob, API | ChannelJob (yahoo-fast) | Yahoo 即時操作 |
 | `pchome.slow` | 8 | SchedulerJob, API | ChannelJob (pchome-slow) | PChome 重操作 |
 | `pchome.fast` | 8 | SchedulerJob, API | ChannelJob (pchome-fast) | PChome 即時操作 |
+| `cyberbiz.slow` | 8 | SchedulerJob, API | ChannelJob (cyberbiz-slow) | Cyberbiz 重操作 |
+| `cyberbiz.fast` | 8 | SchedulerJob, API | ChannelJob (cyberbiz-fast) | Cyberbiz 即時操作 |
 | `order.process` | 8 | ChannelJob | OrderProcessJob | 訂單入庫處理 |
 | `task.backend` | 8 | OrderProcessJob, ChannelJob, SchedulerJob | BackendJob | 後台任務（商品建立、退款同步、統計） |
 | `task.frontend` | 8 | BackendJob | FrontendJob | 前端通知 |
@@ -126,9 +129,10 @@ public interface ActionService {
 
 | Action | Topic 類型 | 觸發來源 | 職責 |
 |--------|-----------|---------|------|
-| `FETCH_ORDERS` | slow | SchedulerJob / API | 拉取訂單（分段抓取策略） |
-| `FETCH_PRODUCTS` | slow | API | 同步商品（全量） |
-| `FETCH_REFUND_ORDERS` | slow | SchedulerJob | 拉取退貨/退款單 |
+| `FETCH_ORDERS` | slow | SchedulerJob（排程自動） | 拉取訂單（分段抓取策略） |
+| `FETCH_PRODUCTS` | **fast** | API（手動，客戶逐通路點擊） | 列表+差異比對，發散 FETCH_PRODUCT_DETAIL 到 `{platform}.slow` |
+| `FETCH_PRODUCT_DETAIL` | slow | FETCH_PRODUCTS 發散 | 單筆商品明細抓取 + 路由到 task.backend |
+| `FETCH_REFUND_ORDERS` | slow | SchedulerJob（排程自動） | 拉取退貨/退款單（多層時間窗口） |
 | `CHECK_HEALTH` | fast | SchedulerJob | 驗證通路 API 連線 |
 | `SHIPPING_CONFIRMED` | fast | API (前端) | 確認出貨（帶物流單號） |
 | `ORDER_CANCELED` | fast | API (前端) | 接受取消訂單 |
@@ -1043,7 +1047,7 @@ public interface ChannelAdapter {
 | POST | `/api/v1/auth/login` | JWT 登入 | email + password → token |
 | POST | `/api/v1/auth/refresh` | Token 刷新 | refreshToken → newToken |
 | POST | `/api/v1/channels/{id}/sync-orders` | 手動拉單 | → {platform}.slow (FETCH_ORDERS) |
-| POST | `/api/v1/channels/{id}/sync-products` | 手動同步商品 | → {platform}.slow (FETCH_PRODUCTS) |
+| POST | `/api/v1/channels/{id}/sync-products` | 手動同步商品（逐通路） | → {platform}.fast (FETCH_PRODUCTS，列表+diff 快速回應) |
 | POST | `/api/v1/products/import` | CSV 匯入商品 | 解析 CSV → 逐筆發 task.backend (CREATE_PRODUCT，不帶 channelId) |
 | GET | `/api/v1/statistics/summary` | 統計摘要 | ?view=sales/revenue/finance/rma |
 | GET | `/api/v1/statistics/daily` | 每日趨勢 | 折線圖用 |
@@ -1063,6 +1067,7 @@ POST /api/v1/channels/{channelId}/sync-orders
 
 POST /api/v1/channels/{channelId}/sync-products
   │  同上，taskAction=FETCH_PRODUCTS
+  │  topic="{platformType}.fast"（列表+diff 快速回應，detail 背景處理）
   │  key=channelId（同通路排隊）
 
 POST /api/v1/orders/{orderId}/ship

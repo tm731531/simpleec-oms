@@ -1,6 +1,6 @@
 # SimpleEC OMS
 
-多平台電商訂單管理系統 — 整合 Momo、Shopee、Yahoo、PChome 等通路，統一管理商品、訂單、出貨與庫存。
+多平台電商訂單管理系統 — 整合 Momo、Shopee、Yahoo、PChome、Cyberbiz 等通路，統一管理商品、訂單、出貨與庫存。
 
 ## 功能特色
 
@@ -36,7 +36,7 @@ simpleec-oms/
 ├── simpleec-channel         # 通路整合層（Adapter 介面）
 ├── simpleec-api             # 前端 REST API（:8082）
 ├── simpleec-gateway         # 對外 Gateway / Webhook / ERP（:8081）
-├── simpleec-channel-job     # 通路同步 JOB（×8 實例：4 平台 × fast/slow）
+├── simpleec-channel-job     # 通路同步 JOB（×10 實例：5 平台 × fast/slow）
 ├── simpleec-order-job       # 訂單處理 JOB
 ├── simpleec-scheduler-job   # 排程引擎（HeartbeatTimer）
 ├── simpleec-backend-job     # 後台非同步 JOB
@@ -110,12 +110,12 @@ docker compose up -d
 
 詳見 [docs/DOCKER_GUIDE.md](docs/DOCKER_GUIDE.md)。
 
-## Kafka Topics
+## Kafka Topics（16 個）
 
 | Topic | 用途 |
 |-------|------|
-| `{platform}.fast` | 即時操作（出貨確認、庫存更新） |
-| `{platform}.slow` | 排程操作（同步商品、拉單） |
+| `{platform}.fast` | 即時操作（出貨確認、商品列表同步、庫存更新） |
+| `{platform}.slow` | 排程操作（拉單、退貨同步、商品明細抓取） |
 | `order.process` | 訂單整理入庫 |
 | `task.backend` | 後台任務（統計、通知） |
 | `task.frontend` | 前台任務 |
@@ -123,7 +123,16 @@ docker compose up -d
 | `task.failed` | 失敗重試佇列 |
 | `task.dlt` | 死信佇列（30 天保留） |
 
-> `{platform}` = momo / shopee / yahoo / pchome
+> `{platform}` = momo / shopee / yahoo / pchome / cyberbiz
+
+### 觸發模式
+
+| 同步類型 | 觸發方式 | Topic |
+|---------|---------|-------|
+| 商品同步 (`FETCH_PRODUCTS`) | **手動** — 客戶逐通路點擊 | `{platform}.fast` |
+| 商品明細 (`FETCH_PRODUCT_DETAIL`) | 自動 — 由商品同步發散 | `{platform}.slow` |
+| 訂單同步 (`FETCH_ORDERS`) | **排程自動** — 每 5-10 分鐘 | `{platform}.slow` |
+| 退貨同步 (`FETCH_REFUND_ORDERS`) | **排程自動** — 多層時間窗 | `{platform}.slow` |
 
 ## 資料庫
 
@@ -147,10 +156,15 @@ Schema 設計文件：[docs/SCHEMA.md](docs/SCHEMA.md)
 | 文件 | 說明 |
 |------|------|
 | [DESIGN_v2.md](DESIGN_v2.md) | 完整系統設計（API、JOB、前端、Kafka） |
+| [docs/ABSTRACT_DESIGN.md](docs/ABSTRACT_DESIGN.md) | 抽象設計規格（模組合約、介面定義） |
 | [docs/SCHEMA.md](docs/SCHEMA.md) | 資料庫 Schema v4 設計 |
 | [docs/DOCKER_GUIDE.md](docs/DOCKER_GUIDE.md) | Docker 環境使用手冊 |
 | [docs/OPERATIONS_RUNBOOK.md](docs/OPERATIONS_RUNBOOK.md) | Kafka 營運手冊 |
-| [docs/event-flows/](docs/event-flows/) | 事件流設計（同步商品、拉單） |
+| [docs/STATISTICS_DESIGN.md](docs/STATISTICS_DESIGN.md) | 日統計設計 |
+| [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) | 實作計劃 |
+| [docs/STATUS.md](docs/STATUS.md) | 開發進度追蹤 |
+| [docs/event-flows/](docs/event-flows/) | 事件流設計（同步商品、拉單、抓取策略） |
+| [docs/plans/](docs/plans/) | 架構設計文件（多通路架構、商品差異同步） |
 
 ## 開發指引
 
