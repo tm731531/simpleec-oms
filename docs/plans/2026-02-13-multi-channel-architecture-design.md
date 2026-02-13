@@ -1407,7 +1407,7 @@ Webhook: POST /webhook/yahoo/{merchantId}
     │    ④ Set diff: added / removed
     │
     │    ⑤a For added products (already have full data from CSV!):
-    │       No FETCH_PRODUCT_DETAIL needed — skip product.detail topic entirely
+    │       No FETCH_PRODUCT_DETAIL needed — skip detail fetch step entirely
     │       For each product+variant:
     │         query productService.findByMerchantAndSku()
     │         → send directly to task.backend:
@@ -1756,7 +1756,7 @@ public enum ActionType {
 | `sell_pack.status` | Add `delisted` value | P0 |
 | Progress tracking (Redis + sync_log) | `product_sync_progress:{syncLogId}` counter + sync_log status lifecycle | P0 |
 | Progress polling API | `GET /api/v1/channels/{channelId}/sync-logs/{id}/progress` | P0 |
-| Yahoo webhook handler | Parse CSV → diff → route to task.backend (skip product.detail) | P0 |
+| Yahoo webhook handler | Parse CSV → diff → route to task.backend (skip detail fetch) | P0 |
 | `channel.concurrency_level` | New column for throttle configuration | P1 |
 | Frontend: concurrency config | Channel settings → concurrency level input | P1 |
 | Frontend: sync progress UI | Poll progress API, show "處理中 3/5", completion toast | P1 |

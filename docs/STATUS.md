@@ -182,7 +182,7 @@ DTO 設計稿見 `docs/event-flows/DB_ENTITY_GAPS.md` §6。
 | Gradle 11 模組 | ✅ |
 | Docker Compose 26 容器 | ✅ |
 | PostgreSQL 16 (19 表 DDL + seed) | ✅ |
-| Kafka KRaft (14 topics) | ✅ |
+| Kafka KRaft (16 topics) | ✅ |
 | Redis 7 (AOF) | ✅ |
 | OTEL Agent + Grafana 觀測 | ✅ |
 | Structured logging (logback) | ✅ |
