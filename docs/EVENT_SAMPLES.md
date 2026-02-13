@@ -93,24 +93,78 @@
 ## 2. Business Topics (業務主題)
 
 ### 2.1 order.process
-訂單處理主題，處理訂單狀態變更、出貨等。
+訂單處理主題，存放**完整訂單資料**作為事實來源 (Source of Truth)。
 
 ```json
 {
   "orderId": "ORD20260213001",
   "merchantId": "M001",
   "channelId": "MOMO_001",
-  "action": "SHIP",
-  "shipmentInfo": {
-    "trackingNumber": "TN123456789",
+  "channelOrderId": "MOMO-2026021300123",
+  "orderStatus": "PENDING",
+  "orderDate": "2026-02-13T09:30:00Z",
+  "customer": {
+    "customerId": "CUST001",
+    "name": "王小明",
+    "phone": "0912345678",
+    "email": "wang@example.com"
+  },
+  "shippingAddress": {
+    "recipient": "王小明",
+    "phone": "0912345678",
+    "postalCode": "10491",
+    "city": "台北市",
+    "district": "中山區",
+    "address": "南京東路三段100號5樓"
+  },
+  "items": [
+    {
+      "lineId": "L001",
+      "productId": "SKU001",
+      "productName": "iPhone 15 Pro Max 256GB",
+      "channelSkuId": "MOMO-SKU-001",
+      "quantity": 1,
+      "unitPrice": 44900,
+      "discount": 1000,
+      "lineTotal": 43900
+    },
+    {
+      "lineId": "L002",
+      "productId": "SKU002",
+      "productName": "AirPods Pro 2",
+      "channelSkuId": "MOMO-SKU-002",
+      "quantity": 2,
+      "unitPrice": 7490,
+      "discount": 0,
+      "lineTotal": 14980
+    }
+  ],
+  "payment": {
+    "method": "CREDIT_CARD",
+    "status": "PAID",
+    "paidAmount": 59380,
+    "paidTime": "2026-02-13T09:31:00Z",
+    "transactionId": "TXN123456789"
+  },
+  "shipping": {
+    "method": "HOME_DELIVERY",
     "carrier": "BLACK_CAT",
-    "shipDate": "2026-02-13",
-    "estimatedDelivery": "2026-02-15"
+    "shippingFee": 500,
+    "estimatedDelivery": "2026-02-15",
+    "trackingNumber": null
+  },
+  "totals": {
+    "subtotal": 59380,
+    "shippingFee": 500,
+    "totalDiscount": 1000,
+    "tax": 2829,
+    "grandTotal": 59380
   },
   "metadata": {
     "requestId": "req-20260213-100400",
-    "operatorId": "USER001",
-    "source": "backend_api"
+    "fetchedAt": "2026-02-13T10:00:00Z",
+    "source": "order_fetch",
+    "version": 1
   },
   "schemaVersion": 1
 }
@@ -121,13 +175,75 @@
   "orderId": "ORD20260213002",
   "merchantId": "M001",
   "channelId": "SHOPEE_001",
-  "action": "CANCEL",
-  "cancelReason": "OUT_OF_STOCK",
-  "cancelNote": "商品已售完",
+  "channelOrderId": "SH202602130456",
+  "orderStatus": "SHIPPED",
+  "orderDate": "2026-02-13T08:00:00Z",
+  "customer": {
+    "customerId": "CUST002",
+    "name": "李小華",
+    "phone": "0923456789",
+    "email": "lee@example.com"
+  },
+  "shippingAddress": {
+    "recipient": "李小華",
+    "phone": "0923456789",
+    "postalCode": "40701",
+    "city": "台中市",
+    "district": "西屯區",
+    "address": "台灣大道四段1000號"
+  },
+  "items": [
+    {
+      "lineId": "L001",
+      "productId": "SKU003",
+      "productName": "無線充電器",
+      "channelSkuId": "SHOPEE-CHG-001",
+      "quantity": 3,
+      "unitPrice": 599,
+      "discount": 100,
+      "lineTotal": 1697
+    }
+  ],
+  "payment": {
+    "method": "SHOPEE_PAY",
+    "status": "PAID",
+    "paidAmount": 1697,
+    "paidTime": "2026-02-13T08:01:00Z",
+    "transactionId": "SP987654321"
+  },
+  "shipping": {
+    "method": "CONVENIENCE_STORE",
+    "carrier": "7-ELEVEN",
+    "shippingFee": 60,
+    "estimatedDelivery": "2026-02-16",
+    "trackingNumber": "SE123456789",
+    "storeId": "131415",
+    "storeName": "台中西屯門市"
+  },
+  "shipmentInfo": {
+    "shippedTime": "2026-02-13T14:00:00Z",
+    "actualCarrier": "統一超商",
+    "packages": [
+      {
+        "packageId": "PKG001",
+        "trackingNumber": "SE123456789",
+        "items": ["L001"]
+      }
+    ]
+  },
+  "totals": {
+    "subtotal": 1797,
+    "shippingFee": 60,
+    "totalDiscount": 100,
+    "tax": 81,
+    "grandTotal": 1757
+  },
   "metadata": {
     "requestId": "req-20260213-100500",
-    "operatorId": "SYSTEM",
-    "source": "auto_cancel"
+    "fetchedAt": "2026-02-13T10:00:00Z",
+    "updatedAt": "2026-02-13T14:00:00Z",
+    "source": "order_fetch",
+    "version": 2
   },
   "schemaVersion": 1
 }
