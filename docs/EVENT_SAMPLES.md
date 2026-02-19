@@ -698,7 +698,7 @@ order.process Handler 接收後，查詢資料庫判斷是新訂單還是已存�
 
 | TaskType | 來源 Topic | 目標 Topic | Consumer Group | 說明 |
 |----------|-----------|-----------|----------------|------|
-| FETCH_ORDERS | {platform}.fast | order.process | channel-job-{platform}-fast | 通路訂單列表 |
+| FETCH_ORDERS | {platform}.slow | order.process | channel-job-{platform}-slow | 通路訂單列表 |
 | FETCH_ORDER_DETAIL | {platform}.slow | order.process | channel-job-{platform}-slow | 訂單詳情 |
 | SHIP_ORDER | {platform}.fast | task.backend | channel-job-{platform}-fast | 出貨指令 |
 | UPDATE_PRICE | {platform}.fast | task.backend | channel-job-{platform}-fast | 價格更新 |
