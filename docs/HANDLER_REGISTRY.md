@@ -153,13 +153,19 @@ public class HandlerRegistry {
 | REJECT_RETURN | RejectReturnHandler | return.process | 拒絕退貨 |
 
 #### Backend Job
-| TaskType | Handler Class | Topic | 說明 |
-|----------|--------------|-------|------|
-| SYNC_PRODUCT | SyncProductHandler | task.backend | **獨立**：新建或更新 Product（根據 SKU 聚合自多通路） |
-| SYNC_PACK | SyncPackHandler | task.backend | **獨立**：新建或更新 Pack（根據 platformId + specId 判定） |
-| UPDATE_INVENTORY | UpdateInventoryHandler | task.backend | 更新庫存 |
-| UPDATE_PRICE | UpdatePriceHandler | task.backend | 更新價格 |
-| SHIP_ORDER | ShipOrderHandler | task.backend | 執行出貨（後端自動或用戶手動） |
+| TaskType | Handler Class | Topic | 說明 | 觸發時機 |
+|----------|--------------|-------|------|---------|
+| SYNC_PRODUCT | SyncProductHandler | task.backend | **獨立**：新建或更新 Product（根據 SKU 聚合自多通路） | 由通路 handler 派發 |
+| SYNC_PACK | SyncPackHandler | task.backend | **獨立**：新建或更新 Pack（根據 platformId + specId 判定） | 由通路 handler 派發 |
+| ORDER_REPORT | OrderReportHandler | task.backend | 生成訂單報表（統計各通路訂單） | 每5分鐘 (% 5 == 1) |
+| INVENTORY_REPORT | InventoryReportHandler | task.backend | 生成庫存報表（統計各通路庫存） | 每5分鐘 (% 5 == 2) |
+| SALES_REPORT | SalesReportHandler | task.backend | 生成銷售報表（統計各通路銷售） | 每5分鐘 (% 5 == 3) |
+| RETURN_REPORT | ReturnReportHandler | task.backend | 生成退貨報表（統計各通路退貨） | 每5分鐘 (% 5 == 4) |
+| KAFKA_HEALTH_CHECK | KafkaHealthHandler | task.backend | Kafka 健康檢查 | 每10分鐘 (% 10 == 5) |
+| DAILY_REPORT | DailyReportHandler | task.backend | 每日報表生成 | 每日 :00 和 :30 |
+| UPDATE_INVENTORY | UpdateInventoryHandler | task.backend | 更新庫存 | 由通路或用戶派發 |
+| UPDATE_PRICE | UpdatePriceHandler | task.backend | 更新價格 | 由通路或用戶派發 |
+| SHIP_ORDER | ShipOrderHandler | task.backend | 執行出貨（後端自動或用戶手動） | 由通路或用戶派發 |
 
 ## 3. Handler 實作範例
 
