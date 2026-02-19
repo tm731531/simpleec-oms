@@ -226,7 +226,8 @@ Scheduler 只傳遞時間戳。Channel Job 自行決定如何分批：
     "source": "channel_job",
     "version": 1,
     "correlationId": "fetch_req_001",
-    "priority": "NORMAL"
+    "priority": "NORMAL",
+    "isRollback": false
   },
   "body": {
     "orders": [

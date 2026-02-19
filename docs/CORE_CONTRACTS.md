@@ -75,7 +75,15 @@
 
 ## 4. 核心 TaskType 定義
 
-### 4.0 Channel Job 角色：數據適配層
+### 4.0 Channel Job 角色：數據適配層 & isRollback 標籤
+
+**isRollback 適用範圍**：
+- ✅ **訂單相關**：FETCH_ORDERS, FETCH_ORDER_DETAIL, PROCESS_ORDER, SHIP_ORDER
+- ✅ **退貨相關**：FETCH_RETURNS, FETCH_RETURN_DETAIL, PROCESS_RETURN, APPROVE_RETURN
+- ❌ **商品相關**：SYNC_PRODUCT, UPDATE_INVENTORY, UPDATE_PRICE, SYNC_STORE（無需 isRollback）
+
+**Channel Job 角色**：
+
 **核心責任**：Channel Job 是數據適配層，負責將各通路 API 的五花八門格式轉換為 OMS 統一的訂單結構。
 
 - 各通路 API 特性天差地遠（數據結構、response 粒度、rate limit、費用等）
@@ -106,6 +114,8 @@
 | FETCH_RETURN_DETAIL | {platform}.slow | return.process | 抓取退貨詳情 |
 | PROCESS_RETURN | return.process | (內部消費) | 退貨入庫（Handler 查詢 DB 決定 INSERT 或 UPDATE） |
 | APPROVE_RETURN | {platform}.fast | return.process | 同意退貨 |
+
+**備註**: PROCESS_RETURN 也遵循 isRollback 邏輯（與 PROCESS_ORDER 相同）
 
 ### 4.3 商品相關（進入 task.backend）
 | TaskType | 來源 Topic | 目標 Topic | 說明 |
@@ -221,7 +231,8 @@ easystore:
     "channelId": "SHOPEE_001",
     "requestId": "detail_req_001",
     "timestamp": "2026-02-13T09:30:00Z",
-    "version": 1
+    "version": 1,
+    "isRollback": false
   },
   "body": {
     "orders": [
@@ -343,10 +354,20 @@ easystore:
     "taskType": "FAILED_TASK",
     "source": "channel_job",
     "merchantId": "merchant_001",
-    "channelId": "SHOPEE_001"
+    "platformId": "shopee",
+    "channelId": "SHOPEE_001",
+    "isRollback": false
   },
   "body": {
-    "originalHeader": { },
+    "originalHeader": {
+      "taskType": "PROCESS_ORDER",
+      "merchantId": "merchant_001",
+      "platformId": "shopee",
+      "channelId": "SHOPEE_001",
+      "requestId": "process_req_001",
+      "timestamp": "2026-02-13T09:35:00Z",
+      "isRollback": false
+    },
     "originalBody": { },
     "errorInfo": {
       "errorCode": "API_TIMEOUT",
