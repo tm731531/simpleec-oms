@@ -264,7 +264,8 @@
 ## Scheduler 策略示例
 
 ### 核心原則
-- ✅ **訂單/退貨抓取**：Scheduler **接收 Heartbeat 脈搏，檢查時間，派發 ORDERS_SLOW 訊息**；Channel Job 根據時間戳自行決策時間窗口邏輯
+- ✅ **時間一致性**：Heartbeat Job 是系統的時間源（time source），確保所有任務派發基於同一個時間基準，避免分散系統的時間不一致問題
+- ✅ **訂單/退貨抓取**：Scheduler 根據 Heartbeat 時間戳檢查分鐘位，派發 ORDERS_SLOW；Channel Job 根據時間戳自行決策時間窗口邏輯
 - ❌ **商品/套包同步**：不由 Scheduler 驅動（高機率被平台 DDOS 鎖機），完全手動 UI 驅動
 - ✅ **報表生成**：Scheduler 根據分鐘偏移（:01, :02, :03, :04 等）派發任務，根據**客戶時區**判斷是否需要日報
 
@@ -272,13 +273,18 @@
 
 ```
 架構：
-  1. Heartbeat Job：每秒發一個脈搏訊息到 scheduler topic
-  2. Scheduler Consumer：接收脈搏，檢查當前時間，判斷是否派發任務
+  1. Heartbeat Job（時間源）：每秒發一個脈搏訊息到 scheduler topic
+     - 帶著 server 上的當前時間戳
+     - 確保整個系統使用同一個時間基準（避免分散系統中的時間不一致）
+
+  2. Scheduler Consumer（決策者）：接收脈搏，根據其中的時間戳判斷是否派發任務
+     - 不依賴本地時間，完全以 Heartbeat 帶來的時間為準
+     - 根據時間戳的分鐘位檢查是否符合觸發條件
 
 Scheduler 判斷邏輯：
-  - 如果當前分鐘是 :00, :05, :10, :15...（5 分鐘的倍數，偏移 00）
+  - 如果 Heartbeat 時間戳的分鐘是 :00, :05, :10, :15...（5 分鐘的倍數）
     → 派發 ORDERS_SLOW 到每個平台的 {platform}.slow consumer
-    → 訊息包含 timestamp: "2026-02-13T08:00:00Z"（或 08:05, 08:10 等）
+    → 訊息包含該時間戳（例如 "2026-02-13T08:00:00Z" 或 "08:05, 08:10"）
 
 Channel Job（{platform}.slow） 接收到 ORDERS_SLOW：
   1. 根據 timestamp 推導「應該查詢的時間窗口」
@@ -466,11 +472,11 @@ Scheduler 根據「當前分鐘」判斷派發哪些任務（任務類型決定�
 ## 拓撲圖
 
 ```
-heartbeat-job（心臟 - 每秒發脈搏）
-  ↓
+heartbeat-job（心臟 - 時間源，每秒發脈搏帶著 server 時間戳）
+  ↓ timestamp-driven（所有決策基於此時間戳）
 scheduler topic
   ↓
-scheduler-consumer（大腦 - 接收脈搏，檢查時間，判斷派發任務）
+scheduler-consumer（大腦 - 接收脈搏，根據時間戳分鐘位判斷派發任務）
   │
   ├─→ :00, :05, :10... → ORDERS_SLOW → {platform}.slow (Channel Job)
   │                            ↓
