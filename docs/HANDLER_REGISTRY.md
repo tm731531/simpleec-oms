@@ -141,14 +141,14 @@ public class HandlerRegistry {
 #### Order Process Job
 | TaskType | Handler Class | Topic | 說明 |
 |----------|--------------|-------|------|
-| ORDER_UPSERT | OrderUpsertHandler | order.process | **新建或更新訂單**（內部根據 orderId 存在性判定） |
+| ORDER_UPSERT | OrderUpsertHandler | order.process | **新建或更新訂單**（內部根據 channelOrderId 存在性判定） |
 | CANCEL_ORDER | CancelOrderHandler | order.process | 取消訂單 |
 | ORDER_STATUS_CHANGE | OrderStatusHandler | order.process | 狀態變更 |
 
 #### Return Process Job
 | TaskType | Handler Class | Topic | 說明 |
 |----------|--------------|-------|------|
-| RETURN_UPSERT | ReturnUpsertHandler | return.process | **新建或更新退貨**（內部根據 returnId 存在性判定） |
+| RETURN_UPSERT | ReturnUpsertHandler | return.process | **新建或更新退貨**（內部根據 channelReturnId 存在性判定） |
 | APPROVE_RETURN | ApproveReturnHandler | return.process | 同意退貨 |
 | REJECT_RETURN | RejectReturnHandler | return.process | 拒絕退貨 |
 
