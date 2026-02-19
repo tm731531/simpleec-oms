@@ -120,22 +120,21 @@ order.process Handler 只需專注業務邏輯（查 DB、決定新建/更新、
 {
   "header": {
     "taskType": "FETCH_ORDERS",
-    "source": "scheduler"
+    "source": "scheduler",
+    "timestamp": "2026-02-13T09:00:00Z"
   },
   "body": {
-    "fetchSpec": {
-      "timestamp": "2026-02-13T09:00:00Z"
-    }
+    "fetchSpec": {}
   }
 }
 ```
 
 說明：
-- `timestamp`: 基準時間戳。Channel Job 根據通路 API 規則使用此時間戳 fetch 訂單
+- Channel Job 從 header 的 `timestamp` 取得基準時間戳，根據通路 API 規則使用此時間戳 fetch 訂單
 
 **Channel Job 的內部決策**（根據通路規則）：
 ```
-1️⃣ 收到 fetchSpec（e.g., PENDING, 1hr window）
+1️⃣ 收到 header.timestamp
 2️⃣ 根據通路 API 規則判斷如何打 API
    ├─ Shopee: GET /api/orders?order_status=UNPAID&create_time_from=X&create_time_to=Y
    ├─ Momo: GET /api/orders?status=pending&created_time_start=X&created_time_end=Y
