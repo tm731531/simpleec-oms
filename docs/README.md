@@ -2,8 +2,8 @@
 
 本目錄包含 SimpleEC OMS 多通路訂單管理系統的完整設計文檔。
 
-> **最後更新**：2026-02-19
-> **版本**：2.0（已刪除過時文檔，重整核心設計）
+> **最後更新**：2026-02-20
+> **版本**：2.1（Mode A/B 架構模式新增，Core Contracts 與 Queue Design 同步）
 
 ---
 
@@ -58,16 +58,28 @@
    - 6 個 Business Consumer Groups（訂單/退貨/後端/錯誤/死信）
    - 每個 Consumer 的詳細行為邏輯與並發設定
    - **Heartbeat + Scheduler 架構**（時間源 + 決策層）
+   - **Mode B 平台的 FETCH_ORDER_DETAIL 流程**（動態決定是否需要詳情 API）
    - 監控指標與告警規則
 
    **何時讀**：理解數據流向時讀 | **讀完後**：知道訊息如何被處理
+
+#### 4. **[DATA_FLOW_MAPPING.md](DATA_FLOW_MAPPING.md)** ⭐⭐
+   訂單數據完整生命週期（新增 Mode A/B 區分）：
+   - §0: Mode A/B 平台分類與區別
+   - §1: Mode A/B 訂單流程圖與 JavaScript 實作範例
+   - §2: Mode A/B 退貨流程圖與範例
+   - 完整的 orderData 統一結構定義
+   - Shopee/Shopify 具體實作對照
+
+   **何時讀**：追蹤訂單數據流、理解 Mode A/B 差異時 | **讀完後**：能快速定位數據問題
 
 ---
 
 ### 🟡 **第二層：執行層設計（根據角色選讀）**
 
-#### 4. **[CHANNEL_IMPLEMENTATION_GUIDE.md](CHANNEL_IMPLEMENTATION_GUIDE.md)** ⭐⭐
+#### 5. **[CHANNEL_IMPLEMENTATION_GUIDE.md](CHANNEL_IMPLEMENTATION_GUIDE.md)** ⭐⭐
    Channel Job 開發者的完整指南：
+   - **§2.0: Mode A/B 架構模式** — 決定平台需要幾個 Handler
    - Channel Job = 數據適配層（Shopee/Momo/Yahoo... → OMS 統一格式）
    - Adapter 實作模式與 FETCH_ORDER_DETAIL 的重要性
    - 分頁、Rate Limit、重試策略的代碼範例
@@ -76,7 +88,7 @@
 
    **何時讀**：開發 Channel Job 時 | **讀完後**：能寫出規範的 Adapter
 
-#### 5. **[HANDLER_REGISTRY.md](HANDLER_REGISTRY.md)** ⭐
+#### 6. **[HANDLER_REGISTRY.md](HANDLER_REGISTRY.md)** ⭐
    Process Job 與 Backend Job 開發者的指南：
    - 所有 Handler 的註冊與路由
    - PROCESS_ORDER → DB INSERT/UPDATE 邏輯
@@ -85,7 +97,7 @@
 
    **何時讀**：開發 Handler 時 | **讀完後**：能實作各類 Handler
 
-#### 6. **[REDIS_DEDUPLICATION.md](REDIS_DEDUPLICATION.md)** ⭐
+#### 7. **[REDIS_DEDUPLICATION.md](REDIS_DEDUPLICATION.md)** ⭐
    訂單去重的核心設計：
    - Key 格式：`order:hash:{merchantId}:{channelId}:{orderId}`
    - **特殊字元完整保留**（如 `#`, `@`）— 不做任何轉換
@@ -99,7 +111,7 @@
 
 ### 🟢 **第三層：支撐設施（部署 & 維運）**
 
-#### 7. **[DOCKER_GUIDE.md](DOCKER_GUIDE.md)**
+#### 8. **[DOCKER_GUIDE.md](DOCKER_GUIDE.md)**
    生產環境部署參考：
    - 所有服務的 Docker 容器配置
    - Kafka、PostgreSQL、Redis 的網路設定
@@ -107,7 +119,7 @@
 
    **何時讀**：準備部署時 | **讀完後**：能一鍵啟動整個系統
 
-#### 8. **[OPERATIONS_RUNBOOK.md](OPERATIONS_RUNBOOK.md)**
+#### 9. **[OPERATIONS_RUNBOOK.md](OPERATIONS_RUNBOOK.md)**
    運維人員的操作手冊：
    - Kafka Topic 監控與 Consumer Lag 追蹤
    - 常見故障排查流程
@@ -115,21 +127,13 @@
 
    **何時讀**：系統上線後 | **讀完後**：能獨立排查運維問題
 
-#### 9. **[SCHEMA.md](SCHEMA.md)**
+#### 10. **[SCHEMA.md](SCHEMA.md)**
    數據庫 DDL 與欄位定義：
    - 19 張表的完整結構
    - 索引與約束
    - 分區策略
 
    **何時讀**：開發 DB 操作或優化查詢時 | **讀完後**：了解數據存儲結構
-
-#### 10. **[DATA_FLOW_MAPPING.md](DATA_FLOW_MAPPING.md)**
-   數據完整生命週期：
-   - Shopee/Momo API → Kafka Message → DB Entity 的對應
-   - 狀態轉換映射表
-   - PII 加密規則
-
-   **何時讀**：追蹤訂單數據流時 | **讀完後**：能快速定位數據問題
 
 #### 11. **[STATISTICS_DESIGN.md](STATISTICS_DESIGN.md)**
    報表與統計設計：
@@ -156,29 +160,31 @@
 
 ### 👨‍💻 **我是 Channel Job 開發者**
 ```
-1️⃣ CORE_CONTRACTS.md (4.0 章) — 了解 Channel Job 數據轉換責任
+1️⃣ CORE_CONTRACTS.md (4.0-4.1 章) — 了解 Mode A/B 和 Channel Job 數據轉換責任
 2️⃣ EVENT_SAMPLES.md (Channel Topics) — 看 FETCH_ORDERS/SHIP_ORDER 樣本
-3️⃣ CHANNEL_IMPLEMENTATION_GUIDE.md — 完整開發指南
-4️⃣ event-flows/FETCH_STRATEGY.md — 深入理解拉單策略
-5️⃣ DOCKER_GUIDE.md — 部署獨立的 fast/slow Consumer
+3️⃣ CHANNEL_IMPLEMENTATION_GUIDE.md (§2.0 開始) — Mode A/B 架構決策 + 完整開發指南
+4️⃣ DATA_FLOW_MAPPING.md (§1 開始) — Mode A/B 訂單流程圖與實作範例
+5️⃣ event-flows/FETCH_STRATEGY.md — 深入理解拉單策略
+6️⃣ DOCKER_GUIDE.md — 部署獨立的 fast/slow Consumer
 ```
 
 ### 🔧 **我是 Handler 開發者**
 ```
-1️⃣ CORE_CONTRACTS.md (4.1-4.3 章) — 了解各 TaskType 職責
+1️⃣ CORE_CONTRACTS.md (4.1-4.3 章) — 了解各 TaskType 職責與 Mode A/B
 2️⃣ EVENT_SAMPLES.md (Business Topics) — 看 PROCESS_ORDER/SYNC_PRODUCT 樣本
-3️⃣ HANDLER_REGISTRY.md — Handler 實作框架
-4️⃣ REDIS_DEDUPLICATION.md — 訂單去重邏輯
-5️⃣ SCHEMA.md — 了解 DB 結構
+3️⃣ QUEUE_CONSUMER_DESIGN.md (Channel Job - Slow Consumer) — 了解 Mode B 的 FETCH_ORDER_DETAIL
+4️⃣ HANDLER_REGISTRY.md — Handler 實作框架
+5️⃣ REDIS_DEDUPLICATION.md — 訂單去重邏輯
+6️⃣ SCHEMA.md — 了解 DB 結構
 ```
 
 ### 🏗️ **我要從頭理解系統**
 ```
-1️⃣ CORE_CONTRACTS.md (全讀) — 契約、Topic、TaskType
-2️⃣ QUEUE_CONSUMER_DESIGN.md (全讀) — Consumer 如何處理
-3️⃣ EVENT_SAMPLES.md (快速掃) — 看訊息格式
-4️⃣ CHANNEL_IMPLEMENTATION_GUIDE.md (1.0-1.2) — Channel 職責
-5️⃣ DATA_FLOW_MAPPING.md — 數據完整流向
+1️⃣ CORE_CONTRACTS.md (全讀) — 契約、Topic、TaskType、Mode A/B
+2️⃣ QUEUE_CONSUMER_DESIGN.md (全讀) — Consumer 如何處理、Mode B FETCH_ORDER_DETAIL
+3️⃣ DATA_FLOW_MAPPING.md (§0-§1) — Mode A/B 訂單流程、完整 orderData 結構
+4️⃣ EVENT_SAMPLES.md (快速掃) — 看訊息格式
+5️⃣ CHANNEL_IMPLEMENTATION_GUIDE.md (§2.0 開始) — Channel 職責與 Mode A/B 決策
 ```
 
 ### 🚀 **我要部署到生產**
@@ -277,6 +283,7 @@ git commit -m "Updated CORE_CONTRACTS & EVENT_SAMPLES for PROCESS_ORDER design"
 
 | 版本 | 日期 | 主要變更 |
 |------|------|---------|
+| **2.1** | 2026-02-20 | Mode A/B 架構模式新增至 CORE_CONTRACTS + CHANNEL_IMPLEMENTATION_GUIDE + QUEUE_CONSUMER_DESIGN；DATA_FLOW_MAPPING.md 升至第一層；文檔同步一致性確認 |
 | **2.0** | 2026-02-19 | 刪除過時文檔（STATUS/ABSTRACT_DESIGN/IMPLEMENTATION_PLAN）；重整文檔層級；強調 Channel Job 數據轉換責任；PROCESS_ORDER 統一設計 |
 | 1.0 | 2026-02-09 | 初版：完整事件流設計；Redis 去重；16 個 Consumer Groups；fast/slow 分流 |
 
@@ -289,14 +296,17 @@ CORE_CONTRACTS.md (基礎)
     │
     ├─→ EVENT_SAMPLES.md (具體範例)
     │       │
-    │       └─→ QUEUE_CONSUMER_DESIGN.md (執行邏輯)
-    │               ├─→ CHANNEL_IMPLEMENTATION_GUIDE.md
+    │       └─→ QUEUE_CONSUMER_DESIGN.md (執行邏輯 + Mode B FETCH_ORDER_DETAIL)
+    │               │
+    │               ├─→ DATA_FLOW_MAPPING.md (Mode A/B 訂單流程)
+    │               │
+    │               ├─→ CHANNEL_IMPLEMENTATION_GUIDE.md (Mode A/B 架構決策)
+    │               │
     │               ├─→ HANDLER_REGISTRY.md
+    │               │
     │               └─→ event-flows/* (詳細流程)
     │
     ├─→ REDIS_DEDUPLICATION.md (去重邏輯)
-    │
-    ├─→ DATA_FLOW_MAPPING.md (數據流)
     │
     └─→ SCHEMA.md (資料庫)
 

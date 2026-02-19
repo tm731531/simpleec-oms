@@ -45,7 +45,75 @@
 - 業務規則驗證（訂單狀態管理、金額計算、庫存扣減等）
 ```
 
-## 2. Channel Adapter 實作模式
+## 2. Mode A/B 架構模式
+
+### 2.0 平台分類：API 數據完整性決定處理流程
+
+不同平台的 API 設計差異很大，主要區別在「訂單列表 API 是否包含完整訊息」。這決定了是否需要額外的詳情 API 呼叫。SimpleEC OMS 將平台分為 **Mode A** 和 **Mode B** 兩種：
+
+#### Mode A：列表 API 已完整（直接轉 PROCESS_ORDER）
+
+| 平台 | 列表 API 包含 | Handler 需做 | 優勢 |
+|------|----------|----------|------|
+| **Shopify** | ✅ items、payment、shipping | 直接入庫 | API 呼叫最少 |
+| **easystore** | ✅ 完整訂單資訊，50 張/次 | 直接入庫 | 批量效率高 |
+
+**流程**：
+```
+Scheduler (Heartbeat) → FETCH_ORDERS (Shopify API list) → 訊息已包含 orderData 完整 → PROCESS_ORDER → DB INSERT/UPDATE
+```
+
+#### Mode B：列表 API 不完整（需要 FETCH_ORDER_DETAIL）
+
+| 平台 | 列表 API 缺少 | 補充方式 | 額外成本 |
+|------|----------|----------|---------|
+| **Shopee** | items 詳情、payment、shipping | 逐筆呼叫 detail API | 高 |
+| **Momo** | 非訂單層級（item-level）| 按訂單號聚合 | 高（需自己整合） |
+
+**流程**：
+```
+Scheduler (Heartbeat)
+  → FETCH_ORDERS (Shopee API list, 不完整)
+  → [決定需要 FETCH_ORDER_DETAIL]
+  → FETCH_ORDER_DETAIL (Shopee detail API, 逐筆)
+  → 訊息現在包含完整 orderData
+  → PROCESS_ORDER → DB INSERT/UPDATE
+```
+
+#### 實作差異對照表
+
+| 面向 | Mode A | Mode B |
+|------|--------|--------|
+| **Handler 數量** | 1 個（FetchOrders 直接發 PROCESS_ORDER） | 2 個（FetchOrders + DetailHandler） |
+| **データ完全性檢查** | 列表 API 後即可 | 詳情 API 後才完整 |
+| **Rate Limit 考量** | 1 次呼叫/訂單 | 2 次呼叫/訂單（list + detail） |
+| **Kafka 流量** | 少（單一 PROCESS_ORDER） | 多（FETCH_ORDER_DETAIL + PROCESS_ORDER） |
+| **Code Complexity** | 低 | 中（需判斷何時 fetch detail） |
+
+#### 決策：如何判定平台是 Mode A 還是 Mode B？
+
+新增平台時，檢查以下清單：
+
+```
+1️⃣ 訂單列表 API 的 response 是否包含以下所有欄位？
+   ✅ items[]（商品清單，含 SKU、名稱、數量、價格）
+   ✅ payment（付款方式、金額、狀態）
+   ✅ shipping（運費、配送方式、地址）
+   ✅ 其他必要欄位（買家名稱、Email、Phone 等）
+
+   → YES: Mode A（直接用 list API）
+   → NO: Mode B（需要詳情 API）
+
+2️⃣ 是否有專門的「詳情 API」可以補充缺失的欄位？
+   → YES: Mode B（使用詳情 API）
+   → NO: Mode B（需在 Channel Job 層自己整合，如 Momo）
+
+3️⃣ 文件或實測確認後，更新 PLATFORM_MAPPING.md
+```
+
+---
+
+## 2.1 Channel Adapter 實作模式
 
 ### 2.1 基礎架構
 ```java

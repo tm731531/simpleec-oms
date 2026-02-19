@@ -142,11 +142,23 @@
 | PChome/Cyberbiz | ... | ... |
 
 ### 4.1 訂單相關
+
+#### Mode A vs Mode B 處理方式
+
+**重要**：訂單詳情是否需要另外 fetch 取決於平台 API 能力，分為兩種模式：
+
+| 模式 | 平台特性 | 流程 | 範例 |
+|------|--------|------|------|
+| **Mode A** | 訂單列表 API 已包含完整資訊（items、payment、shipping 等） | FETCH_ORDERS (list) → orderData 完整 → PROCESS_ORDER | Shopify、easystore |
+| **Mode B** | 訂單列表 API 只有概要資訊 | FETCH_ORDERS (list) → 判斷需要詳情 → FETCH_ORDER_DETAIL → 詳情完整 → PROCESS_ORDER | Shopee、Momo（需按訂單號聚合） |
+
+#### TaskType 定義
+
 | TaskType | 來源 Topic | 目標 Topic | 說明 |
 |----------|-----------|------------|------|
 | FETCH_ORDERS | scheduler | {platform}.slow | Scheduler 接收 Heartbeat 脈搏，根據分鐘位判斷派發，Channel Job 根據 timestamp 決策是否呼叫 API |
-| FETCH_ORDER_DETAIL | {platform}.slow | order.process | Channel Job 決定某訂單需詳情，fetch detail 後發到 order.process |
-| PROCESS_ORDER | order.process | (內部消費) | Handler 查詢 DB 決定 INSERT 或 UPDATE，執行業務邏輯 |
+| FETCH_ORDER_DETAIL | {platform}.slow | order.process | **Mode B only**：Channel Job 判斷某訂單需詳情，fetch detail API 後發到 order.process。Mode A 平台無此步驟。 |
+| PROCESS_ORDER | order.process | (內部消費) | Handler 查詢 DB 決定 INSERT 或 UPDATE，執行業務邏輯。orderData 必須是**完整資料**（Mode A 來自 list API，Mode B 來自 detail API） |
 | SHIP_ORDER | {platform}.fast | task.backend | 出貨作業 |
 
 ### 4.2 退貨相關

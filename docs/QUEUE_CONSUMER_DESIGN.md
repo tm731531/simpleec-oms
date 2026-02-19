@@ -71,9 +71,13 @@
 
 **接收來源**：ORDERS_SLOW 定期通知（每 5 分鐘）+ UI 驅動事件
 
+**重要前提**：此 Consumer 的行為取決於平台處理模式（Mode A 或 Mode B）
+- **Mode A 平台**（如 Shopify、easystore）：列表 API 已含完整訊息，不需要 FETCH_ORDER_DETAIL；走簡化流程
+- **Mode B 平台**（如 Shopee、Momo）：列表 API 不完整，需要判斷何時發送 FETCH_ORDER_DETAIL 進行詳情補充
+
 **兩種不同的消費邏輯**（根據 taskType）：
 
-#### A. ORDERS_SLOW 通知 → 決策是否抓訂單/退貨
+#### A. ORDERS_SLOW 通知 → 決策是否抓訂單/退貨（両模式共用）
 
 ```
 1. 從 Scheduler 接收 ORDERS_SLOW 通知（每 5 分鐘）
@@ -94,19 +98,27 @@
    （由 fast consumer 呼叫 API 並回傳結果）
 ```
 
-#### B. FETCH_ORDER_DETAIL
+#### B. FETCH_ORDER_DETAIL（Mode B only）
+
+**何時觸發**：僅 Mode B 平台（列表 API 不完整）
 
 ```
 1. 從 {platform}.slow 接收 FETCH_ORDER_DETAIL 訊息
    - 帶著需要詳情的 orderId 列表
+   - 僅 Mode B 平台會產生此訊息
 
-2. 逐筆呼叫 Shopee 訂單詳情 API
+2. 逐筆呼叫平台詳情 API（如 Shopee detail API）
    - 取得完整的訂單資訊（items、payments、shipping 等）
    - 處理 rate limit
 
 3. 發送到 order.process
-   - 訊息格式：header.taskType = UPDATE_ORDER
-   - body 包含完整的訂單資料
+   - 訊息格式：header.taskType = PROCESS_ORDER（詳情完整後的標準名稱）
+   - body 包含完整的訂單資料（現在與 Mode A 的訊息格式相同）
+
+⚠️ 重點：
+   - Mode A 平台無此步驟，直接從 FETCH_ORDERS → PROCESS_ORDER
+   - Mode B 平台必須經過 FETCH_ORDER_DETAIL 補充詳情後，才能發 PROCESS_ORDER
+   - 訊息最終都匯聚到 order.process（內容格式一致）
 ```
 
 #### C. SYNC_PACK（新增）— 雙層檢查 + 條件派發
