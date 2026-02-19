@@ -240,37 +240,75 @@
 
 ## Scheduler 策略示例
 
-Scheduler 應該按以下邏輯分發任務：
+### 核心原則
+- ✅ **訂單/退貨抓取**：Scheduler **只發時間戳**，Channel Job 自行決策時間窗口邏輯
+- ❌ **商品/套包同步**：不由 Scheduler 驅動（高機率被平台 DDOS 鎖機），完全手動 UI 驅動
+- ✅ **報表生成**：每 5/30 分鐘或整點觸發，根據**客戶時區**判斷是否需要日報
 
-### 訂單抓取策略（Shopee 例）
+### 訂單/退貨抓取策略
 
 ```
-08:00 → FETCH_ORDERS(PENDING)      # 1小時內新訂單（08:00-09:00）
-09:00 → FETCH_ORDERS(PENDING)      # 09:00-10:00
+Scheduler 每 X 分鐘觸發一次（根據平台和訂單優先級）：
+
+08:00 → FETCH_ORDERS { timestamp: "2026-02-13T08:00:00Z" }
+08:15 → FETCH_ORDERS { timestamp: "2026-02-13T08:15:00Z" }
 ...
-12:00 → FETCH_ORDERS(PROCESSING)   # 3天內出貨中訂單
-12:30 → FETCH_ORDERS(SHIPPED)      # 7天內已出貨訂單
-13:00 → FETCH_ORDERS(COMPLETED)    # 7~15天內已完成訂單
+（每 15 分鐘一次，時間增量由 Scheduler 自動計算）
+
+FETCH_RETURNS { timestamp: "..." }  # 類似邏輯
+
+⚠️  Channel Job 內部根據 timestamp 自行決策：
+  - 新訂單（1h 窗口）vs 待出貨（3d 窗口）vs 已完成（7d 窗口）
+  - 是否需要打 detail API（平台能力、rate limit）
+  - Scheduler 不關心這些細節，只提供時間戳
 ```
 
-### 套包同步策略（SYNC_PACK）
+### 商品和套包同步策略
 
 ```
-⚠️  重要：SYNC_PACK 不由 Scheduler 驅動，而是由 UI (admin_ui) 驅動
+⚠️  重要：SYNC_PRODUCT 和 SYNC_PACK 不由 Scheduler 驅動！
 
-UI 操作流程：
-  1. 客戶在後臺按「同步套包」按鈕
-  2. 發送 SYNC_PACK 訊息到 {platform}.slow（source: admin_ui）
-  3. {platform}.slow 執行雙層檢查 + 條件派發到 task.backend
-  4. task.backend 中的 SYNC_PRODUCT-handler 和 SYNC_PACK-handler 獨立處理
+原因：
+  - 會被平台認為 DDOS，高機率被鎖機
+  - 每個平台 rate limit 不同，定期同步不可控
+
+策略：完全手動 UI 驅動
+  1. 客戶在後臺按「同步套包」按鈕（source: admin_ui）
+  2. 發送 SYNC_PACK 到 {platform}.slow
+  3. {platform}.slow 執行雙層檢查 + 條件派發
+  4. task.backend 中 SYNC_PRODUCT-handler 和 SYNC_PACK-handler 獨立處理
 
 沒有定時排程，完全由用戶需求驅動。
 ```
 
-### 庫存和價格更新策略
+### 報表生成策略（task.backend）
 
 ```
-每小時 → UPDATE_PRICE/INVENTORY    # 定期同步（由 Scheduler 驅動）
+Scheduler 定期觸發報表更新任務：
+
+每 5/30 分鐘 或 整點：
+  GENERATE_REPORT_TRIGGER { timestamp: "...", merchantId: "M001" }
+  ↓
+  task.backend → 報表 Handler
+
+報表 Handler 邏輯：
+  1. 接收 timestamp（UTC）
+  2. 遍歷該商家的所有客戶，獲取每個客戶的時區（timezone）
+  3. 將 timestamp 轉換為該客戶時區
+  4. 判斷是否跨過 0 點（午夜）
+     - YES: 觸發「日報更新」→ 彙整前一天的訂單、銷售額、退貨等數據
+     - NO: 僅更新小時數據（如有需要）
+
+範例：
+  timestamp = 2026-02-13T16:00:00Z (UTC)
+
+  Customer A: timezone = UTC+8
+    → 本地時間 2026-02-14T00:00:00+08:00
+    → 偵測到跨 0 點 ✓ → 觸發「日報」
+
+  Customer B: timezone = UTC-5
+    → 本地時間 2026-02-13T11:00:00-05:00
+    → 未跨 0 點 ✗ → 僅更新小時數據
 ```
 
 ---
