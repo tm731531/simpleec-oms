@@ -155,8 +155,8 @@ public class HandlerRegistry {
 #### Backend Job
 | TaskType | Handler Class | Topic | 說明 |
 |----------|--------------|-------|------|
-| SYNC_PRODUCT | SyncProductHandler | task.backend | **獨立**：建立 Product（從 SKU 聚合） |
-| SYNC_PACK | SyncPackHandler | task.backend | **獨立**：建立/更新 Pack 及其 Product 映射 |
+| SYNC_PRODUCT | SyncProductHandler | task.backend | **獨立**：新建或更新 Product（根據 SKU 聚合自多通路） |
+| SYNC_PACK | SyncPackHandler | task.backend | **獨立**：新建或更新 Pack（根據 platformId + specId 判定） |
 | UPDATE_INVENTORY | UpdateInventoryHandler | task.backend | 更新庫存 |
 | UPDATE_PRICE | UpdatePriceHandler | task.backend | 更新價格 |
 | SHIP_ORDER | ShipOrderHandler | task.backend | 執行出貨（後端自動或用戶手動） |
