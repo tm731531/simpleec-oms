@@ -106,7 +106,17 @@ order.process Handler 只需專注業務邏輯（查 DB、決定新建/更新、
 
 ### 5.1 FETCH_ORDERS
 
-**Scheduler 發送到 {platform}.fast:**
+**核心原則**：
+- Scheduler **決定做什麼**（fetchSpec：時間範圍、狀態等）
+- Channel Job **根據通路規則決定怎麼做**（不同平台 API 規則不同）
+  - Shopee：有狀態 + 有時間 → 用狀態+時間窗口查詢
+  - Momo：分物流類型 + 有時間 → 根據物流類型+時間查詢
+  - Yahoo：只有更新時間 → 根據時間範圍查詢
+  - 有些通路不分狀態，只看更新時間
+- Channel Job **決定是否需要 DETAIL**（金額大、有異常狀態等）
+- Channel Job **最終組 OMS 結構**（統一 orderData 格式）
+
+**Scheduler 發送到 {platform}.slow:**
 ```json
 {
   "header": {
@@ -117,9 +127,31 @@ order.process Handler 只需專注業務邏輯（查 DB、決定新建/更新、
     "fetchSpec": {
       "orderStatus": "PENDING",
       "description": "1小時內新訂單"
+      // 或改成 timeRange，或改成其他通路特定規則
+      // Scheduler 只決定「時間範圍」和「篩選條件」
+      // Channel Job 根據通路 API 規則轉換成實際 API 參數
     }
   }
 }
+```
+
+**Channel Job 的內部決策**（根據通路規則）：
+```
+1️⃣ 收到 fetchSpec（e.g., PENDING, 1hr window）
+2️⃣ 根據通路 API 規則判斷如何打 API
+   ├─ Shopee: GET /api/orders?order_status=UNPAID&create_time_from=X&create_time_to=Y
+   ├─ Momo: GET /api/orders?status=pending&created_time_start=X&created_time_end=Y
+   └─ Yahoo: GET /api/orders?updated_after=X (不分狀態)
+3️⃣ 抓回訂單清單
+4️⃣ 判斷是否需要 DETAIL
+   ├─ 金額 > 10000 → YES
+   ├─ 訂單狀態異常 → YES
+   └─ 否則 → NO
+5️⃣ 組好 OMS 結構的 orderData
+   └─ Shopee shop_order_id → channelOrderId
+   └─ Shopee items[] → OMS items[] 統一格式
+   └─ Shopee shipping → OMS shipping 統一欄位
+6️⃣ 發到 order.process
 ```
 
 **Channel Job 回傳到 order.process (PROCESS_ORDER):**
@@ -131,9 +163,26 @@ order.process Handler 只需專注業務邏輯（查 DB、決定新建/更新、
     "correlationId": "原始 requestId"
   },
   "body": {
-    "channelOrderId": "通路訂單號",
+    "channelOrderId": "通路訂單號（保留原始格式，如 1002#100）",
     "orderData": {
-      // 通路原始資料
+      // ⭐ 已轉換成 OMS 統一結構（不是通路原始格式）
+      "orderStatus": "PENDING",        // 統一狀態
+      "orderDate": "2026-02-13T...",   // 統一日期格式
+      "customer": {                    // 統一客戶結構
+        "name": "...",
+        "phone": "...",
+        "email": "..."
+      },
+      "items": [                       // 統一項目結構
+        {
+          "productId": "SKU...",
+          "quantity": 1,
+          "unitPrice": 100,
+          "subtotal": 100
+        }
+      ],
+      "payment": { ... },              // 統一支付結構
+      "shipping": { ... }              // 統一配送結構
     }
   }
 }
@@ -141,18 +190,27 @@ order.process Handler 只需專注業務邏輯（查 DB、決定新建/更新、
 
 ### 5.2 FETCH_ORDER_DETAIL
 
-**slow Consumer 發送到 {platform}.slow:**
+**說明**：
+- Channel Job 在 FETCH_ORDERS 階段判斷某些訂單需要詳情
+- 決定發送 FETCH_ORDER_DETAIL 到 {platform}.slow（背景非同步打詳情 API）
+- 根據通路 API 規則取得完整訊息（items、payments、shipping details 等）
+- 再組成 OMS 統一結構發到 order.process
+
+**Channel Job 內部決策後發送到 {platform}.slow:**
 ```json
 {
   "header": {
-    "taskType": "FETCH_ORDER_DETAIL"
+    "taskType": "FETCH_ORDER_DETAIL",
+    "source": "channel_job"
   },
   "body": {
     "orders": [
       {
-        "channelOrderId": "string",
+        "channelOrderId": "MOMO-2026021300001",
         "metadata": {
-          // Channel 特定參數
+          // 通路特定參數（如 Momo 的 API version、商店 ID 等）
+          "apiVersion": "v3",
+          "storeId": "STORE123"
         }
       }
     ]
@@ -160,7 +218,7 @@ order.process Handler 只需專注業務邏輯（查 DB、決定新建/更新、
 }
 ```
 
-**Channel Job 回傳到 order.process (PROCESS_ORDER):**
+**Channel Job 根據通路規則打 DETAIL API，完成組 OMS 結構後發到 order.process：**
 ```json
 {
   "header": {
@@ -169,9 +227,16 @@ order.process Handler 只需專注業務邏輯（查 DB、決定新建/更新、
     "correlationId": "原始 requestId"
   },
   "body": {
-    "channelOrderId": "通路訂單號",
+    "channelOrderId": "MOMO-2026021300001",
     "orderData": {
-      // 完整訂單資料
+      // ⭐ 完整的 OMS 統一結構
+      "orderStatus": "PENDING",
+      "orderDate": "2026-02-13T09:30:00Z",
+      "customer": { ... },
+      "items": [ ... ],           // 來自 DETAIL API 的完整項目清單
+      "payment": { ... },         // 來自 DETAIL API 的支付詳情
+      "shipping": { ... },        // 來自 DETAIL API 的配送詳情
+      "totals": { ... }           // 詳細金額分解
     }
   }
 }
