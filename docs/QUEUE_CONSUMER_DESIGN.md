@@ -1,31 +1,35 @@
 # SimpleEC OMS Queue Consumer 設計
 
-根據事件流架構，定義所有 Consumer、Topic 和 Action 的對應關係。
+根據事件流架構（CORE_CONTRACTS.md），定義所有 Consumer、Topic 和 Action 的對應關係。
+
+**重點變更**：SYNC_PACK 現在是 UI (admin_ui) 驅動，在 {platform}.slow 執行雙層檢查 + 條件派發。SYNC_PRODUCT 和 SYNC_PACK 是獨立事件，各有各的 Handler。
 
 ## Consumer Groups 設計
 
-### Channel Consumer Groups（10組）
+### Channel Consumer Groups（10 組）
 
 | Consumer | Topic | Action | Concurrency | Priority | Note |
 |----------|-------|--------|-------------|----------|------|
-| channel-job-momo-fast | momo.fast | FETCH_ORDERS, SHIP_ORDER, UPDATE_PRICE, UPDATE_INVENTORY, APPROVE_RETURN | 4 | HIGH | 1小時內新訂單、出貨指令、價格/庫存快速更新 |
-| channel-job-momo-slow | momo.slow | FETCH_ORDER_DETAIL, SYNC_PRODUCT, FETCH_RETURNS, FETCH_RETURN_DETAIL | 2 | NORMAL | 訂單詳情、商品詳情、退貨詳情 |
+| channel-job-momo-fast | momo.fast | FETCH_ORDERS, SHIP_ORDER, UPDATE_PRICE, UPDATE_INVENTORY, APPROVE_RETURN | 4 | HIGH | 1 小時內新訂單、出貨指令、價格/庫存快速更新 |
+| channel-job-momo-slow | momo.slow | FETCH_ORDER_DETAIL, SYNC_PACK, FETCH_RETURNS, FETCH_RETURN_DETAIL | 2 | NORMAL | 訂單詳情、套包同步（雙層檢查 + 條件派發）、退貨詳情 |
 | channel-job-shopee-fast | shopee.fast | FETCH_ORDERS, SHIP_ORDER, UPDATE_PRICE, UPDATE_INVENTORY, APPROVE_RETURN | 4 | HIGH | 蝦皮快速同步 |
-| channel-job-shopee-slow | shopee.slow | FETCH_ORDER_DETAIL, SYNC_PRODUCT, FETCH_RETURNS, FETCH_RETURN_DETAIL | 2 | NORMAL | 蝦皮詳情同步 |
+| channel-job-shopee-slow | shopee.slow | FETCH_ORDER_DETAIL, SYNC_PACK, FETCH_RETURNS, FETCH_RETURN_DETAIL | 2 | NORMAL | 蝦皮詳情同步、套包同步 |
 | channel-job-yahoo-fast | yahoo.fast | FETCH_ORDERS, SHIP_ORDER, UPDATE_PRICE, UPDATE_INVENTORY, APPROVE_RETURN | 4 | HIGH | Yahoo 快速同步 |
-| channel-job-yahoo-slow | yahoo.slow | FETCH_ORDER_DETAIL, SYNC_PRODUCT, FETCH_RETURNS, FETCH_RETURN_DETAIL | 2 | NORMAL | Yahoo CSV 處理、詳情同步 |
+| channel-job-yahoo-slow | yahoo.slow | FETCH_ORDER_DETAIL, SYNC_PACK, FETCH_RETURNS, FETCH_RETURN_DETAIL | 2 | NORMAL | Yahoo CSV 處理、詳情同步、套包同步 |
 | channel-job-pchome-fast | pchome.fast | FETCH_ORDERS, SHIP_ORDER, UPDATE_PRICE, UPDATE_INVENTORY, APPROVE_RETURN | 4 | HIGH | PChome 快速同步 |
-| channel-job-pchome-slow | pchome.slow | FETCH_ORDER_DETAIL, SYNC_PRODUCT, FETCH_RETURNS, FETCH_RETURN_DETAIL | 2 | NORMAL | PChome 詳情同步 |
+| channel-job-pchome-slow | pchome.slow | FETCH_ORDER_DETAIL, SYNC_PACK, FETCH_RETURNS, FETCH_RETURN_DETAIL | 2 | NORMAL | PChome 詳情同步、套包同步 |
 | channel-job-cyberbiz-fast | cyberbiz.fast | FETCH_ORDERS, SHIP_ORDER, UPDATE_PRICE, UPDATE_INVENTORY, APPROVE_RETURN | 4 | HIGH | Cyberbiz 快速同步 |
-| channel-job-cyberbiz-slow | cyberbiz.slow | FETCH_ORDER_DETAIL, SYNC_PRODUCT, FETCH_RETURNS, FETCH_RETURN_DETAIL | 2 | NORMAL | Cyberbiz 詳情同步 |
+| channel-job-cyberbiz-slow | cyberbiz.slow | FETCH_ORDER_DETAIL, SYNC_PACK, FETCH_RETURNS, FETCH_RETURN_DETAIL | 2 | NORMAL | Cyberbiz 詳情同步、套包同步 |
 
-### Business Consumer Groups（5 組）
+### Business Consumer Groups（7 組）
 
 | Consumer | Topic | Action | Concurrency | Priority | Note |
 |----------|-------|--------|-------------|----------|------|
 | order-process-handler | order.process | NEW_ORDER: 新訂單入庫 / UPDATE_ORDER: 訂單更新 | 8 | HIGH | 核心業務，需高吞吐 |
-| return-process-handler | return.process | NEW_RETURN: 新退貨入庫 / APPROVE_RETURN: 同意退貨 | 4 | NORMAL | 退貨處理 |
-| backend-task-handler | task.backend | SYNC_PRODUCT, UPDATE_INVENTORY, UPDATE_PRICE, SYNC_STORE, SHIP_ORDER 等 | 4 | NORMAL | 所有後端非同步任務 |
+| return-process-handler | return.process | NEW_RETURN: 新退貨入庫 / PROCESS_RETURN: 退貨入庫 | 4 | NORMAL | 退貨處理 |
+| sync-product-handler | task.backend | SYNC_PRODUCT: 商品同步（從 SKU 聚合建立 Product） | 4 | NORMAL | 獨立處理商品同步 |
+| sync-pack-handler | task.backend | SYNC_PACK: 套包同步（建立 Pack 或更新 Pack→Product 映射） | 4 | NORMAL | 獨立處理套包同步 |
+| backend-task-handler | task.backend | UPDATE_INVENTORY, UPDATE_PRICE, SHIP_ORDER 等 | 4 | NORMAL | 其他後端非同步任務 |
 | error-handler | task.failed | FAILED_TASK: 失敗重試邏輯 | 2 | HIGH | 可重試的錯誤 |
 | dlt-handler | task.dlt | DLT_MESSAGE: 死信記錄 & 告警 | 1 | CRITICAL | 無法恢復的訊息 |
 
@@ -33,9 +37,7 @@
 
 | Consumer | Topic | Action | Concurrency | Priority | Note |
 |----------|-------|--------|-------------|----------|------|
-| scheduler-dispatcher | scheduler | DISPATCH_ORDER_FETCH: 分發訂單抓取任務 | 1 | HIGH | 排程驅動，單一執行緒 |
-| | | HEALTH_CHECK: 系統健康檢查 | | | |
-| task-backend-handler | task.backend | 後端非同步任務（報表、資料同步等） | 2 | NORMAL | 內部系統任務 |
+| scheduler-dispatcher | scheduler | DISPATCH_ORDER_FETCH: 分發訂單抓取任務 / HEALTH_CHECK: 系統健康檢查 | 1 | HIGH | 排程驅動，單一執行緒 |
 | task-frontend-handler | task.frontend | 前端非同步任務（資料匯出、批次更新） | 4 | NORMAL | 用戶觸發任務 |
 
 ---
@@ -67,9 +69,12 @@
 
 ### Channel Job - Slow Consumer（example: shopee-channel-job-slow）
 
-**消費邏輯**:
+**兩種不同的消費邏輯**（根據 taskType）：
+
+#### A. FETCH_ORDER_DETAIL
+
 ```
-1. 從 order.process 接收 FETCH_ORDER_DETAIL 訊息
+1. 從 {platform}.slow 接收 FETCH_ORDER_DETAIL 訊息
    - 帶著需要詳情的 orderId 列表
 
 2. 逐筆呼叫 Shopee 訂單詳情 API
@@ -79,6 +84,31 @@
 3. 發送到 order.process
    - 訊息格式：header.taskType = UPDATE_ORDER
    - body 包含完整的訂單資料
+```
+
+#### B. SYNC_PACK（新增）— 雙層檢查 + 條件派發
+
+```
+1. 從 {platform}.slow 接收 SYNC_PACK 訊息（source: admin_ui）
+   - 帶著套包資料：platformId, specId, packName, packData 等
+
+2. 執行「雙層對映檢查」（讀取 OMS 資料庫，NOT 呼叫平台 API）
+   ① 查詢 PRODUCT 表：根據 SKU → Product 是否存在？
+   ② 查詢 PACK 表：根據「platformId + specId」→ Pack 是否存在？
+
+3. 根據「決策矩陣」決定派發事件到 task.backend
+
+   | Product | Pack | 動作 |
+   |---------|------|------|
+   | ✅ 有   | ✅ 有 | 不做事（已完整） |
+   | ✅ 有   | ❌ 無 | → 派發 SYNC_PACK |
+   | ❌ 無   | ✅ 有 | → 派發 SYNC_PRODUCT → 派發 SYNC_PACK |
+   | ❌ 無   | ❌ 無 | → 派發 SYNC_PRODUCT → 派發 SYNC_PACK |
+
+4. 發送事件到 task.backend
+   - 訊息格式：SYNC_PRODUCT（如需）+ SYNC_PACK（如需）
+   - 注意：兩個事件都發送，由各自的獨立 Handler 處理
+   - SYNC_PRODUCT 優先於 SYNC_PACK（Product 必須先存在）
 ```
 
 ### Order Process Handler
@@ -119,29 +149,56 @@
    - 觸發退貨相關的後續流程
 ```
 
-### Backend Task Handler
+### Backend Task Handler（拆分為多個獨立 Handler）
 
-**消費邏輯**:
+**設計原則**：每個 TaskType 有各自的獨立 Handler（最小粒度設計），可被不同業務流程重用。
+
+#### 1. SYNC_PRODUCT Handler（獨立）
+
 ```
-1. 從 task.backend 接收各類後端任務
-   - SYNC_PRODUCT: 商品同步
-   - UPDATE_INVENTORY: 庫存更新
-   - UPDATE_PRICE: 價格更新
-   - SYNC_STORE: 賣場同步
-   - SHIP_ORDER: 出貨指令（自動或手動）
-   - 其他後端業務邏輯
+1. 從 task.backend 接收 SYNC_PRODUCT 訊息
+   - 帶著商品資料：SKU, name, price, attributes 等
 
-2. 根據 TaskType 路由到對應的業務邏輯
-   - 各 TaskType 有各自的處理邏輯
-   - Handler 根據訊息內容判斷如何處理
+2. 檢查資料庫
+   - 根據 SKU 查詢 PRODUCT 表 → 是否已存在？
 
-3. 執行業務操作
-   - 更新資料庫
-   - 調用外部服務
-   - 發送後續事件
+3. 執行業務邏輯
+   - 不存在 → INSERT 新商品
+   - 已存在 → UPDATE 商品信息（如名稱、價格等）
 
 4. 記錄結果
-   - 成功或失敗的狀態
+   - 返回 Product ID（用於後續 SYNC_PACK）
+   - 記錄成功或失敗
+```
+
+#### 2. SYNC_PACK Handler（獨立）
+
+```
+1. 從 task.backend 接收 SYNC_PACK 訊息
+   - 帶著套包資料：platformId, specId, Product ID（可能來自上一步）等
+
+2. 檢查資料庫
+   - 根據「platformId + specId」查詢 PACK 表 → 是否已存在？
+
+3. 執行業務邏輯
+   - 不存在 → INSERT 新套包記錄
+   - 已存在 → UPDATE 套包信息（關聯 Product ID、更新價格等）
+
+4. 記錄結果
+   - 返回 Pack ID
+   - 記錄成功或失敗
+```
+
+#### 3. 其他 Handler（UPDATE_INVENTORY, UPDATE_PRICE, SHIP_ORDER 等）
+
+```
+根據 TaskType 路由到對應的業務邏輯
+- UPDATE_INVENTORY: 庫存更新
+- UPDATE_PRICE: 價格更新
+- SHIP_ORDER: 出貨指令（自動或手動）
+- 等其他後端任務
+
+各 Handler 獨立執行、互不干擾。
 ```
 
 ### Error Handler (task.failed)
@@ -196,12 +253,24 @@ Scheduler 應該按以下邏輯分發任務：
 13:00 → FETCH_ORDERS(COMPLETED)    # 7~15天內已完成訂單
 ```
 
-### 商品和賣場同步策略
+### 套包同步策略（SYNC_PACK）
 
 ```
-06:00 → SYNC_PRODUCT(BATCH)        # 全量商品同步（每天一次）
-06:30 → SYNC_STORE(BATCH)          # 全量賣場同步（每天一次）
-每小時 → UPDATE_PRICE/INVENTORY    # 定期同步（價格、庫存）
+⚠️  重要：SYNC_PACK 不由 Scheduler 驅動，而是由 UI (admin_ui) 驅動
+
+UI 操作流程：
+  1. 客戶在後臺按「同步套包」按鈕
+  2. 發送 SYNC_PACK 訊息到 {platform}.slow（source: admin_ui）
+  3. {platform}.slow 執行雙層檢查 + 條件派發到 task.backend
+  4. task.backend 中的 SYNC_PRODUCT-handler 和 SYNC_PACK-handler 獨立處理
+
+沒有定時排程，完全由用戶需求驅動。
+```
+
+### 庫存和價格更新策略
+
+```
+每小時 → UPDATE_PRICE/INVENTORY    # 定期同步（由 Scheduler 驅動）
 ```
 
 ---
@@ -209,7 +278,7 @@ Scheduler 應該按以下邏輯分發任務：
 ## 拓撲圖
 
 ```
-scheduler
+scheduler（排程驅動）
   ├─→ {platform}.fast/slow (Channel Job)
   │       ↓
   │    order.process (Order Handler: 判斷新建/更新)
@@ -217,17 +286,23 @@ scheduler
   │       ↓
   │    [Redis Hash updated]
   │
-  └─→ task.backend (排程分發後端任務)
-       ├─ SYNC_PRODUCT/SYNC_STORE (商品/賣場同步)
-       ├─ UPDATE_PRICE/UPDATE_INVENTORY (價格/庫存更新)
-       ├─ SHIP_ORDER (自動出貨)
-       └─ 其他後端任務 (Backend Task Handler 處理)
+  └─→ scheduler 還會分發「庫存、價格更新」等任務
+       └─→ task.backend
+           ├─ UPDATE_PRICE-handler
+           ├─ UPDATE_INVENTORY-handler
+           └─ ...其他排程任務
 
-UI Trigger
-  └─→ task.frontend (UI Driver)
-       └─ SHIP_ORDER (用戶手動出貨)
-            ↓
-       task.backend (轉發給 Backend Handler 執行)
+UI Trigger（用戶驅動）
+  ├─→ SYNC_PACK (source: admin_ui)
+  │   └─→ {platform}.slow (Channel Job: 雙層檢查)
+  │       ↓ [條件派發]
+  │    task.backend
+  │       ├─ SYNC_PRODUCT-handler (獨立)
+  │       └─ SYNC_PACK-handler (獨立)
+  │
+  └─→ SHIP_ORDER (用戶手動出貨)
+      └─→ task.backend
+          └─ SHIP_ORDER-handler
 
 [Error handling]
 Any failure → task.failed (Error Handler)
