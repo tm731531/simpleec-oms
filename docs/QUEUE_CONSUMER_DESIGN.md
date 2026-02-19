@@ -69,9 +69,32 @@
 
 ### Channel Job - Slow Consumer（example: shopee-channel-job-slow）
 
+**接收來源**：ORDERS_SLOW 定期通知（每 5 分鐘）+ UI 驅動事件
+
 **兩種不同的消費邏輯**（根據 taskType）：
 
-#### A. FETCH_ORDER_DETAIL
+#### A. ORDERS_SLOW 通知 → 決策是否抓訂單/退貨
+
+```
+1. 從 Scheduler 接收 ORDERS_SLOW 通知（每 5 分鐘）
+   - 帶著 timestamp，但不帶具體 orderStatus
+
+2. 內部決策邏輯（由 Channel Job 實現）
+   - 根據該平台的 API 限制和業務需求決定「查詢時間窗口」
+   - 決策是否需要呼叫 FETCH_ORDERS API
+   - 決策是否需要呼叫 FETCH_RETURNS API
+
+   例如：
+     Shopee: 每次都抓新訂單（1h 窗口）+ 每次都抓 pending 退貨（3d 窗口）
+     Momo:   每 2 次 ORDERS_SLOW 才抓一次（10 分鐘抓一次新訂單）
+
+3. 如果決策「需要抓」，則發送到對應的 Topic
+   - FETCH_ORDERS → shopee.fast
+   - FETCH_RETURNS → shopee.fast
+   （由 fast consumer 呼叫 API 並回傳結果）
+```
+
+#### B. FETCH_ORDER_DETAIL
 
 ```
 1. 從 {platform}.slow 接收 FETCH_ORDER_DETAIL 訊息
@@ -86,7 +109,7 @@
    - body 包含完整的訂單資料
 ```
 
-#### B. SYNC_PACK（新增）— 雙層檢查 + 條件派發
+#### C. SYNC_PACK（新增）— 雙層檢查 + 條件派發
 
 ```
 1. 從 {platform}.slow 接收 SYNC_PACK 訊息（source: admin_ui）
@@ -245,22 +268,27 @@
 - ❌ **商品/套包同步**：不由 Scheduler 驅動（高機率被平台 DDOS 鎖機），完全手動 UI 驅動
 - ✅ **報表生成**：每 5/30 分鐘或整點觸發，根據**客戶時區**判斷是否需要日報
 
-### 訂單/退貨抓取策略
+### 訂單/退貨抓取策略（5 分鐘週期 + orders slow 任務）
 
 ```
-Scheduler 每 X 分鐘觸發一次（根據平台和訂單優先級）：
+Scheduler 每 5 分鐘觸發一次 ORDERS_SLOW 通知到每個平台的 {platform}.slow consumer：
 
-08:00 → FETCH_ORDERS { timestamp: "2026-02-13T08:00:00Z" }
-08:15 → FETCH_ORDERS { timestamp: "2026-02-13T08:15:00Z" }
+00:00 → ORDERS_SLOW { timestamp: "2026-02-13T08:00:00Z" }
+00:05 → ORDERS_SLOW { timestamp: "2026-02-13T08:05:00Z" }
+00:10 → ORDERS_SLOW { timestamp: "2026-02-13T08:10:00Z" }
 ...
-（每 15 分鐘一次，時間增量由 Scheduler 自動計算）
+（每 5 分鐘一次，時間戳由 Scheduler 自動計算）
 
-FETCH_RETURNS { timestamp: "..." }  # 類似邏輯
+Channel Job（{platform}.slow） 接收到 ORDERS_SLOW：
+  1. 根據 timestamp 推導「應該查詢的時間窗口」
+  2. 決策是否需要呼叫 API 抓訂單/退貨
+  3. 發送 FETCH_ORDERS 或 FETCH_RETURNS 到 {platform}.fast
 
 ⚠️  Channel Job 內部根據 timestamp 自行決策：
   - 新訂單（1h 窗口）vs 待出貨（3d 窗口）vs 已完成（7d 窗口）
   - 是否需要打 detail API（平台能力、rate limit）
   - Scheduler 不關心這些細節，只提供時間戳
+  - 每個平台可能有不同的抓取策略（例如 Shopee 每 5 分鐘檢查 1h 窗口，但 Momo 可能 3h 檢查一次）
 ```
 
 ### 商品和套包同步策略
@@ -366,16 +394,18 @@ Handler 接收 RECOMPUTE_ORDER_REPORT：
 ---
 
 ```
-⚠️  關鍵：避免 Thundering Herd 問題 — 不同「事項（報表類型）」在不同分鐘觸發！
+⚠️  關鍵：避免 Thundering Herd 問題 — 不同「事項（任務類型）」在不同分鐘觸發！
 
-Scheduler 根據「報表類型/任務性質」計算偏移，分散觸發時間：
+Scheduler 根據「任務類型」計算偏移，分散觸發時間：
 
-5 分鐘間隔（小時報表）：
-  - 訂單報表   → 偏移 01 分 → 01, 06, 11, 16, 21, 26, 31, 36, 41, 46, 51, 56
-  - 庫存報表   → 偏移 02 分 → 02, 07, 12, 17, 22, 27, 32, 37, 42, 47, 52, 57
-  - 銷售額報表 → 偏移 03 分 → 03, 08, 13, 18, 23, 28, 33, 38, 43, 48, 53, 58
-  - 退貨報表   → 偏移 04 分 → 04, 09, 14, 19, 24, 29, 34, 39, 44, 49, 54, 59
-  （從快取讀取需要重算的 channel，批量派發，hash(reportType) % 5 決定偏移）
+5 分鐘間隔（訂單抓取 + 小時報表）：
+  - ORDERS_SLOW 通知   → 偏移 00 分 → 00, 05, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55
+                              （每 5 分鐘通知 {platform}.slow consumer，由 Channel Job 決策是否呼叫 API）
+  - 訂單報表           → 偏移 01 分 → 01, 06, 11, 16, 21, 26, 31, 36, 41, 46, 51, 56
+  - 庫存報表           → 偏移 02 分 → 02, 07, 12, 17, 22, 27, 32, 37, 42, 47, 52, 57
+  - 銷售額報表         → 偏移 03 分 → 03, 08, 13, 18, 23, 28, 33, 38, 43, 48, 53, 58
+  - 退貨報表           → 偏移 04 分 → 04, 09, 14, 19, 24, 29, 34, 39, 44, 49, 54, 59
+  （報表：從快取讀取需要重算的 channel，批量派發，hash(reportType) % 5 決定偏移）
 
 10 分鐘間隔：
   - 報表生成       → 偏移 00 分 → 00, 10, 20, 30, 40, 50（同報表快取邏輯）
