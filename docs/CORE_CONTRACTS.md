@@ -147,20 +147,44 @@
 **第 1 步：讀取 header.timestamp**
 - 取得基準時間戳，決定查詢窗口
 
-**第 2 步：根據通路 API 規則打 orders list API**
+**第 2 步：根據時間戳和訂單狀態，分批多次打 API（Orders Channel Job 核心職責）**
+
+Channel Job 不只打一次 API，而是根據訂單「年齡」分層級、分批次拉取：
+
 ```
-Shopee:  GET /api/orders?order_status=UNPAID&create_time_from=X&create_time_to=Y
-         (返回: 訂單摘要資訊，items 不完整)
-
-Momo:    GET /api/orders?created_time_start=X&created_time_end=Y
-         (特殊: 返回 item-level 記錄，每行是一個 item，非訂單層級)
-
-Yahoo:   GET /api/orders?updated_after=X
-         (特殊: 只有更新時間，不分訂單狀態)
-
-easystore: GET /api/orders?from_date=X&to_date=Y&limit=50
-           (優點: 一次可拿 50 張，且包含完整資訊)
+例子（各通路都遵循此模式）：
+- 1 小時內新訂單（PENDING）           → 打 API_1
+- 3 天內待出貨訂單（CONFIRMED）       → 打 API_2
+- 5 天內出貨中訂單（SHIPPED）         → 打 API_3
+- 7 天後完成訂單（COMPLETED/CLOSED） → 打 API_4
 ```
+
+**具體實例：**
+```
+Shopee:
+  GET /api/orders?order_status=UNPAID&create_time_from=BASE_TS&create_time_to=BASE_TS+1h
+  GET /api/orders?order_status=AWAITING_SHIPMENT&create_time_from=BASE_TS-3d&create_time_to=BASE_TS
+  GET /api/orders?order_status=SHIPPED&create_time_from=BASE_TS-5d&create_time_to=BASE_TS
+  GET /api/orders?order_status=COMPLETED&create_time_from=BASE_TS-7d&create_time_to=BASE_TS
+
+Momo:
+  GET /api/orders?created_time_start=BASE_TS-1h&created_time_end=BASE_TS (新訂單)
+  GET /api/orders?created_time_start=BASE_TS-3d&created_time_end=BASE_TS (待出貨)
+  (特殊: 返回 item-level 記錄，每行是一個 item，Channel Job 自己分組聚合)
+
+Yahoo:
+  GET /api/orders?updated_after=BASE_TS-1d  (最近一天更新的，包含所有狀態)
+  (特殊: 只有更新時間，不分訂單狀態；Channel Job 自己評估狀態)
+
+easystore:
+  GET /api/orders?from_date=BASE_TS-7d&to_date=BASE_TS&limit=50
+  (優點: 一次可拿 50 張 + 完整資訊，可視需要多次翻頁)
+```
+
+**設計原則**：
+- Scheduler 只提供 `timestamp`（基準時間）
+- Channel Job 根據**通路特性**和**訂單狀態生命週期**，決定如何分批拉取
+- 不同狀態的訂單重要性和更新頻率不同 → 分層級拉取保證數據新鮮度
 
 **第 3 步：判斷是否需要 FETCH_ORDER_DETAIL**
 
