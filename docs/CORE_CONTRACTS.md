@@ -126,7 +126,9 @@
     "source": "scheduler",
     "timestamp": "2026-02-13T09:00:00Z",
     "merchantId": "merchant_001",
-    "channelId": "SHOPEE_001"
+    "channelId": "SHOPEE_001",
+    "requestId": "fetch_req_001",
+    "version": 1
   },
   "body": {
     "fetchSpec": {}
@@ -183,8 +185,9 @@ easystore: GET /api/orders?from_date=X&to_date=Y&limit=50
     "source": "channel_job",
     "merchantId": "merchant_001",
     "channelId": "SHOPEE_001",
-    "requestId": "detail_req_xxx",
-    "timestamp": "2026-02-13T09:30:00Z"
+    "requestId": "detail_req_001",
+    "timestamp": "2026-02-13T09:30:00Z",
+    "version": 1
   },
   "body": {
     "orders": [
@@ -208,8 +211,9 @@ easystore: GET /api/orders?from_date=X&to_date=Y&limit=50
     "source": "channel_job",
     "merchantId": "merchant_001",
     "channelId": "SHOPEE_001",
-    "requestId": "process_req_xxx",
-    "timestamp": "2026-02-13T09:35:00Z"
+    "requestId": "process_req_001",
+    "timestamp": "2026-02-13T09:35:00Z",
+    "version": 1
   },
   "body": {
     "channelOrderId": "2026021300001",
