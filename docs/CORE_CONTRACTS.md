@@ -127,6 +127,46 @@
 **備註**: 通路層只有「套包」(Pack) 概念——在該通路上賣的商品單位。
 商品聚合 (SYNC_PRODUCT) 是 OMS 內部邏輯，BACKEND 收到 SYNC_PACK 後，建立 Pack → Product 映射（客戶不做 mapping，由系統自動建立）。
 
+### 4.4 SYNC_PACK 完整流程：雙層檢查 + 條件派發
+
+**UI 操作**：客戶點擊「同步套包」按鈕（source: admin_ui）
+
+**{platform}.fast 層**（基本比對，快速）：
+- 取得通路上的套包列表（平台 ID + 規格編號）
+- 發送到 {platform}.slow 進行詳細處理
+
+**{platform}.slow 層**（詳細檢查，較慢）：
+- 逐個套包進行 **雙層對映檢查**：
+  1. 查詢 **PRODUCT 表**：根據 SKU 檢查商品是否存在
+  2. 查詢 **PACK 表**：根據「平台 ID + 規格編號」檢查套包是否存在
+- 根據檢查結果決定發送哪些獨立事件到 task.backend
+
+**決策矩陣**（派發規則）：
+
+| Product 存在？ | Pack 存在？ | 動作 | 說明 |
+|---------------|-----------|------|------|
+| ✅ 有 | ✅ 有 | 不做事 | 已完整，無需任何操作 |
+| ✅ 有 | ❌ 無 | SYNC_PACK | 只需建立 Pack |
+| ❌ 無 | ✅ 有 | SYNC_PRODUCT → SYNC_PACK | 先建 Product，再建/更新 Pack |
+| ❌ 無 | ❌ 無 | SYNC_PRODUCT → SYNC_PACK | 先建 Product，再建 Pack |
+
+**實例**（平台 ID: AAAA，4個規格）：
+
+| 規格 | SKU | Product | Pack | 派發事件 |
+|------|-----|---------|------|---------|
+| 001 | A001 | ✅ 有 | ❌ 無 | → SYNC_PACK |
+| 002 | A002 | ❌ 無 | ❌ 無 | → SYNC_PRODUCT → SYNC_PACK |
+| 003 | A003 | ❌ 無 | ✅ 有 | → SYNC_PRODUCT → SYNC_PACK |
+| 004 | A004 | ✅ 有 | ✅ 有 | （skip，已完整） |
+
+**重要設計原則**：
+- ✅ **SYNC_PRODUCT** 和 **SYNC_PACK** 是獨立的兩個 TaskType
+- ✅ 各有各的 Handler 在 task.backend 中獨立處理
+- ✅ **最小粒度設計** — 可被其他流程重用
+  - SYNC_PRODUCT 可由其他業務觸發（不只是 Pack 同步）
+  - SYNC_PACK 可單獨發送（當 Product 已存在）
+- ❌ 不串聯在一個事件中，不同時更新多個表
+
 ## 5. 訂單 fetch 流程詳解
 
 ### 5.1 FETCH_ORDERS：Scheduler 觸發
