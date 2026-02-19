@@ -59,11 +59,16 @@
 
 ### 3.2 Header 欄位說明
 - `taskType`: 決定使用哪個 Handler Class 處理
-- `merchantId`: 多商戶隔離，資料不互通
-- `channelId`: 通路實例，如 SHOPEE_001, SHOPEE_002（多帳號）
-- `requestId`: 唯一識別碼，用於追蹤和冪等性
-- `timestamp`: 訊息時間戳，用於追蹤和業務判斷（如 FETCH_ORDERS 的基準時間）
-- `correlationId`: 串連相關訊息，如 FETCH_ORDERS → FETCH_ORDER_DETAIL → PROCESS_ORDER 的關聯
+- `source`: 訊息來源（scheduler/api/webhook/manual/channel_job 等）
+- `merchantId`: 多商戶隔離，資料不互通（必填）
+- `platformId`: 通路編號（shopee/momo/yahoo/pchome/cyberbiz/easystore），用於第三方 API 呼叫（必填）
+- `channelId`: 通路實例，如 SHOPEE_001, SHOPEE_002（多帳號）（選填）
+- `requestId`: 唯一識別碼，用於追蹤和冪等性（必填）
+- `timestamp`: 訊息時間戳（ISO-8601），用於追蹤和業務判斷（如 FETCH_ORDERS 的基準時間）（必填）
+- `version`: 訊息協議版本，用於向後相容判斷（必填）
+- `correlationId`: 串連相關訊息，如 FETCH_ORDERS → FETCH_ORDER_DETAIL → PROCESS_ORDER 的關聯（選填）
+- `retryCount`: 重試次數（選填）
+- `priority`: 優先度 HIGH/NORMAL/LOW（選填）
 
 ## 4. 核心 TaskType 定義
 
@@ -126,6 +131,7 @@
     "source": "scheduler",
     "timestamp": "2026-02-13T09:00:00Z",
     "merchantId": "merchant_001",
+    "platformId": "shopee",
     "channelId": "SHOPEE_001",
     "requestId": "fetch_req_001",
     "version": 1
@@ -184,6 +190,7 @@ easystore: GET /api/orders?from_date=X&to_date=Y&limit=50
     "taskType": "FETCH_ORDER_DETAIL",
     "source": "channel_job",
     "merchantId": "merchant_001",
+    "platformId": "shopee",
     "channelId": "SHOPEE_001",
     "requestId": "detail_req_001",
     "timestamp": "2026-02-13T09:30:00Z",
@@ -210,14 +217,16 @@ easystore: GET /api/orders?from_date=X&to_date=Y&limit=50
     "taskType": "PROCESS_ORDER",
     "source": "channel_job",
     "merchantId": "merchant_001",
+    "platformId": "shopee",
     "channelId": "SHOPEE_001",
     "requestId": "process_req_001",
     "timestamp": "2026-02-13T09:35:00Z",
     "version": 1
   },
   "body": {
-    "channelOrderId": "2026021300001",
     "orderData": {
+      "orderId": "ord_abc123def456",
+      "channelOrderId": "2026021300001",
       "orderStatus": "PENDING",
       "buyerName": "顧客名稱",
       "buyerPhone": "0912345678",
@@ -236,6 +245,7 @@ easystore: GET /api/orders?from_date=X&to_date=Y&limit=50
           "productId": "pd_xyz789",
           "channelProductId": "SHOPEE-SKU-98765",
           "channelSpecId": "SHOPEE-SPEC-98765-A",
+          "channelItemId": "SHOPEE-ITEM-98765-001",
           "channelProductName": "SHOPEE養生雞精禮盒限定組",
           "channelSpecName": "60ml×12入(單盒)",
           "productName": "養生雞精禮盒限定組",
@@ -252,9 +262,12 @@ easystore: GET /api/orders?from_date=X&to_date=Y&limit=50
 
 **重要提示**：
 - `orderData` 已是 **OMS 統一結構**（對應 orders 表和 items JSONB），不是通路原始格式
-- 特殊字元（如訂單號的 `#`, `-`, `@`）必須完整保留（用於冪等性判斷）
+- **orderId**: 我們的訂單 NanoID（新訂單由 Handler 生成，更新時由 orderData 帶入）
+- **channelOrderId**: 通路訂單編號（如 Shopee 的 order_id）；特殊字元（`#`, `-`, `@`）必須完整保留
+- **channelItemId**: 通路項目編號（如 Momo/Shopee 的 item_id）
+- **platformId** in header: 通路 ID（Shopee/Momo/Yahoo/easystore 等），用於通路 API 調用需要
 - Handler INSERT/UPDATE 時直接拆解 orderData 到各欄位：
-  - 訂單表: orderStatus, buyerName, buyerPhone, buyerEmail, shippingAddress, shippingMethod, paymentMethod, totalAmount, shippingFee, discountAmount, channelCreatedAt, paidAt
+  - 訂單表: id=orderId, channel_order_id=channelOrderId, orderStatus, buyerName, buyerPhone, buyerEmail, shippingAddress, shippingMethod, paymentMethod, totalAmount, shippingFee, discountAmount, channelCreatedAt, paidAt
   - items JSONB: 整個 items[] 陣列存入 orders.items
 
 ---
