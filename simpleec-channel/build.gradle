@@ -1,8 +1,0 @@
-dependencies {
-    implementation project(':simpleec-common')
-    implementation project(':simpleec-core')
-
-    implementation 'org.springframework.boot:spring-boot-starter'
-    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
-    implementation 'com.fasterxml.jackson.core:jackson-databind'
-}
