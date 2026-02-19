@@ -475,14 +475,58 @@ SHOPEE_RATE_LIMIT_ORDER: 5
 SHOPEE_RATE_LIMIT_PRODUCT: 10
 ```
 
-### 10.2 Docker Compose
+### 10.2 Docker Compose（獨立 Consumer Groups）
 ```yaml
-shopee-channel-job:
+# 快速通道：1小時內新訂單、出貨指令等
+shopee-channel-job-fast:
   image: simpleec-oms/channel-job:latest
   environment:
-    JOB_CHANNEL_TOPICS: shopee.fast,shopee.slow
-    JOB_CHANNEL_GROUP_ID: channel-job-shopee
+    JOB_CHANNEL_TOPICS: shopee.fast
+    JOB_CHANNEL_GROUP_ID: channel-job-shopee-fast
     SPRING_PROFILES_ACTIVE: shopee
+    JOB_CONCURRENCY: 4
   depends_on:
     - kafka
     - redis
+
+# 慢速通道：商品詳情、訂單詳情等
+shopee-channel-job-slow:
+  image: simpleec-oms/channel-job:latest
+  environment:
+    JOB_CHANNEL_TOPICS: shopee.slow
+    JOB_CHANNEL_GROUP_ID: channel-job-shopee-slow
+    SPRING_PROFILES_ACTIVE: shopee
+    JOB_CONCURRENCY: 2
+  depends_on:
+    - kafka
+    - redis
+
+# 其他通路類似配置...
+momo-channel-job-fast:
+  image: simpleec-oms/channel-job:latest
+  environment:
+    JOB_CHANNEL_TOPICS: momo.fast
+    JOB_CHANNEL_GROUP_ID: channel-job-momo-fast
+    SPRING_PROFILES_ACTIVE: momo
+    JOB_CONCURRENCY: 4
+  depends_on:
+    - kafka
+    - redis
+
+momo-channel-job-slow:
+  image: simpleec-oms/channel-job:latest
+  environment:
+    JOB_CHANNEL_TOPICS: momo.slow
+    JOB_CHANNEL_GROUP_ID: channel-job-momo-slow
+    SPRING_PROFILES_ACTIVE: momo
+    JOB_CONCURRENCY: 2
+  depends_on:
+    - kafka
+    - redis
+```
+
+**說明**：
+- 每個 `{platform}-{speed}` 組合有獨立的 Consumer Group
+- 快速通道（.fast）通常並發數高（4），處理小訊息
+- 慢速通道（.slow）並發數低（2），處理複雜邏輯
+- 獨立 GROUP 避免一個失敗拖累整個通路

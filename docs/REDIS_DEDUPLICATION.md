@@ -239,39 +239,14 @@ public void processOrderWithConsistency(OrderMessage message) {
 }
 ```
 
-### 4.2 失敗恢復機制
-```java
-@Component
-public class RedisRecoveryService {
-
-    /**
-     * 定期同步 DB 到 Redis
-     * 處理 Redis 失效或不一致的情況
-     */
-    @Scheduled(cron = "0 0 3 * * *")  // 每天凌晨 3 點
-    public void syncDbToRedis() {
-        // 查詢最近 7 天的訂單
-        List<Order> recentOrders = orderRepository.findRecentOrders(7);
-
-        for (Order order : recentOrders) {
-            String orderHashKey = RedisKeyBuilder.buildOrderHashKey(
-                order.getMerchantId(),
-                order.getChannelId(),
-                order.getChannelOrderId()
-            );
-
-            String orderHash = calculateOrderHash(order);
-            redisTemplate.opsForValue().set(
-                orderHashKey,
-                orderHash,
-                Duration.ofDays(7)
-            );
-        }
-
-        log.info("Synced {} orders to Redis", recentOrders.size());
-    }
-}
-```
+### 4.2 Redis 失效重建策略
+- **不進行定期全量同步** — 避免資源浪費（90% 無效操作）
+- **被動重建** — 重複訂單會在一小時內再次抓取，此時會正確更新 Redis
+- **點對點檢查** — 若需驗證特定訂單，逐筆查詢而非全表掃描
+- 優勢：
+  - 節省計算和內存資源
+  - Redis 快取保持高效（只存儲活躍訂單）
+  - 重複訂單會自然修復（下次抓取時）
 
 ## 5. 監控與告警
 

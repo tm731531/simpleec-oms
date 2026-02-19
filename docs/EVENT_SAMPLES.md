@@ -44,7 +44,15 @@
 
 ### 平台快速主題：momo.fast / shopee.fast / yahoo.fast / pchome.fast / cyberbiz.fast
 
-**TaskType: FETCH_ORDERS** - 通路發送訂單列表給 order.process（需要判斷是否需詳情）
+**TaskType: FETCH_ORDERS** - 從 scheduler 指定的時間區段/狀態抓訂單列表
+
+Scheduler 根據策略決定要抓什麼狀態。例：
+- 1小時內的新訂單（PENDING）
+- 3天內的出貨中訂單（PROCESSING）
+- 7天內的已完成訂單（COMPLETED）
+- 7~15天內的已出貨訂單（SHIPPED）
+
+Channel Job 只負責根據 scheduler 的指令抓取並轉換資料。
 
 ```json
 {
@@ -52,34 +60,35 @@
     "taskType": "FETCH_ORDERS",
     "merchantId": "M001",
     "channelId": "MOMO_001",
-    "requestId": "req-20260213-100000",
+    "requestId": "sched-20260213-fetch-pending",
     "timestamp": "2026-02-13T10:00:00Z",
     "source": "scheduler",
     "version": 1,
     "priority": "HIGH"
   },
   "body": {
-    "timeRange": {
-      "start": "2026-02-13T09:00:00Z",
-      "end": "2026-02-13T10:00:00Z"
+    "fetchSpec": {
+      "orderStatus": "PENDING",
+      "description": "1小時內新訂單"
     },
     "orders": [
       {
         "orderId": "MOMO-2026021300001",
         "orderData": {
-          "orderStatus": "READY_TO_SHIP",
-          "totalAmount": 15000,
-          "shippingStatus": "PROCESSING"
+          "orderStatus": "PENDING",
+          "orderDate": "2026-02-13T09:30:00Z",
+          "totalAmount": 15000
         },
         "needsDetail": true,
         "metadata": {
-          "reason": "大單需詳情"
+          "reason": "金額超過 10000，需要詳情"
         }
       },
       {
         "orderId": "MOMO-2026021300002",
         "orderData": {
           "orderStatus": "PENDING",
+          "orderDate": "2026-02-13T09:45:00Z",
           "totalAmount": 500
         },
         "needsDetail": false,
@@ -87,9 +96,10 @@
       }
     ],
     "summary": {
-      "total": 100,
+      "total": 150,
       "fetched": 2,
-      "hasMore": true
+      "hasMore": true,
+      "nextCursor": "cursor-abc123"
     }
   }
 }
