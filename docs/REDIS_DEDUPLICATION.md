@@ -69,6 +69,28 @@ public class RedisKeyBuilder {
         // 直接使用，不做任何解碼
         return new OrderKey(parts[2], parts[3], parts[4]);
     }
+
+    public static String buildReturnHashKey(String merchantId, String channelId, String returnId) {
+        // 驗證參數
+        validateNotNull(merchantId, "merchantId");
+        validateNotNull(channelId, "channelId");
+        validateNotNull(returnId, "returnId");
+
+        // 直接組合，不做任何字元轉換
+        return String.format("return:hash:%s:%s:%s",
+            merchantId, channelId, returnId);
+    }
+
+    public static ReturnKey parseReturnHashKey(String key) {
+        // 限制分割數量為 5，避免退貨號中的冒號被錯誤分割
+        String[] parts = key.split(":", 5);
+        if (parts.length != 5) {
+            throw new IllegalArgumentException("Invalid key format: " + key);
+        }
+
+        // 直接使用，不做任何解碼
+        return new ReturnKey(parts[2], parts[3], parts[4]);
+    }
 }
 ```
 
@@ -104,6 +126,43 @@ public class OrderHashService {
 
         String json = objectMapper.writeValueAsString(sortedData);
         return DigestUtils.sha256Hex(json);
+    }
+}
+```
+
+### 3.2 Return Hash 計算
+```java
+public class ReturnHashService {
+
+    /**
+     * 計算退貨資料的 Hash 值
+     * 使用 SHA-256，只包含會變動的欄位
+     */
+    public String calculateReturnHash(ReturnData returnData) {
+        // 排序欄位確保一致性
+        TreeMap<String, Object> sortedData = new TreeMap<>();
+
+        // 只包含業務欄位，排除系統欄位
+        sortedData.put("returnStatus", returnData.getReturnStatus());
+        sortedData.put("refundAmount", returnData.getRefundAmount());
+        sortedData.put("reason", returnData.getReason());
+        sortedData.put("items", normalizeReturnItems(returnData.getItems()));
+
+        String json = objectMapper.writeValueAsString(sortedData);
+        return DigestUtils.sha256Hex(json);
+    }
+
+    private List<Map<String, Object>> normalizeReturnItems(List<ReturnItem> items) {
+        // 項目也需要排序，確保一致性
+        return items.stream()
+            .map(item -> {
+                TreeMap<String, Object> normalized = new TreeMap<>();
+                normalized.put("itemId", item.getItemId());
+                normalized.put("quantity", item.getQuantity());
+                normalized.put("sku", item.getSku());
+                return new TreeMap<>(normalized);
+            })
+            .collect(Collectors.toList());
     }
 }
 ```
@@ -199,6 +258,62 @@ public class OrderProcessHandler {
         redisTemplate.opsForValue().set(
             orderHashKey,
             orderHash,
+            Duration.ofDays(7)  // TTL 7 天
+        );
+    }
+}
+```
+
+#### Return Process Job（讀寫 Redis + DB）
+```java
+@Component
+public class ReturnProcessHandler {
+
+    @Autowired
+    private RedisTemplate<String, String> redisTemplate;
+
+    @Autowired
+    private ReturnRepository returnRepository;
+
+    @Transactional
+    public void handle(ReturnMessage message) {
+        String merchantId = message.getHeader().getMerchantId();
+        String channelId = message.getHeader().getChannelId();
+        String returnId = message.getReturnId();
+        String returnHash = message.getReturnHash();
+
+        String returnHashKey = RedisKeyBuilder.buildReturnHashKey(
+            merchantId, channelId, returnId
+        );
+
+        // 1. 再次檢查 Redis（避免並發重複）
+        String existingHash = redisTemplate.opsForValue().get(returnHashKey);
+        if (returnHash.equals(existingHash)) {
+            log.info("Return already processed (Redis check): {}", returnId);
+            return;
+        }
+
+        // 2. 檢查資料庫
+        Return existingReturn = returnRepository.findByChannelIdAndChannelReturnId(
+            channelId, returnId
+        );
+
+        if (existingReturn == null) {
+            // 新退貨
+            Return newReturn = createReturn(message);
+            returnRepository.save(newReturn);
+            log.info("New return created: {}", returnId);
+        } else {
+            // 更新退貨
+            updateReturn(existingReturn, message);
+            returnRepository.save(existingReturn);
+            log.info("Return updated: {}", returnId);
+        }
+
+        // 3. 更新 Redis Hash（確保與 DB 同步）
+        redisTemplate.opsForValue().set(
+            returnHashKey,
+            returnHash,
             Duration.ofDays(7)  // TTL 7 天
         );
     }

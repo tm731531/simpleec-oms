@@ -310,24 +310,34 @@ public class OrderUpsertHandler implements TaskHandler {
 }
 ```
 
-**Hash 包含的欄位** (參考 REDIS_DEDUPLICATION.md)：
+**Hash 包含的欄位** (參考 REDIS_DEDUPLICATION.md，§3.1 Order Hash 計算)：
 - `orderStatus` — 訂單狀態
-- `paymentStatus` — 付款狀態
+- `totalAmount` — 訂單總金額
 - `shippingStatus` — 物流狀態
-- `shippingInfo` — 物流信息（包含追蹤號）
-- `totalAmount` — 金額
+- `paymentStatus` — 付款狀態
 - `items` — 項目列表（包含 SKU、數量等）
 - `buyerInfo` — 買家信息
+- `shippingInfo` — 物流信息（包含追蹤號）
 
 **⚠️ Hash 計算務必使用 TreeMap 排序，避免 JSON 亂序**：
 ```java
-// 正確做法：使用 TreeMap 排序欄位
-TreeMap<String, Object> sortedData = new TreeMap<>();
-sortedData.put("orderStatus", orderData.getOrderStatus());
-sortedData.put("paymentStatus", orderData.getPaymentStatus());
-// ... 其他欄位
-String json = objectMapper.writeValueAsString(sortedData);
-String hash = DigestUtils.sha256Hex(json);
+// 使用 OrderHashService.calculateOrderHash() — 參考 REDIS_DEDUPLICATION.md §3.1
+public String calculateOrderHash(OrderData orderData) {
+    // 排序欄位確保一致性（無論來自哪個通路）
+    TreeMap<String, Object> sortedData = new TreeMap<>();
+
+    // 只包含會變動的業務欄位
+    sortedData.put("orderStatus", orderData.getOrderStatus());
+    sortedData.put("totalAmount", orderData.getTotalAmount());
+    sortedData.put("shippingStatus", orderData.getShippingStatus());
+    sortedData.put("paymentStatus", orderData.getPaymentStatus());
+    sortedData.put("items", normalizeItems(orderData.getItems()));
+    sortedData.put("buyerInfo", orderData.getBuyerInfo());
+    sortedData.put("shippingInfo", orderData.getShippingInfo());
+
+    String json = objectMapper.writeValueAsString(sortedData);
+    return DigestUtils.sha256Hex(json);
+}
 ```
 
 ### 3.3 Return Process Handler (Upsert Pattern with Hash Deduplication)
@@ -407,11 +417,13 @@ public class ReturnUpsertHandler implements TaskHandler {
 }
 ```
 
-**Hash 包含的欄位**：
+**Hash 包含的欄位** (參考 REDIS_DEDUPLICATION.md)：
 - `returnStatus` — 退貨狀態
 - `reason` — 退貨原因
 - `items` — 退貨項目（數量、SKU 等）
 - `refundAmount` — 退款金額
+
+**⚠️ Return Hash 定義應在 REDIS_DEDUPLICATION.md §3.2 中補充**（目前還未定義）
 
 ## 4. Handler 生命週期
 
