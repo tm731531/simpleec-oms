@@ -13,7 +13,49 @@
 - 新的 TaskType
 - 通路特定處理邏輯
 
-## 2. Topic 定義
+## 2. Scheduler 架構：Heartbeat + Decision System
+
+**核心設計**：分散系統中，不同 Scheduler 實例有不同的本地時間。解決方案：
+- **Heartbeat Job** (時間源)：單一權威伺服器，每秒發脈搏到 `scheduler` topic，攜帶當前 timestamp
+- **Scheduler Consumer** (決策者)：所有 Scheduler 實例接收脈搏，根據 timestamp 檢查分鐘位判斷派發任務
+
+**優勢**：
+- ✅ 單一時間基準：避免分散系統時間不同步
+- ✅ 反應式驅動：事件驅動而非時間觸發
+- ✅ 完全可控：停止 Heartbeat = 暫停所有排程任務
+- ✅ 易於測試：用任意 timestamp 的脈搏重放
+
+**Scheduler 判斷邏輯**（基於 timestamp 的分鐘位）：
+```
+当分钟 % 5 == 0（:00, :05, :10...）
+  → 派發 ORDERS_SLOW 到所有 {platform}.slow
+  → Channel Job 根據 timestamp 自行決策是否呼叫 API
+
+当分钟 % 5 == 1（:01, :06, :11...）
+  → 派發訂單報表任務到 task.backend
+
+当分钟 % 5 == 2（:02, :07, :12...）
+  → 派發庫存報表任務到 task.backend
+
+当分钟 % 5 == 3（:03, :08, :13...）
+  → 派發銷售額報表任務到 task.backend
+
+当分钟 % 5 == 4（:04, :09, :14...）
+  → 派發退貨報表任務到 task.backend
+
+当分钟 % 10 == 5（:05, :15, :25...）
+  → 派發 Kafka 健康檢查
+
+当分钟 == 0 或 30（:00, :30）
+  → 派發日報生成任務
+```
+
+**實現細節**：
+- Heartbeat 訊息格式：`{ timestamp: "2026-02-13T08:00:00Z", ... }`
+- Scheduler Consumer 實作：`if (timestamp.getMinutes() % 5 === 0) { dispatch ORDERS_SLOW }`
+- **重點**：NEVER 用本地時間 `new Date().getMinutes()`，ALWAYS 用 Heartbeat timestamp
+
+## 3. Topic 定義
 
 ### 2.1 Channel Topics (通路主題)
 | Topic Pattern | 用途 | 處理時間要求 | Retention |
@@ -30,7 +72,7 @@
 | `return.process` | 退貨資料處理 | Source of Truth | 1d |
 | `task.backend` | 後端非同步任務 | 商品同步、庫存更新、賣場同步、出貨等 | 1d |
 | `task.frontend` | 前端非同步任務 | UI 觸發的任務（匯出、批次更新等） | 1d |
-| `scheduler` | 排程分發 | 排程引擎分發 | 1d |
+| `scheduler` | Heartbeat 脈搏 | Heartbeat Job 每秒發送當前 timestamp，所有 Scheduler Consumer 接收後判斷派發任務 | 1d |
 | `task.failed` | 失敗任務 | 可重試的錯誤 | 1d |
 | `task.dlt` | 死信隊列 | 無法處理的訊息 | 30d |
 
@@ -102,7 +144,7 @@
 ### 4.1 訂單相關
 | TaskType | 來源 Topic | 目標 Topic | 說明 |
 |----------|-----------|------------|------|
-| FETCH_ORDERS | scheduler | {platform}.slow | Scheduler 觸發，Channel Job fetch orders list |
+| FETCH_ORDERS | scheduler | {platform}.slow | Scheduler 接收 Heartbeat 脈搏，根據分鐘位判斷派發，Channel Job 根據 timestamp 決策是否呼叫 API |
 | FETCH_ORDER_DETAIL | {platform}.slow | order.process | Channel Job 決定某訂單需詳情，fetch detail 後發到 order.process |
 | PROCESS_ORDER | order.process | (內部消費) | Handler 查詢 DB 決定 INSERT 或 UPDATE，執行業務邏輯 |
 | SHIP_ORDER | {platform}.fast | task.backend | 出貨作業 |
@@ -169,16 +211,18 @@
 
 ## 5. 訂單 fetch 流程詳解
 
-### 5.1 FETCH_ORDERS：Scheduler 觸發
+### 5.1 FETCH_ORDERS：Heartbeat 驅動
 
 **架構原則**：
-- Scheduler **只傳遞時間戳**（header.timestamp），代表「從何時開始 fetch」
-- Channel Job **根據時間戳 + 通路 API 規則自行決策**，包括：
+- **Heartbeat Job** 每秒發脈搏到 `scheduler` topic，攜帶當前 timestamp
+- **Scheduler Consumer** 接收脈搏，檢查分鐘位：
+  - 當分鐘 % 5 == 0（:00, :05, :10...）時 → 派發 ORDERS_SLOW 到所有 {platform}.slow
+- **Channel Job** 根據 timestamp + 通路 API 規則**自行決策**是否呼叫 API，包括：
   - 如何打 API（各通路規則不同）
   - 是否需要 FETCH_ORDER_DETAIL（取決於 API 能力和 rate limit）
   - 如何組成 OMS 統一結構
 
-**Scheduler 發送到 {platform}.slow:**
+**Scheduler Consumer 派發到 {platform}.slow:**
 ```json
 {
   "header": {

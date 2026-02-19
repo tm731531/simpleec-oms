@@ -44,7 +44,7 @@
 
 #### 2. **[EVENT_SAMPLES.md](EVENT_SAMPLES.md)** ⭐⭐⭐
    每個 Topic 的具體 JSON 訊息範例：
-   - scheduler 的排程分發示例
+   - scheduler 的 Heartbeat 脈搏示例（時間源）
    - {platform}.fast/slow 的 TaskType 操作範例
    - order.process/return.process 的完整訊息格式
    - task.backend/task.frontend 的處理樣本
@@ -57,7 +57,7 @@
    - 10 個 Channel Consumer Groups（5 平台 × fast/slow 分流）
    - 6 個 Business Consumer Groups（訂單/退貨/後端/錯誤/死信）
    - 每個 Consumer 的詳細行為邏輯與並發設定
-   - Scheduler 觸發策略範例
+   - **Heartbeat + Scheduler 架構**（時間源 + 決策層）
    - 監控指標與告警規則
 
    **何時讀**：理解數據流向時讀 | **讀完後**：知道訊息如何被處理

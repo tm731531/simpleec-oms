@@ -25,9 +25,51 @@
 | `order.process` | 8 | 訂單處理 | 永久 |
 | `task.backend` | 8 | 後台任務 | 永久 |
 | `task.frontend` | 8 | 前台任務 | 永久 |
-| `scheduler` | 4 | 排程心跳 | 永久 |
+| `scheduler` | 4 | Heartbeat 脈搏（時間源） | 永久 |
 | `task.failed` | 4 | 失敗重打佇列 | 永久 |
 | `task.dlt` | 4 | 死信佇列（最終站） | 30 天 |
+
+## Scheduler 運作原理
+
+**二層架構**：
+
+1. **Heartbeat Job**（時間源）
+   - 單一權威伺服器，每秒發脈搏到 `scheduler` topic
+   - 訊息格式：`{ timestamp: "2026-02-13T08:00:00Z", ... }`
+   - 目的：確保整個分散系統使用同一時間基準
+
+2. **Scheduler Consumer**（決策層）
+   - 所有 Scheduler 實例接收脈搏
+   - 根據 timestamp 的分鐘位判斷派發任務：
+     * `:00, :05, :10...` → 派發 ORDERS_SLOW 到所有 {platform}.slow
+     * `:01, :06, :11...` → 派發訂單報表任務到 task.backend
+     * `:02, :07, :12...` → 派發庫存報表任務到 task.backend
+     * `:03, :08, :13...` → 派發銷售額報表任務到 task.backend
+     * `:04, :09, :14...` → 派發退貨報表任務到 task.backend
+     * `:05, :15, :25...` (10分鐘) → 派發 Kafka 健康檢查
+     * `:00, :30` → 派發日報生成任務
+
+**監控 scheduler topic**：
+
+```bash
+# 查看最新脈搏訊息
+docker exec simpleec-kafka /opt/kafka/bin/kafka-console-consumer.sh \
+  --bootstrap-server localhost:9092 \
+  --topic scheduler \
+  --from-beginning \
+  --max-messages 10
+
+# 查看 Scheduler Consumer Group Lag
+docker exec simpleec-kafka /opt/kafka/bin/kafka-consumer-groups.sh \
+  --bootstrap-server localhost:9092 \
+  --group scheduler-consumer \
+  --describe
+```
+
+**故障排查**：
+- 如果 Heartbeat 停止，整個排程系統暫停（設計特性，非 bug）
+- 檢查 Heartbeat Job 是否運行：`docker ps | grep heartbeat`
+- 檢查 scheduler topic 是否有新訊息：用上述 kafka-console-consumer 命令
 
 ## 常用操作
 
