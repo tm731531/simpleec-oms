@@ -107,11 +107,11 @@ http://localhost:8088
 ### Kafka Topics (10個 + 7業務主題)
 - **10 Channel Topics**: `{platform}.fast`, `{platform}.slow` × 6 platforms (momo, shopee, yahoo, pchome, cyberbiz, easystore)
   - `.fast`: 快速任務（SHIP_ORDER, UPDATE_PRICE, UPDATE_INVENTORY, APPROVE_RETURN）< 5s
-  - `.slow`: 慢速任務（FETCH_ORDERS, FETCH_ORDER_DETAIL, FETCH_RETURNS, FETCH_RETURN_DETAIL, SYNC_STORE）< 5m
-  - **重點**: 通路只有「賣場」(SYNC_STORE)，沒有「商品」概念
+  - `.slow`: 慢速任務（FETCH_ORDERS, FETCH_ORDER_DETAIL, FETCH_RETURNS, FETCH_RETURN_DETAIL, SYNC_PACK）< 5m
+  - **重點**: 通路只有「套包」(Pack)，沒有「商品」概念；BACKEND 自動建立 Pack → Product 映射
 - **7 Business Topics**: `order.process`, `return.process`, `task.backend`, `task.frontend`, `scheduler`, `task.failed`, `task.dlt`
   - 其中 `order.process` 和 `return.process` 是 Source of Truth
-  - `task.backend` 包含所有內部邏輯任務（SYNC_PRODUCT、SYNC_STORE 的內部處理等）
+  - `task.backend` 包含所有內部邏輯任務（SYNC_PACK 的結果處理、SYNC_PRODUCT、Pack→Product 映射建立等）
 - **可配置 Retention**: 透過 `simpleec.kafka.retention.*` (預設 1d，DLT 30d)
 
 ### 多平台 Channel Job 實現模式
@@ -196,7 +196,7 @@ simpleec-oms/
   - easystore: 7d 窗口（一次取 50 筆完整訂單）
 - 判斷是否需要 detail API（根據平台能力和 rate limit）
 - 格式轉換成統一 OMS 結構（orderId, channelOrderId, items[].channelItemId）
-- SYNC_STORE：同步通路賣場（通路只有賣場概念，沒有商品概念）
+- SYNC_PACK：同步通路套包（在通路上賣的商品套包資訊，BACKEND 自動建立 Pack → Product 映射）
 - 發送到 Kafka
 
 ❌ **Channel Job 不該做**:
@@ -204,7 +204,7 @@ simpleec-oms/
 - 業務邏輯驗證（庫存、積分等）
 - 訂單狀態管理
 - 接受 Queue 裡面的時間 range（應該自己計算）
-- 同步商品 (SYNC_PRODUCT) — 這是 OMS 內部邏輯，根據 SKU 聚合
+- 同步商品 (SYNC_PRODUCT) 或建立 Pack→Product 映射 — 這是 OMS 內部邏輯，由 BACKEND 根據 SYNC_PACK 自動建立
 
 ### 2. 統一 Header/Body 結構 & 路由
 - **Header** 負責路由（taskType 決定 Handler）

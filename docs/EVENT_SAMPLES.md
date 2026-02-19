@@ -646,7 +646,7 @@ order.process Handler 接收後，查詢資料庫判斷是新訂單還是已存�
 | SHIP_ORDER | {platform}.fast | task.backend | channel-job-{platform}-fast | 出貨指令 |
 | UPDATE_PRICE | {platform}.fast | task.backend | channel-job-{platform}-fast | 價格更新 |
 | UPDATE_INVENTORY | {platform}.fast | task.backend | channel-job-{platform}-fast | 庫存更新 |
-| SYNC_STORE | {platform}.slow | task.backend | channel-job-{platform}-slow | 通路賣場同步 |
+| SYNC_PACK | {platform}.slow | task.backend | channel-job-{platform}-slow | 通路套包同步 |
 | FETCH_RETURNS | {platform}.slow | return.process | channel-job-{platform}-slow | 退貨列表 |
 | FETCH_RETURN_DETAIL | {platform}.slow | return.process | channel-job-{platform}-slow | 退貨詳情 |
 | APPROVE_RETURN | {platform}.fast | return.process | channel-job-{platform}-fast | 同意退貨 |
