@@ -145,6 +145,22 @@
 
 ---
 
+### 🏛️ **系統架構全景（推薦先讀）**
+
+#### **[ARCHITECTURE_OVERVIEW.md](ARCHITECTURE_OVERVIEW.md)** ⭐⭐⭐ 新增
+   統整所有文檔的系統整體架構：
+   - 5 分鐘快速理解核心概念
+   - Mode A/B 訂單流程完整對比（端到端）
+   - 11 份文檔地圖與依賴關係
+   - 角色與職責對應（新人 / 架構師 / 運維）
+   - Heartbeat + Scheduler 時間驅動邏輯
+   - Redis 二層去重機制解釋
+   - 常見問題 + 推薦學習路徑
+
+   **何時讀**：**所有新人上手首讀** | **讀完後**：能快速定位各文檔用途
+
+---
+
 ### 📂 **詳細流程設計（進階參考）**
 
 | 文檔 | 所在位置 | 用途 |
@@ -160,6 +176,7 @@
 
 ### 👨‍💻 **我是 Channel Job 開發者**
 ```
+0️⃣ ARCHITECTURE_OVERVIEW.md (§2.3) — 角色視圖：Channel Job 開發者路線圖
 1️⃣ CORE_CONTRACTS.md (4.0-4.1 章) — 了解 Mode A/B 和 Channel Job 數據轉換責任
 2️⃣ EVENT_SAMPLES.md (Channel Topics) — 看 FETCH_ORDERS/SHIP_ORDER 樣本
 3️⃣ CHANNEL_IMPLEMENTATION_GUIDE.md (§2.0 開始) — Mode A/B 架構決策 + 完整開發指南
@@ -170,6 +187,7 @@
 
 ### 🔧 **我是 Handler 開發者**
 ```
+0️⃣ ARCHITECTURE_OVERVIEW.md (§2.4) — 角色視圖：Handler 開發者路線圖
 1️⃣ CORE_CONTRACTS.md (4.1-4.3 章) — 了解各 TaskType 職責與 Mode A/B
 2️⃣ EVENT_SAMPLES.md (Business Topics) — 看 PROCESS_ORDER/SYNC_PRODUCT 樣本
 3️⃣ QUEUE_CONSUMER_DESIGN.md (Channel Job - Slow Consumer) — 了解 Mode B 的 FETCH_ORDER_DETAIL
@@ -180,6 +198,7 @@
 
 ### 🏗️ **我要從頭理解系統**
 ```
+0️⃣ ARCHITECTURE_OVERVIEW.md (全讀) — 系統整體架構 + 數據流 + 11 份文檔地圖
 1️⃣ CORE_CONTRACTS.md (全讀) — 契約、Topic、TaskType、Mode A/B
 2️⃣ QUEUE_CONSUMER_DESIGN.md (全讀) — Consumer 如何處理、Mode B FETCH_ORDER_DETAIL
 3️⃣ DATA_FLOW_MAPPING.md (§0-§1) — Mode A/B 訂單流程、完整 orderData 結構
@@ -189,6 +208,7 @@
 
 ### 🚀 **我要部署到生產**
 ```
+0️⃣ ARCHITECTURE_OVERVIEW.md (§2.5) — 角色視圖：DevOps 檢查清單
 1️⃣ DOCKER_GUIDE.md — 容器配置與啟動
 2️⃣ OPERATIONS_RUNBOOK.md — 監控與故障排查
 3️⃣ SCHEMA.md — DB 初始化確認
@@ -197,6 +217,7 @@
 
 ### 🐛 **我要排查運維問題**
 ```
+0️⃣ ARCHITECTURE_OVERVIEW.md (§2.5) — 整體架構快速回憶
 1️⃣ OPERATIONS_RUNBOOK.md — 故障排查流程
 2️⃣ QUEUE_CONSUMER_DESIGN.md (監控指標) — Consumer Lag 檢查
 3️⃣ DATA_FLOW_MAPPING.md — 追蹤具體訊息流向
@@ -283,6 +304,7 @@ git commit -m "Updated CORE_CONTRACTS & EVENT_SAMPLES for PROCESS_ORDER design"
 
 | 版本 | 日期 | 主要變更 |
 |------|------|---------|
+| **2.2** | 2026-02-20 | **新增 ARCHITECTURE_OVERVIEW.md** 統整全系統；HANDLER_REGISTRY.md Mode A/B 平台分類；所有角色路線圖更新；12 份文檔完全同步 |
 | **2.1** | 2026-02-20 | Mode A/B 架構模式新增至 CORE_CONTRACTS + CHANNEL_IMPLEMENTATION_GUIDE + QUEUE_CONSUMER_DESIGN；DATA_FLOW_MAPPING.md 升至第一層；文檔同步一致性確認 |
 | **2.0** | 2026-02-19 | 刪除過時文檔（STATUS/ABSTRACT_DESIGN/IMPLEMENTATION_PLAN）；重整文檔層級；強調 Channel Job 數據轉換責任；PROCESS_ORDER 統一設計 |
 | 1.0 | 2026-02-09 | 初版：完整事件流設計；Redis 去重；16 個 Consumer Groups；fast/slow 分流 |

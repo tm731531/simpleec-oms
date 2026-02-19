@@ -45,17 +45,29 @@ Handler 2: FetchOrderDetailHandler
 
 **示例：Shopee（確認），Momo, Yahoo, PChome, Cyberbiz（待確認）**
 
-### 平台 Mode 對應表（待補充）
+### 平台 Mode 對應表（實裝狀態）
 
-| 平台 | 模式 | Handler 數 | 說明 |
-|------|------|-----------|------|
-| Shopee | Mode B | 2 | FETCH_ORDERS + FETCH_ORDER_DETAIL |
-| Shopify | Mode A | 1 | FETCH_ORDERS（直接） |
-| Momo | ? | ? | 待確認 API 完整度 |
-| Yahoo | ? | ? | 待確認 API 完整度 |
-| PChome | ? | ? | 待確認 API 完整度 |
-| easystore | ? | ? | 待確認 API 完整度 |
-| Cyberbiz | ? | ? | 待確認 API 完整度 |
+#### ✅ 已確認
+
+| 平台 | 模式 | Handler 數 | 詳情 | 參考文檔 |
+|------|------|-----------|------|---------|
+| **Shopee** | Mode B | 2 | 列表 API 不含 items/payment/shipping；需二次詳情呼叫 | CHANNEL_IMPLEMENTATION_GUIDE §2.0 |
+| **Shopify** | Mode A | 1 | 列表 API 已含完整訊息；直接轉 PROCESS_ORDER | CHANNEL_IMPLEMENTATION_GUIDE §2.0 |
+| **easystore** | Mode A | 1 | 列表 API 含 50 張完整訂單；直接轉 PROCESS_ORDER | CHANNEL_IMPLEMENTATION_GUIDE §2.0 |
+
+#### ⏳ 待確認
+
+| 平台 | 預期模式 | 預期 Handler 數 | 確認方法 |
+|------|---------|--------|---------|
+| Momo | Mode B 預測 | 2 | 檢查列表 API 是否有 items 陣列（item-level 結構） |
+| Yahoo | Mode B 預測 | 2 | 檢查列表 API 是否有狀態分類和詳情 |
+| PChome | Mode B 預測 | 2 | 檢查列表 API 是否有完整商品和運費資訊 |
+| Cyberbiz | 待評估 | ? | 新通路，需實測 API 行為 |
+
+**更新方法**（見 CHANNEL_IMPLEMENTATION_GUIDE §2.0 決策清單）：
+1. 查看官方 API 文檔 → 確認列表 API 是否包含 items[]、payment、shipping
+2. 實測 API response → 驗證資料完整度
+3. 更新本表 + 開發對應 Handler
 
 ---
 
@@ -127,9 +139,43 @@ public class HandlerRegistry {
 
 ## 2. TaskType → Handler 對應表
 
-### 2.1 Channel Job Handlers
+### 2.1 Channel Job Handlers（按 Mode 分組）
 
-#### Shopee Channel Job
+#### 🟢 Mode A 平台（直接模式） — 單一 Handler
+
+**特點**：列表 API 已完整 → FETCH_ORDERS → orderData 完整 → PROCESS_ORDER（一次性）
+
+#### Shopify Channel Job（Mode A）
+
+| TaskType | Handler Class | Topic | 說明 |
+|----------|--------------|-------|------|
+| FETCH_ORDERS | ShopifyOrderListHandler | shopify.slow | 抓取訂單列表（已含完整資訊） |
+| FETCH_RETURNS | ShopifyReturnListHandler | shopify.slow | 抓取退貨列表 |
+| SYNC_PACK | ShopifySyncPackHandler | shopify.slow | **雙層檢查 + 條件派發** |
+| SHIP_ORDER | ShopifyShipOrderHandler | shopify.fast | 執行出貨 |
+| UPDATE_INVENTORY | ShopifyInventoryHandler | shopify.fast | 更新庫存 |
+| UPDATE_PRICE | ShopifyPriceHandler | shopify.fast | 更新價格 |
+| APPROVE_RETURN | ShopifyApproveReturnHandler | shopify.fast | 同意退貨 |
+
+#### easystore Channel Job（Mode A）
+
+| TaskType | Handler Class | Topic | 說明 |
+|----------|--------------|-------|------|
+| FETCH_ORDERS | EasystoreOrderListHandler | easystore.slow | 抓取訂單列表（50 張/次，完整資訊） |
+| FETCH_RETURNS | EasystoreReturnListHandler | easystore.slow | 抓取退貨列表 |
+| SYNC_PACK | EasystoreSyncPackHandler | easystore.slow | **雙層檢查 + 條件派發** |
+| SHIP_ORDER | EasystoreShipOrderHandler | easystore.fast | 執行出貨 |
+| UPDATE_INVENTORY | EasystoreInventoryHandler | easystore.fast | 更新庫存 |
+| UPDATE_PRICE | EasystorePriceHandler | easystore.fast | 更新價格 |
+| APPROVE_RETURN | EasystoreApproveReturnHandler | easystore.fast | 同意退貨 |
+
+---
+
+#### 🔴 Mode B 平台（列表+詳情模式） — 兩個 Handler
+
+**特點**：列表 API 不完整 → FETCH_ORDERS → FETCH_ORDER_DETAIL → orderData 完整 → PROCESS_ORDER（兩步）
+
+#### Shopee Channel Job（Mode B）
 | TaskType | Handler Class | Topic | 說明 |
 |----------|--------------|-------|------|
 | FETCH_ORDERS | ShopeeOrderListHandler | shopee.slow | 抓取訂單列表 |
@@ -142,7 +188,7 @@ public class HandlerRegistry {
 | UPDATE_PRICE | ShopeePriceHandler | shopee.fast | 更新價格 |
 | APPROVE_RETURN | ShopeeApproveReturnHandler | shopee.fast | 同意退貨 |
 
-#### Momo Channel Job
+#### Momo Channel Job（Mode B 預測 — 待確認）
 | TaskType | Handler Class | Topic | 說明 |
 |----------|--------------|-------|------|
 | FETCH_ORDERS | MomoOrderListHandler | momo.slow | 抓取訂單列表 |
@@ -155,7 +201,7 @@ public class HandlerRegistry {
 | UPDATE_PRICE | MomoPriceHandler | momo.fast | 更新價格 |
 | APPROVE_RETURN | MomoApproveReturnHandler | momo.fast | 同意退貨 |
 
-#### Yahoo Channel Job
+#### Yahoo Channel Job（Mode B 預測 — 待確認）
 | TaskType | Handler Class | Topic | 說明 |
 |----------|--------------|-------|------|
 | FETCH_ORDERS | YahooOrderListHandler | yahoo.slow | 抓取訂單列表 |
@@ -169,7 +215,7 @@ public class HandlerRegistry {
 | UPDATE_PRICE | YahooPriceHandler | yahoo.fast | 更新價格 |
 | APPROVE_RETURN | YahooApproveReturnHandler | yahoo.fast | 同意退貨 |
 
-#### PChome Channel Job
+#### PChome Channel Job（Mode B 預測 — 待確認）
 | TaskType | Handler Class | Topic | 說明 |
 |----------|--------------|-------|------|
 | FETCH_ORDERS | PChomeOrderListHandler | pchome.slow | 抓取訂單列表 |
@@ -182,7 +228,7 @@ public class HandlerRegistry {
 | UPDATE_PRICE | PChomePriceHandler | pchome.fast | 更新價格 |
 | APPROVE_RETURN | PChomeApproveReturnHandler | pchome.fast | 同意退貨 |
 
-#### Cyberbiz Channel Job
+#### Cyberbiz Channel Job（待確認 — 新通路）
 | TaskType | Handler Class | Topic | 說明 |
 |----------|--------------|-------|------|
 | FETCH_ORDERS | CyberbizOrderListHandler | cyberbiz.slow | 抓取訂單列表 |
