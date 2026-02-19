@@ -46,27 +46,64 @@ public class HandlerRegistry {
 | FETCH_ORDER_DETAIL | ShopeeOrderDetailHandler | shopee.slow | 抓取訂單詳情 |
 | FETCH_RETURNS | ShopeeReturnListHandler | shopee.slow | 抓取退貨列表 |
 | FETCH_RETURN_DETAIL | ShopeeReturnDetailHandler | shopee.slow | 抓取退貨詳情 |
-| PREPARE_SHIPMENT | ShopeeShippingPrepareHandler | shopee.fast | 準備出貨參數 |
+| SYNC_PACK | ShopeeSyncPackHandler | shopee.slow | **雙層檢查 + 條件派發 SYNC_PRODUCT / SYNC_PACK** |
 | SHIP_ORDER | ShopeeShipOrderHandler | shopee.fast | 執行出貨 |
 | UPDATE_INVENTORY | ShopeeInventoryHandler | shopee.fast | 更新庫存 |
 | UPDATE_PRICE | ShopeePriceHandler | shopee.fast | 更新價格 |
-| SYNC_PRODUCT | ShopeeProductSyncHandler | shopee.slow | 同步商品 |
+| APPROVE_RETURN | ShopeeApproveReturnHandler | shopee.fast | 同意退貨 |
 
 #### Momo Channel Job
 | TaskType | Handler Class | Topic | 說明 |
 |----------|--------------|-------|------|
 | FETCH_ORDERS | MomoOrderListHandler | momo.slow | 抓取訂單列表 |
 | FETCH_ORDER_DETAIL | MomoOrderDetailHandler | momo.slow | 抓取訂單詳情 |
+| FETCH_RETURNS | MomoReturnListHandler | momo.slow | 抓取退貨列表 |
+| FETCH_RETURN_DETAIL | MomoReturnDetailHandler | momo.slow | 抓取退貨詳情 |
+| SYNC_PACK | MomoSyncPackHandler | momo.slow | **雙層檢查 + 條件派發 SYNC_PRODUCT / SYNC_PACK** |
 | SHIP_ORDER | MomoShipOrderHandler | momo.fast | 執行出貨 |
 | UPDATE_INVENTORY | MomoInventoryHandler | momo.fast | 更新庫存 |
-| SYNC_PRODUCT | MomoProductSyncHandler | momo.slow | 同步商品 |
+| UPDATE_PRICE | MomoPriceHandler | momo.fast | 更新價格 |
+| APPROVE_RETURN | MomoApproveReturnHandler | momo.fast | 同意退貨 |
 
 #### Yahoo Channel Job
 | TaskType | Handler Class | Topic | 說明 |
 |----------|--------------|-------|------|
 | FETCH_ORDERS | YahooOrderListHandler | yahoo.slow | 抓取訂單列表 |
+| FETCH_ORDER_DETAIL | YahooOrderDetailHandler | yahoo.slow | 抓取訂單詳情 |
+| FETCH_RETURNS | YahooReturnListHandler | yahoo.slow | 抓取退貨列表 |
+| FETCH_RETURN_DETAIL | YahooReturnDetailHandler | yahoo.slow | 抓取退貨詳情 |
+| SYNC_PACK | YahooSyncPackHandler | yahoo.slow | **雙層檢查 + 條件派發 SYNC_PRODUCT / SYNC_PACK** |
 | PROCESS_YAHOO_CSV | YahooCsvHandler | yahoo.slow | 處理 CSV webhook |
 | SHIP_ORDER | YahooShipOrderHandler | yahoo.fast | 執行出貨 |
+| UPDATE_INVENTORY | YahooInventoryHandler | yahoo.fast | 更新庫存 |
+| UPDATE_PRICE | YahooPriceHandler | yahoo.fast | 更新價格 |
+| APPROVE_RETURN | YahooApproveReturnHandler | yahoo.fast | 同意退貨 |
+
+#### PChome Channel Job
+| TaskType | Handler Class | Topic | 說明 |
+|----------|--------------|-------|------|
+| FETCH_ORDERS | PChomeOrderListHandler | pchome.slow | 抓取訂單列表 |
+| FETCH_ORDER_DETAIL | PChomeOrderDetailHandler | pchome.slow | 抓取訂單詳情 |
+| FETCH_RETURNS | PChomeReturnListHandler | pchome.slow | 抓取退貨列表 |
+| FETCH_RETURN_DETAIL | PChomeReturnDetailHandler | pchome.slow | 抓取退貨詳情 |
+| SYNC_PACK | PCHomeSyncPackHandler | pchome.slow | **雙層檢查 + 條件派發 SYNC_PRODUCT / SYNC_PACK** |
+| SHIP_ORDER | PChomeShipOrderHandler | pchome.fast | 執行出貨 |
+| UPDATE_INVENTORY | PChomeInventoryHandler | pchome.fast | 更新庫存 |
+| UPDATE_PRICE | PChomePriceHandler | pchome.fast | 更新價格 |
+| APPROVE_RETURN | PChomeApproveReturnHandler | pchome.fast | 同意退貨 |
+
+#### Cyberbiz Channel Job
+| TaskType | Handler Class | Topic | 說明 |
+|----------|--------------|-------|------|
+| FETCH_ORDERS | CyberbizOrderListHandler | cyberbiz.slow | 抓取訂單列表 |
+| FETCH_ORDER_DETAIL | CyberbizOrderDetailHandler | cyberbiz.slow | 抓取訂單詳情 |
+| FETCH_RETURNS | CyberbizReturnListHandler | cyberbiz.slow | 抓取退貨列表 |
+| FETCH_RETURN_DETAIL | CyberbizReturnDetailHandler | cyberbiz.slow | 抓取退貨詳情 |
+| SYNC_PACK | CyberbizSyncPackHandler | cyberbiz.slow | **雙層檢查 + 條件派發 SYNC_PRODUCT / SYNC_PACK** |
+| SHIP_ORDER | CyberbizShipOrderHandler | cyberbiz.fast | 執行出貨 |
+| UPDATE_INVENTORY | CyberbizInventoryHandler | cyberbiz.fast | 更新庫存 |
+| UPDATE_PRICE | CyberbizPriceHandler | cyberbiz.fast | 更新價格 |
+| APPROVE_RETURN | CyberbizApproveReturnHandler | cyberbiz.fast | 同意退貨 |
 
 ### 2.2 Business Job Handlers
 
@@ -89,10 +126,11 @@ public class HandlerRegistry {
 #### Backend Job
 | TaskType | Handler Class | Topic | 說明 |
 |----------|--------------|-------|------|
-| PRODUCT_UPDATED | ProductUpdateHandler | product.sync | 商品更新 |
-| INVENTORY_CHANGED | InventoryChangeHandler | inventory.update | 庫存變動 |
-| GENERATE_REPORT | ReportGenerationHandler | task.backend | 產生報表 |
-| SYNC_MASTER_DATA | MasterDataSyncHandler | task.backend | 同步主資料 |
+| SYNC_PRODUCT | SyncProductHandler | task.backend | **獨立**：建立 Product（從 SKU 聚合） |
+| SYNC_PACK | SyncPackHandler | task.backend | **獨立**：建立/更新 Pack 及其 Product 映射 |
+| UPDATE_INVENTORY | UpdateInventoryHandler | task.backend | 更新庫存 |
+| UPDATE_PRICE | UpdatePriceHandler | task.backend | 更新價格 |
+| SHIP_ORDER | ShipOrderHandler | task.backend | 執行出貨（後端自動或用戶手動） |
 
 ## 3. Handler 實作範例
 
