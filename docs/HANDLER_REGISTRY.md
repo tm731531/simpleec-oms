@@ -1,6 +1,65 @@
 # SimpleEC OMS Handler 註冊表
 
-## 0. Heartbeat + Scheduler 驅動模型
+## 0. 平台模式與 Handler 架構對應
+
+根據 PLATFORM_MAPPING.md §0 和 DATA_FLOW_MAPPING.md §0-2，每個平台的 Channel Job Handler 數量取決於其處理模式：
+
+### Mode A 平台（直接模式）— 單一 Handler
+列表 API 已含完整資訊 → **FETCH_ORDERS 直接產生 ORDER_UPSERT**
+
+```
+Handler: FetchOrdersHandler
+  ├─ Input: FETCH_ORDERS message
+  ├─ Logic:
+  │   ├─ 呼叫列表 API（已有 items, shipping, customer）
+  │   ├─ 逐單組織 OMS 結構
+  │   ├─ 計算 Hash（TreeMap 排序）
+  │   ├─ 讀 Redis 檢查 hash（第一層去重）
+  │   └─ 發送 ORDER_UPSERT（若 hash 不同）
+  └─ Output: ORDER_UPSERT message → order.process topic
+```
+
+**示例：Shopify, easystore（推測，待確認）**
+
+### Mode B 平台（列表+詳情模式）— 兩個 Handler
+列表 API 缺少關鍵資訊 → **FETCH_ORDERS 產生 FETCH_ORDER_DETAIL，詳情 Handler 產生 ORDER_UPSERT**
+
+```
+Handler 1: FetchOrdersHandler
+  ├─ Input: FETCH_ORDERS message
+  ├─ Logic:
+  │   ├─ 呼叫列表 API
+  │   └─ 逐單產生 FETCH_ORDER_DETAIL message
+  └─ Output: FETCH_ORDER_DETAIL messages → {platform}.slow topic
+
+Handler 2: FetchOrderDetailHandler
+  ├─ Input: FETCH_ORDER_DETAIL message (per order)
+  ├─ Logic:
+  │   ├─ 呼叫詳情 API（取得 items, shipping, buyer）
+  │   ├─ 組織 OMS 結構
+  │   ├─ 計算 Hash
+  │   ├─ 讀 Redis 檢查 hash（第一層去重）
+  │   └─ 發送 ORDER_UPSERT（若 hash 不同）
+  └─ Output: ORDER_UPSERT message → order.process topic
+```
+
+**示例：Shopee（確認），Momo, Yahoo, PChome, Cyberbiz（待確認）**
+
+### 平台 Mode 對應表（待補充）
+
+| 平台 | 模式 | Handler 數 | 說明 |
+|------|------|-----------|------|
+| Shopee | Mode B | 2 | FETCH_ORDERS + FETCH_ORDER_DETAIL |
+| Shopify | Mode A | 1 | FETCH_ORDERS（直接） |
+| Momo | ? | ? | 待確認 API 完整度 |
+| Yahoo | ? | ? | 待確認 API 完整度 |
+| PChome | ? | ? | 待確認 API 完整度 |
+| easystore | ? | ? | 待確認 API 完整度 |
+| Cyberbiz | ? | ? | 待確認 API 完整度 |
+
+---
+
+## 0.1 Heartbeat + Scheduler 驅動模型
 
 **關鍵前提**：所有 Handler 的觸發源是 **Heartbeat + Scheduler** 系統
 

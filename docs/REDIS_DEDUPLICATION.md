@@ -1,5 +1,28 @@
 # SimpleEC OMS Redis 去重設計
 
+## 0. Mode A 和 Mode B 的 Hash 一致性
+
+無論平台使用 **Mode A（直接模式）** 或 **Mode B（列表+詳情模式）**，Redis Hash 去重邏輯 **完全相同**：
+
+### 統一特性
+- ✓ 相同的 Hash 計算演算法（TreeMap 排序 + SHA-256）
+- ✓ 相同的 Redis Key 格式：`order:hash:{merchantId}:{channelId}:{orderId}`
+- ✓ 相同的 Hash Value（不存儲在 DB，只存 Redis）
+- ✓ 相同的 TTL（7 天）
+- ✓ 相同的兩層去重架構：
+  - 第一層（Channel Job）：讀 Redis，決定是否跳過（資源優化）
+  - 第二層（Order Job OrderUpsertHandler）：再檢查 Redis + DB，確保並發安全
+
+### 唯一差異：Hash 計算的數據來源
+| 模式 | 數據來源 | 計算時機 |
+|------|--------|--------|
+| **Mode A** | 列表 API（一次呼叫） | FETCH_ORDERS Handler 中 |
+| **Mode B** | 詳情 API（逐單呼叫） | FETCH_ORDER_DETAIL Handler 中 |
+
+但計算結果和後續 Redis 操作 **完全一致**。
+
+---
+
 ## 1. 核心原則
 
 ### 1.1 特殊字元保留原則

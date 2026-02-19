@@ -2,12 +2,16 @@
 
 ⚠️ **重要聲明 - 部分內容為示例**
 
-本文件分為兩部分：
+本文件分為三部分：
 
 ## 🟢 正式標準（已定義，不會改變）
 - **OMS Schema 定義**（Order, Product, Pack, Return 結構）
 - **OMS 狀態機定義**（訂單、商品、退貨的統一狀態）
 - **TaskType 定義**（FETCH_ORDERS, SHIP_ORDER 等行為）
+- **平台處理模式**（Mode A vs Mode B — 根據列表 API 的完整度）
+
+## 🟡 條件式標準（根據平台特性變化）
+- **各平台所屬模式**（Mode A 直接模式 或 Mode B 列表+詳情模式）
 
 ## 🔴 待實現部分（現在是 SAMPLE，逐步更新）
 - **各平台 API 映射**（Shopee / Momo / Yahoo / PChome / easystore / Cyberbiz）
@@ -15,6 +19,40 @@
 - **平台字段 → OMS 字段的映射規則**
 
 未來當實現各平台時，會一個一個更新這些 SAMPLE 部分為真實 API 規範。
+
+---
+
+## 0. 平台處理模式定義
+
+參考 DATA_FLOW_MAPPING.md §0，每個平台根據其**列表 API 的數據完整度**決定處理模式：
+
+### Mode A：直接模式（列表 API 已含完整資訊）
+- ✓ 單一 Handler：FETCH_ORDERS → 直接組織 OMS → 計算 hash → ORDER_UPSERT
+- ✓ 適合：列表 API 已包含完整商品、客戶、地址等資訊
+- ✓ 優點：快速、低 API 配額消耗
+- ✗ 缺點：依賴列表 API 設計完整度
+
+**示例：Shopify, Stripe, 自有平台**
+
+### Mode B：列表+詳情模式（列表 API 缺少關鍵資訊）
+- ✓ 兩個 Handler：FETCH_ORDERS → 產生 FETCH_ORDER_DETAIL 訊息 → 詳情 API → ORDER_UPSERT
+- ✓ 適合：列表 API 缺少商品清單、物流詳情等關鍵資訊
+- ✓ 優點：數據完整、準確
+- ✗ 缺點：詳情 API 呼叫多（=訂單數），消耗更多配額
+
+**示例：Shopee（列表無 items/shippingInfo），Momo（類似限制）**
+
+### 平台模式對應（待補充）
+
+| 通路 | 模式 | 理由 | 數據完整度檢查點 |
+|------|------|------|-----------------|
+| Shopee | Mode B | 列表無商品、物流詳情 | 需檢查：items, shippingInfo, buyerInfo |
+| Shopify | Mode A | 列表已包含完整數據 | 列表 API 含：line_items, shipping_address, customer |
+| Momo | ? | 待確認 | ? |
+| Yahoo | ? | 待確認 | ? |
+| PChome | ? | 待確認 | ? |
+| easystore | ? | 待確認 | ? |
+| Cyberbiz | ? | 待確認 | ? |
 
 ---
 
