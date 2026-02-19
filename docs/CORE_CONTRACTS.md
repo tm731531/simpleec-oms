@@ -215,40 +215,43 @@ easystore: GET /api/orders?from_date=X&to_date=Y&limit=50
     "channelOrderId": "2026021300001",
     "orderData": {
       "orderStatus": "PENDING",
-      "orderDate": "2026-02-13T09:30:00Z",
-      "customer": {
-        "name": "顧客名稱",
-        "phone": "0912345678",
-        "email": "customer@example.com"
-      },
+      "buyerName": "顧客名稱",
+      "buyerPhone": "0912345678",
+      "buyerEmail": "customer@example.com",
+      "shippingAddress": "台北市信義區松壽路 99 號",
+      "shippingMethod": "HOME_DELIVERY",
+      "paymentMethod": "CREDIT_CARD",
+      "totalAmount": 2790.00,
+      "shippingFee": 60.00,
+      "discountAmount": 270.00,
+      "channelCreatedAt": "2026-02-13T08:30:00Z",
+      "paidAt": "2026-02-13T08:31:00Z",
       "items": [
         {
-          "productId": "SKU001",
-          "productName": "商品名稱",
+          "sku": "HGJ-60-12",
+          "productId": "pd_xyz789",
+          "channelProductId": "SHOPEE-SKU-98765",
+          "channelSpecId": "SHOPEE-SPEC-98765-A",
+          "channelProductName": "SHOPEE養生雞精禮盒限定組",
+          "channelSpecName": "60ml×12入(單盒)",
+          "productName": "養生雞精禮盒限定組",
           "quantity": 2,
-          "unitPrice": 1000,
-          "subtotal": 2000
+          "unitPrice": 1395.00,
+          "subtotal": 2790.00,
+          "sellPackId": "sp_abc123"
         }
-      ],
-      "payment": {
-        "method": "CREDIT_CARD",
-        "status": "PAID",
-        "total": 2000
-      },
-      "shipping": {
-        "method": "HOME_DELIVERY",
-        "address": "台北市信義區...",
-        "estimatedArrival": "2026-02-15T23:59:59Z"
-      }
+      ]
     }
   }
 }
 ```
 
 **重要提示**：
-- `orderData` 已是 **OMS 統一結構**（不是通路原始格式）
+- `orderData` 已是 **OMS 統一結構**（對應 orders 表和 items JSONB），不是通路原始格式
 - 特殊字元（如訂單號的 `#`, `-`, `@`）必須完整保留（用於冪等性判斷）
-- order.process Handler 無需解析通路格式，直接使用 orderData
+- Handler INSERT/UPDATE 時直接拆解 orderData 到各欄位：
+  - 訂單表: orderStatus, buyerName, buyerPhone, buyerEmail, shippingAddress, shippingMethod, paymentMethod, totalAmount, shippingFee, discountAmount, channelCreatedAt, paidAt
+  - items JSONB: 整個 items[] 陣列存入 orders.items
 
 ---
 
