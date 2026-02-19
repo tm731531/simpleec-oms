@@ -158,46 +158,53 @@
 **Channel Job 的內部決策流程**（根據通路規則）：
 
 **第 1 步：讀取 header.timestamp**
-- 取得基準時間戳，決定查詢窗口
+- 取得基準時間戳（BASE_TS）
 
 **第 2 步：根據時間戳和訂單狀態，分批多次打 API（Orders Channel Job 核心職責）**
 
-Channel Job 不只打一次 API，而是根據訂單「年齡」分層級、分批次拉取：
+Scheduler 只傳一個 timestamp，Channel Job **自行決策**分批策略和時間窗口：
 
 ```
-例子（各通路都遵循此模式）：
-- 1 小時內新訂單（PENDING）           → 打 API_1
-- 3 天內待出貨訂單（CONFIRMED）       → 打 API_2
-- 5 天內出貨中訂單（SHIPPED）         → 打 API_3
-- 7 天後完成訂單（COMPLETED/CLOSED） → 打 API_4
+Channel Job 根據訂單「年齡」分層級、自行計算時間窗口：
+- PENDING 訂單：BASE_TS 往前推 1 小時內 → 打 API_1
+- CONFIRMED 訂單：BASE_TS 往前推 3 天內 → 打 API_2
+- SHIPPED 訂單：BASE_TS 往前推 5 天內 → 打 API_3
+- COMPLETED 訂單：BASE_TS 往前推 7 天內 → 打 API_4
+
+（時間窗口完全由 Channel Job 內部決策，Queue 和 Scheduler 無關）
 ```
 
-**具體實例：**
+**具體實例（Channel Job 內部實現細節）：**
 ```
-Shopee:
+Shopee 訂單 API：
+  // Channel Job 自行計算的時間窗口
   GET /api/orders?order_status=UNPAID&create_time_from=BASE_TS&create_time_to=BASE_TS+1h
   GET /api/orders?order_status=AWAITING_SHIPMENT&create_time_from=BASE_TS-3d&create_time_to=BASE_TS
   GET /api/orders?order_status=SHIPPED&create_time_from=BASE_TS-5d&create_time_to=BASE_TS
   GET /api/orders?order_status=COMPLETED&create_time_from=BASE_TS-7d&create_time_to=BASE_TS
 
-Momo:
-  GET /api/orders?created_time_start=BASE_TS-1h&created_time_end=BASE_TS (新訂單)
-  GET /api/orders?created_time_start=BASE_TS-3d&created_time_end=BASE_TS (待出貨)
-  (特殊: 返回 item-level 記錄，每行是一個 item，Channel Job 自己分組聚合)
+Momo 訂單 API：
+  // Momo API 無狀態分類，Channel Job 用時間範圍
+  GET /api/orders?created_time_start=BASE_TS-1h&created_time_end=BASE_TS
+  GET /api/orders?created_time_start=BASE_TS-3d&created_time_end=BASE_TS
+  // 返回 item-level 記錄，Channel Job 自己按訂單號分組聚合
 
-Yahoo:
-  GET /api/orders?updated_after=BASE_TS-1d  (最近一天更新的，包含所有狀態)
-  (特殊: 只有更新時間，不分訂單狀態；Channel Job 自己評估狀態)
+Yahoo 訂單 API：
+  // Yahoo 無狀態，只有更新時間
+  GET /api/orders?updated_after=BASE_TS-1d
+  // Channel Job 自己評估訂單狀態
 
-easystore:
+easystore 訂單 API：
+  // easystore 一次可拿完整資訊
   GET /api/orders?from_date=BASE_TS-7d&to_date=BASE_TS&limit=50
-  (優點: 一次可拿 50 張 + 完整資訊，可視需要多次翻頁)
+  // 可視需要分頁拉取
 ```
 
 **設計原則**：
-- Scheduler 只提供 `timestamp`（基準時間）
-- Channel Job 根據**通路特性**和**訂單狀態生命週期**，決定如何分批拉取
-- 不同狀態的訂單重要性和更新頻率不同 → 分層級拉取保證數據新鮮度
+- ✅ Scheduler 只提供 `timestamp`（一個時間點）
+- ✅ **Queue 裡面 NO RANGE** — 只有單一時間戳
+- ✅ Channel Job 根據**通路特性**和**訂單狀態生命週期**，自行計算時間窗口
+- ✅ 不同狀態的訂單重要性和更新頻率不同 → 分層級拉取保證數據新鮮度
 
 **第 3 步：判斷是否需要 FETCH_ORDER_DETAIL**
 
