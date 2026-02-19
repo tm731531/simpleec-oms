@@ -3,26 +3,28 @@
 ## 1. Channel Job 職責界定
 
 ### 1.1 核心原則
-- **單一職責**：只負責與通路 API 溝通
+- **數據適配層**：將各通路 API 的五花八門格式統一轉換為 OMS 標準結構
 - **不存資料**：所有資料透過 Kafka 傳遞
 - **不做業務邏輯**：業務邏輯在 Process Job
 
 ### 1.2 Channel Job 該做什麼
 ```java
 ✅ 正確的職責：
-- 呼叫通路 API
+- 呼叫通路 API（FETCH_ORDERS, FETCH_ORDER_DETAIL 等）
 - 處理分頁/游標
 - 處理 rate limit
 - 重試邏輯
-- 資料格式轉換（API response → Kafka message）
-- 發送訊息到對應 topic
+- 資料結構轉換（Shopee/Momo/Yahoo 訂單 → OMS 標準 orderData）
+  * 例：Shopee shop_order_id → channelOrderId
+  * 例：Momo 商品結構 → items[] (統一格式)
+  * 例：多通路運費計算 → shipping.fee (統一字段)
+- 發送轉換後的訊息到對應 topic
 
 ❌ 不該做的事：
-- 存取資料庫
-- 業務規則驗證
-- 訂單狀態管理
-- 金額計算
-- 庫存扣減
+- 存取資料庫（資料庫查詢由 Handler 負責）
+- 決定新訂單或更新訂單（由 Handler 查 DB 決定）
+- 計算去重 hash（由 Handler 計算）
+- 業務規則驗證（訂單狀態管理、金額計算、庫存扣減等）
 ```
 
 ## 2. Channel Adapter 實作模式

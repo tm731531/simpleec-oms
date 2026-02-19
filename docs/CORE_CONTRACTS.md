@@ -66,6 +66,18 @@
 
 ## 4. 核心 TaskType 定義
 
+### 4.0 Channel Job 數據轉換原則
+**核心責任**：Channel Job 是數據適配層，負責將各通路 API 的五花八門格式轉換為 OMS 統一的訂單結構。
+
+- **FETCH_ORDERS**：快速掃描訂單列表，決定哪些訂單需要詳情
+- **FETCH_ORDER_DETAIL**：深度獲取完整信息，**轉換成 OMS 標準訂單結構**（這是關鍵）
+  - Shopee 的訂單 → orderData (OMS 格式)
+  - Momo 的訂單 → orderData (OMS 格式)
+  - Yahoo, PChome, Cyberbiz... → orderData (OMS 格式)
+- **PROCESS_ORDER**：發送轉換後的標準結構到 order.process
+
+order.process Handler 只需專注業務邏輯（查 DB、決定新建/更新、去重），不需處理多通路差異。
+
 ### 4.1 訂單相關
 | TaskType | 來源 Topic | 目標 Topic | 說明 |
 |----------|-----------|------------|------|
