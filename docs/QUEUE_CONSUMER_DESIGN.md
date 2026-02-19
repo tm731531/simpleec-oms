@@ -264,20 +264,21 @@
 ## Scheduler 策略示例
 
 ### 核心原則
-- ✅ **訂單/退貨抓取**：Scheduler **只發時間戳**，Channel Job 自行決策時間窗口邏輯
+- ✅ **訂單/退貨抓取**：Scheduler **接收 Heartbeat 脈搏，檢查時間，派發 ORDERS_SLOW 訊息**；Channel Job 根據時間戳自行決策時間窗口邏輯
 - ❌ **商品/套包同步**：不由 Scheduler 驅動（高機率被平台 DDOS 鎖機），完全手動 UI 驅動
-- ✅ **報表生成**：每 5/30 分鐘或整點觸發，根據**客戶時區**判斷是否需要日報
+- ✅ **報表生成**：Scheduler 根據分鐘偏移（:01, :02, :03, :04 等）派發任務，根據**客戶時區**判斷是否需要日報
 
 ### 訂單/退貨抓取策略（5 分鐘週期 + orders slow 任務）
 
 ```
-Scheduler 每 5 分鐘觸發一次 ORDERS_SLOW 通知到每個平台的 {platform}.slow consumer：
+架構：
+  1. Heartbeat Job：每秒發一個脈搏訊息到 scheduler topic
+  2. Scheduler Consumer：接收脈搏，檢查當前時間，判斷是否派發任務
 
-00:00 → ORDERS_SLOW { timestamp: "2026-02-13T08:00:00Z" }
-00:05 → ORDERS_SLOW { timestamp: "2026-02-13T08:05:00Z" }
-00:10 → ORDERS_SLOW { timestamp: "2026-02-13T08:10:00Z" }
-...
-（每 5 分鐘一次，時間戳由 Scheduler 自動計算）
+Scheduler 判斷邏輯：
+  - 如果當前分鐘是 :00, :05, :10, :15...（5 分鐘的倍數，偏移 00）
+    → 派發 ORDERS_SLOW 到每個平台的 {platform}.slow consumer
+    → 訊息包含 timestamp: "2026-02-13T08:00:00Z"（或 08:05, 08:10 等）
 
 Channel Job（{platform}.slow） 接收到 ORDERS_SLOW：
   1. 根據 timestamp 推導「應該查詢的時間窗口」
@@ -396,25 +397,40 @@ Handler 接收 RECOMPUTE_ORDER_REPORT：
 ```
 ⚠️  關鍵：避免 Thundering Herd 問題 — 不同「事項（任務類型）」在不同分鐘觸發！
 
-Scheduler 根據「任務類型」計算偏移，分散觸發時間：
+架構：Heartbeat Job 每秒發脈搏 → Scheduler Consumer 接收脈搏並檢查時間 → 判斷是否派發任務
+
+Scheduler 根據「當前分鐘」判斷派發哪些任務（任務類型決定偏移）：
 
 5 分鐘間隔（訂單抓取 + 小時報表）：
-  - ORDERS_SLOW 通知   → 偏移 00 分 → 00, 05, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55
-                              （每 5 分鐘通知 {platform}.slow consumer，由 Channel Job 決策是否呼叫 API）
-  - 訂單報表           → 偏移 01 分 → 01, 06, 11, 16, 21, 26, 31, 36, 41, 46, 51, 56
-  - 庫存報表           → 偏移 02 分 → 02, 07, 12, 17, 22, 27, 32, 37, 42, 47, 52, 57
-  - 銷售額報表         → 偏移 03 分 → 03, 08, 13, 18, 23, 28, 33, 38, 43, 48, 53, 58
-  - 退貨報表           → 偏移 04 分 → 04, 09, 14, 19, 24, 29, 34, 39, 44, 49, 54, 59
-  （報表：從快取讀取需要重算的 channel，批量派發，hash(reportType) % 5 決定偏移）
+  當分鐘 % 5 == 0（即 :00, :05, :10...）
+    → 派發 ORDERS_SLOW 到所有 {platform}.slow
+    → （Channel Job 接收後決策是否呼叫 API）
+
+  當分鐘 % 5 == 1（即 :01, :06, :11...）
+    → 派發訂單報表任務到 task.backend
+    → （從快取讀取需要重算的 channel，批量派發）
+
+  當分鐘 % 5 == 2（即 :02, :07, :12...）
+    → 派發庫存報表任務到 task.backend
+
+  當分鐘 % 5 == 3（即 :03, :08, :13...）
+    → 派發銷售額報表任務到 task.backend
+
+  當分鐘 % 5 == 4（即 :04, :09, :14...）
+    → 派發退貨報表任務到 task.backend
 
 10 分鐘間隔：
-  - 報表生成       → 偏移 00 分 → 00, 10, 20, 30, 40, 50（同報表快取邏輯）
-  - Kafka 消化狀況 → 偏移 05 分 → 05, 15, 25, 35, 45, 55
-                           檢查項目：consumer lag, 吞吐量, 死信隊列堆積, broker 負載
-                           生成監控報告，告警如果有異常
+  當分鐘 % 10 == 0（即 :00, :10, :20...）
+    → 派發定期報表生成任務（同上述報表快取邏輯）
+
+  當分鐘 % 10 == 5（即 :05, :15, :25...）
+    → 派發 Kafka 消化狀況檢查
+    → 檢查項目：consumer lag, 吞吐量, 死信隊列堆積, broker 負載
+    → 生成監控報告，告警如果有異常
 
 30 分鐘和整點（日報）：
-  - 所有日報統一：00 分和 30 分（無偏移，因為日報頻率低，且數量少）
+  當分鐘 == 0 或 == 30（即 :00, :30）
+    → 派發日報生成任務（無偏移，因為日報頻率低，且數量少）
 
 報表/任務 Handler 邏輯：
   1. 接收 timestamp（UTC）
@@ -450,19 +466,30 @@ Scheduler 根據「任務類型」計算偏移，分散觸發時間：
 ## 拓撲圖
 
 ```
-scheduler（排程驅動）
-  ├─→ {platform}.fast/slow (Channel Job)
-  │       ↓
-  │    order.process (Order Handler: 判斷新建/更新)
-  │    return.process (Return Handler)
-  │       ↓
-  │    [Redis Hash updated]
+heartbeat-job（心臟 - 每秒發脈搏）
+  ↓
+scheduler topic
+  ↓
+scheduler-consumer（大腦 - 接收脈搏，檢查時間，判斷派發任務）
   │
-  └─→ scheduler 還會分發「庫存、價格更新」等任務
-       └─→ task.backend
-           ├─ UPDATE_PRICE-handler
-           ├─ UPDATE_INVENTORY-handler
-           └─ ...其他排程任務
+  ├─→ :00, :05, :10... → ORDERS_SLOW → {platform}.slow (Channel Job)
+  │                            ↓
+  │                    order.process (Order Handler: 判斷新建/更新)
+  │                    return.process (Return Handler)
+  │                            ↓
+  │                    [Redis Hash updated]
+  │
+  ├─→ :01, :06, :11... → 訂單報表 ──→ task.backend
+  │
+  ├─→ :02, :07, :12... → 庫存報表 ──→ task.backend
+  │
+  ├─→ :03, :08, :13... → 銷售額報表 ──→ task.backend
+  │
+  ├─→ :04, :09, :14... → 退貨報表 ──→ task.backend
+  │
+  ├─→ :05, :15, :25... (10分鐘) → Kafka 健康檢查 ──→ monitoring.report
+  │
+  └─→ :00, :30 → 日報生成 ──→ task.backend
 
 UI Trigger（用戶驅動）
   ├─→ SYNC_PACK (source: admin_ui)
