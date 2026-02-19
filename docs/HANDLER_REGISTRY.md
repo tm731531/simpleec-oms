@@ -225,53 +225,75 @@ public class ShopeeOrderListHandler implements ChannelTaskHandler {
 }
 ```
 
-### 3.2 Order Process Handler (Upsert Pattern)
+### 3.2 Order Process Handler (Upsert Pattern with Hash Deduplication)
 ```java
 @Component
 public class OrderUpsertHandler implements TaskHandler {
 
     private final OrderService orderService;
     private final OrderMapper orderMapper;
+    private final RedisTemplate<String, String> redisTemplate;
 
     @Override
     public String getTaskType() {
         return "ORDER_UPSERT";
     }
 
+    @Transactional
     @Override
     public void handle(TaskMessage message) {
         OrderUpsertRequest request = parseBody(message.getBody(), OrderUpsertRequest.class);
+        String merchantId = message.getHeader().getMerchantId();
+        String channelId = request.getChannelId();
+        String channelOrderId = request.getChannelOrderId();
+        String orderHash = request.getOrderHash();  // 從 Channel Job 傳入
 
-        // 1. 檢查是否已存在（根據 channelOrderId）
-        Optional<Order> existing = orderService.findByChannelOrderId(
-            request.getChannelId(),
-            request.getChannelOrderId()
-        );
+        // 0. 構建 Redis Key（從 REDIS_DEDUPLICATION.md）
+        String redisKey = String.format("order:hash:%s:%s:%s",
+            merchantId, channelId, channelOrderId);
+
+        // 1. 再次檢查 Redis（避免並發重複）
+        String existingHashInRedis = redisTemplate.opsForValue().get(redisKey);
+        if (orderHash.equals(existingHashInRedis)) {
+            log.info("Order already processed (Redis hash match): {}", channelOrderId);
+            return;
+        }
+
+        // 2. 檢查資料庫中是否已存在
+        Optional<Order> existing = orderService.findByChannelOrderId(channelId, channelOrderId);
 
         Order order;
         if (existing.isPresent()) {
             // 2A. 更新現有訂單
             order = existing.get();
-            order.update(orderMapper.fromChannelData(
-                message.getHeader().getChannelId(),
-                request.getOrderData()
-            ));
-            log.info("Updated order: {} from channel {}",
-                order.getOrderId(), request.getChannelId());
+
+            // 只有當 hash 不同時才真正更新（檢測是否有實質變化）
+            if (!orderHash.equals(existing.get().getContentHash())) {
+                order.update(orderMapper.fromChannelData(channelId, request.getOrderData()));
+                log.info("Updated order: {} from channel {} (hash changed)",
+                    order.getOrderId(), channelId);
+            } else {
+                log.debug("Order content unchanged: {}", channelOrderId);
+                return;
+            }
         } else {
             // 2B. 建立新訂單
-            order = orderMapper.fromChannelData(
-                message.getHeader().getChannelId(),
-                request.getOrderData()
-            );
+            order = orderMapper.fromChannelData(channelId, request.getOrderData());
             log.info("Created new order: {} from channel {}",
-                order.getOrderId(), request.getChannelId());
+                order.getOrderId(), channelId);
         }
 
-        // 3. 儲存訂單（insert or update）
+        // 3. 儲存訂單到資料庫（insert or update）
         orderService.save(order);
 
-        // 4. 觸發後續流程
+        // 4. 更新 Redis Hash 快取（確保與 DB 同步）
+        redisTemplate.opsForValue().set(
+            redisKey,
+            orderHash,
+            Duration.ofDays(7)  // TTL 7 天
+        );
+
+        // 5. 觸發後續流程
         if (request.isNeedsDetail()) {
             order.setStatus(OrderStatus.PENDING_DETAIL);
         } else {
@@ -287,6 +309,15 @@ public class OrderUpsertHandler implements TaskHandler {
     }
 }
 ```
+
+**Hash 包含的欄位** (參考 REDIS_DEDUPLICATION.md)：
+- `orderStatus` — 訂單狀態
+- `paymentStatus` — 付款狀態
+- `shippingStatus` — 物流狀態
+- `shippingInfo` — 物流信息（包含追蹤號）
+- `totalAmount` — 金額
+- `items` — 項目列表（包含 SKU、數量等）
+- `buyerInfo` — 買家信息
 
 ## 4. Handler 生命週期
 
