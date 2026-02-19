@@ -14,6 +14,7 @@
 - 訂單號碼在**通路內唯一**，但**跨通路可能重複**
 - 必須使用 `channelId + orderId` 組成複合鍵
 - 例如：Shopify `#1001` 和 Cyberbiz `#1001` 是不同訂單
+- 客戶可能會在訂單號中使用任意符號（如 `/t`、`/n`、`@`、`#` 等），這些都是有意義的
 
 ## 2. Redis Key 設計
 
@@ -38,10 +39,11 @@ inventory:hash:{merchantId}:{channelId}:{skuId}
 
 ### 2.2 特殊字元處理策略
 
-#### 方案一：直接使用（推薦）
-- **直接保留所有特殊字元在 Redis Key 中**
-- Redis 支援大部分 ASCII 字元，包括：`#`, `@`, `-`, `_`, `.`, `:`, `/`
-- 只有空白字元和控制字元需要特別處理
+#### 直接保留所有字元（推薦）
+- **直接保留所有特殊字元在 Redis Key 中，不做任何轉換**
+- Redis 原生支援所有 ASCII 和 UTF-8 字元
+- 客戶的訂單號（包括 `/t`, `/n`, `@`, `#`, `-` 等）都是有業務意義的，必須完整保留
+- Key 分割使用冒號 `:` 作為分隔符，但訂單號中的冒號也是保留的
 
 ```java
 public class RedisKeyBuilder {
@@ -52,53 +54,29 @@ public class RedisKeyBuilder {
         validateNotNull(channelId, "channelId");
         validateNotNull(orderId, "orderId");
 
-        // 只處理真正有問題的字元
-        String safeOrderId = orderId
-            .replace(" ", "_SP_")     // 空白轉換
-            .replace("\t", "_TAB_")   // Tab 轉換
-            .replace("\n", "_NL_")    // 換行轉換
-            .replace("\r", "_CR_");   // 回車轉換
-
+        // 直接組合，不做任何字元轉換
         return String.format("order:hash:%s:%s:%s",
-            merchantId, channelId, safeOrderId);
+            merchantId, channelId, orderId);
     }
 
     public static OrderKey parseOrderHashKey(String key) {
-        String[] parts = key.split(":", 5);  // 限制分割數量為 5
+        // 限制分割數量為 5，避免訂單號中的冒號被錯誤分割
+        String[] parts = key.split(":", 5);
         if (parts.length != 5) {
             throw new IllegalArgumentException("Invalid key format: " + key);
         }
 
-        String orderId = parts[4]
-            .replace("_SP_", " ")
-            .replace("_TAB_", "\t")
-            .replace("_NL_", "\n")
-            .replace("_CR_", "\r");
-
-        return new OrderKey(parts[2], parts[3], orderId);
+        // 直接使用，不做任何解碼
+        return new OrderKey(parts[2], parts[3], parts[4]);
     }
 }
 ```
 
-#### 方案二：URL 編碼（備選）
-- 使用 URL 編碼保留所有特殊字元
-- 優點：100% 安全，缺點：Key 可讀性降低
-
-```java
-public class RedisKeyBuilderUrlEncoded {
-
-    public static String buildOrderHashKey(String merchantId, String channelId, String orderId) {
-        String encodedOrderId = URLEncoder.encode(orderId, StandardCharsets.UTF_8);
-        return String.format("order:hash:%s:%s:%s",
-            merchantId, channelId, encodedOrderId);
-    }
-
-    public static OrderKey parseOrderHashKey(String key) {
-        String[] parts = key.split(":", 5);
-        String orderId = URLDecoder.decode(parts[4], StandardCharsets.UTF_8);
-        return new OrderKey(parts[2], parts[3], orderId);
-    }
-}
+**範例**：
+```
+訂單號: ORD/t2024/n001  →  Key: order:hash:M001:SHOPIFY_001:ORD/t2024/n001
+訂單號: 1002#100       →  Key: order:hash:M001:CYBERBIZ_001:1002#100
+訂單號: SH@2024:ORD:01 →  Key: order:hash:M002:SHOPEE_001:SH@2024:ORD:01
 ```
 
 ## 3. Hash 計算與存儲
@@ -233,13 +211,20 @@ public class OrderProcessHandler {
 ```java
 @Transactional
 public void processOrderWithConsistency(OrderMessage message) {
-    String orderHashKey = buildKey(message);
+    String merchantId = message.getHeader().getMerchantId();
+    String channelId = message.getHeader().getChannelId();
+    String orderId = message.getOrderId();
+    String orderHash = message.getOrderHash();
+
+    // 直接組合 Key（不做任何轉換）
+    String orderHashKey = String.format("order:hash:%s:%s:%s",
+        merchantId, channelId, orderId);
 
     // 使用 Redis Pipeline 減少往返
     redisTemplate.executePipelined((RedisCallback<Object>) connection -> {
         // 檢查並設置（原子操作）
-        byte[] key = orderHashKey.getBytes();
-        byte[] value = message.getOrderHash().getBytes();
+        byte[] key = orderHashKey.getBytes(StandardCharsets.UTF_8);
+        byte[] value = orderHash.getBytes(StandardCharsets.UTF_8);
 
         // SET NX EX（如果不存在則設置，並設定過期時間）
         connection.set(key, value,
@@ -338,23 +323,25 @@ public void testSpecialCharactersInOrderId() {
         "ORDER_2024_001",    // 底線
         "ORD.2024.001",      // 點號
         "2024/01/001",       // 斜線
-        "ORDER:2024:001",    // 冒號
+        "ORDER:2024:001",    // 訂單號中包含冒號
+        "ORD/t2024/n001",    // 斜線符號
         "訂單-2024-001"      // 中文
     };
 
     for (String orderId : testOrderIds) {
-        String key = RedisKeyBuilder.buildOrderHashKey(
+        // 直接組合 Key（不做任何轉換）
+        String key = String.format("order:hash:%s:%s:%s",
             "M001", "SHOPIFY_001", orderId
         );
-
-        // 驗證可以正確解析
-        OrderKey parsed = RedisKeyBuilder.parseOrderHashKey(key);
-        assertEquals(orderId, parsed.getOrderId());
 
         // 驗證 Redis 可以存取
         redisTemplate.opsForValue().set(key, "test-hash");
         String retrieved = redisTemplate.opsForValue().get(key);
         assertEquals("test-hash", retrieved);
+
+        // 驗證可以正確解析
+        OrderKey parsed = RedisKeyBuilder.parseOrderHashKey(key);
+        assertEquals(orderId, parsed.getOrderId());
     }
 }
 ```
@@ -389,18 +376,21 @@ public void testDuplicateOrderIdAcrossChannels() {
 
 ## 7. 實施建議
 
-1. **優先使用方案一（直接保留特殊字元）**
-   - Redis 原生支援大部分特殊字元
-   - 保持 Key 可讀性，便於除錯
+1. **完全保留訂單號中的所有字元**
+   - Redis 原生支援所有 UTF-8 字元
+   - 不做任何轉換、編碼、規範化
+   - 客戶的訂單號格式就是有業務意義的
 
-2. **建立字元白名單監控**
-   - 記錄所有出現過的特殊字元
-   - 發現新字元時發出告警
+2. **Key 分割時使用冒號限制分割數量**
+   - 使用 `split(":", 5)` 確保訂單號中的冒號不會被分割
+   - 保證能正確解析包含分隔符的訂單號
 
 3. **定期資料一致性檢查**
    - 每日比對 DB 和 Redis 資料
    - 發現不一致時自動修復
+   - 確保特殊字元的完整性
 
 4. **效能優化**
    - 使用 Redis Pipeline 批次操作
    - 考慮使用 Redis Cluster 分散負載
+   - UTF-8 編碼可能會增加 Key 大小，監控內存使用
