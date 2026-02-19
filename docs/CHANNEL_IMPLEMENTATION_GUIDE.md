@@ -107,16 +107,71 @@ public class ShopeeAdapter implements OrderChannelAdapter, ProductChannelAdapter
 
 ## 3. 分頁策略實作
 
+### 3.0 通路分頁方式差異對照表
+
+**重要**：各通路分頁方式天差地遠，必須為每個通路實作各自的 PaginationStrategy。
+
+| 通路 | 分頁方式 | 主要識別方式 | 複雜性 | 備註 |
+|------|--------|-----------|-------|------|
+| **Shopee** | 真正 Cursor | 回傳 `nextCursor` 和 `hasMore` | 低 | 標準 cursor 實作，可直接使用 |
+| **Momo** | Offset + Limit | 回傳 `totalCount`，計算 `offset += pageSize` | 低 | 傳統 offset-based |
+| **Yahoo** | 假 Cursor（其實是 Offset） | 回傳字串 cursor，但實際是 base64 encoded offset | 中 | 需要解碼 cursor 為 offset，再計算下一頁 |
+| **PChome** | Header-based Pagination | 回傳 `X-Page-Count`, `X-Page-No` headers | 中 | 不是 body，要從 HTTP headers 讀 pagination 資訊 |
+| **easystore** | Limit + 時間範圍 | 無 cursor，改用 `from_date`, `to_date` | 低 | 按時間範圍分批，不按 offset/cursor |
+| **Cyberbiz** | 待確認 | - | 待評估 | 新通路，需實測 API 行為 |
+
 ### 3.1 策略介面
+
 ```java
+/**
+ * 通路無關的分頁策略介面
+ * 每個通路實作各自的邏輯（cursor、offset、header、時間範圍等）
+ */
 public interface PaginationStrategy {
+    /**
+     * 判斷是否還有下一頁
+     * - Cursor 類：檢查 cursor 是否非空且 hasMore flag
+     * - Offset 類：檢查 offset < totalCount
+     * - Header 類：檢查 HTTP headers 的頁碼資訊
+     * - 時間範圍類：檢查是否還有時間窗口
+     */
     boolean hasMore();
+
+    /**
+     * 根據 API response 更新分頁狀態
+     * - CursorPagination: 從 response 提取 nextCursor、hasMore flag
+     * - OffsetPagination: 從 response 提取 totalCount，計算新 offset
+     * - HeaderPagination: 從 response headers 提取 page info
+     * - TimestampPagination: 推進時間窗口
+     */
     void updateState(Object response);
+
+    /**
+     * 取得下一頁的請求參數
+     * 返回值格式各通路不同：
+     * - Cursor: { "cursor": "abc123" }
+     * - Offset: { "offset": 100, "limit": 100 }
+     * - Header: {} (資訊存在 headers)
+     * - Time: { "from_date": "...", "to_date": "..." }
+     */
     Map<String, Object> getNextParams();
+
+    /**
+     * 取得額外 HTTP headers（某些通路需要）
+     * 預設實作返回空 map，Header-based 通路（如 PChome）可覆寫
+     */
+    default Map<String, String> getHeaders() {
+        return Map.of();
+    }
 }
 
-// Cursor-based (Shopee)
-public class CursorPagination implements PaginationStrategy {
+// ========== Cursor-based (Shopee) ==========
+/**
+ * 真正的 cursor pagination
+ * - API 回傳 nextCursor 和 hasMore flag
+ * - 每次請求帶著 cursor，直到 hasMore=false
+ */
+public class ShopeeeCursorPagination implements PaginationStrategy {
     private String cursor = "";
     private boolean more = true;
 
@@ -128,8 +183,8 @@ public class CursorPagination implements PaginationStrategy {
     @Override
     public void updateState(Object response) {
         ShopeeResponse r = (ShopeeResponse) response;
-        this.cursor = r.getNextCursor();
-        this.more = r.hasMore();
+        this.cursor = r.getNextCursor();  // e.g., "abc123def456"
+        this.more = r.hasMore();           // true/false
     }
 
     @Override
@@ -138,8 +193,14 @@ public class CursorPagination implements PaginationStrategy {
     }
 }
 
-// Offset-based (Momo)
-public class OffsetPagination implements PaginationStrategy {
+// ========== Offset-based (Momo) ==========
+/**
+ * 傳統 offset + limit 分頁
+ * - API 回傳 totalCount
+ * - 每次計算新 offset = offset + pageSize
+ * - 直到 offset >= totalCount
+ */
+public class MomoOffsetPagination implements PaginationStrategy {
     private int offset = 0;
     private int total = Integer.MAX_VALUE;
     private final int pageSize = 100;
@@ -154,6 +215,148 @@ public class OffsetPagination implements PaginationStrategy {
         MomoResponse r = (MomoResponse) response;
         this.total = r.getTotalCount();
         this.offset += pageSize;
+    }
+
+    @Override
+    public Map<String, Object> getNextParams() {
+        return Map.of("offset", offset, "limit", pageSize);
+    }
+}
+
+// ========== Fake Cursor (Yahoo) ==========
+/**
+ * 假 Cursor：API 回傳字串 cursor，但實際是 base64 encoded offset
+ * 需要：
+ * 1. 解碼 cursor 為整數 offset
+ * 2. 計算下一頁 offset
+ * 3. 編碼為新 cursor
+ */
+public class YahoFakeCursorPagination implements PaginationStrategy {
+    private String cursor = "";
+    private int currentOffset = 0;
+    private boolean hasMore = true;
+    private final int pageSize = 50;
+
+    @Override
+    public boolean hasMore() {
+        return hasMore;
+    }
+
+    @Override
+    public void updateState(Object response) {
+        YahooResponse r = (YahooResponse) response;
+        // Yahoo 回傳 nextCursor（是 base64 encoded offset）
+        String nextCursor = r.getNextCursor();
+        if (nextCursor != null && !nextCursor.isEmpty()) {
+            // 解碼 cursor: Base64.decode(nextCursor) → 整數 offset
+            this.currentOffset = decodeOffsetFromCursor(nextCursor);
+            this.cursor = nextCursor;
+            this.hasMore = r.hasMore();
+        } else {
+            this.hasMore = false;
+        }
+    }
+
+    @Override
+    public Map<String, Object> getNextParams() {
+        return Map.of("cursor", cursor);
+    }
+
+    private int decodeOffsetFromCursor(String cursor) {
+        // 實作：Base64 解碼，提取 offset
+        byte[] decoded = Base64.getDecoder().decode(cursor);
+        return Integer.parseInt(new String(decoded));
+    }
+}
+
+// ========== Header-based Pagination (PChome) ==========
+/**
+ * PChome 特殊：分頁資訊在 HTTP response headers 中
+ * - X-Page-No: 當前頁碼（1-indexed）
+ * - X-Page-Count: 總頁數
+ * 需要追蹤當前頁碼，逐頁遞進
+ */
+public class PChomeHeaderPagination implements PaginationStrategy {
+    private int currentPage = 1;
+    private int totalPages = 1;
+    private final int pageSize = 100;
+
+    @Override
+    public boolean hasMore() {
+        return currentPage < totalPages;
+    }
+
+    @Override
+    public void updateState(Object response) {
+        if (response instanceof HttpResponse) {
+            HttpResponse httpResponse = (HttpResponse) response;
+            // 從 headers 提取分頁資訊
+            String pageNoHeader = httpResponse.getHeader("X-Page-No");
+            String pageCountHeader = httpResponse.getHeader("X-Page-Count");
+
+            if (pageCountHeader != null) {
+                this.totalPages = Integer.parseInt(pageCountHeader);
+            }
+            // 更新當前頁為下一頁
+            this.currentPage++;
+        }
+    }
+
+    @Override
+    public Map<String, Object> getNextParams() {
+        return Map.of("page", currentPage, "limit", pageSize);
+    }
+
+    @Override
+    public Map<String, String> getHeaders() {
+        // PChome 某些 API 需要特定 headers
+        return Map.of("Accept", "application/json");
+    }
+}
+
+// ========== Timestamp-based Pagination (easystore) ==========
+/**
+ * easystore 無 cursor/offset，改用時間範圍分批
+ * - from_date, to_date 定義查詢時間窗口
+ * - 無法從 response 獲知是否還有更多數據，需要自行計算時間進度
+ */
+public class EasystoreTimestampPagination implements PaginationStrategy {
+    private LocalDateTime fromDate;
+    private LocalDateTime toDate;
+    private LocalDateTime currentCheckpoint;
+    private final Duration batchWindow = Duration.ofHours(6);  // 每批 6 小時
+
+    public EasystoreTimestampPagination(LocalDateTime startDate, LocalDateTime endDate) {
+        this.fromDate = startDate;
+        this.toDate = endDate;
+        this.currentCheckpoint = startDate;
+    }
+
+    @Override
+    public boolean hasMore() {
+        return currentCheckpoint.isBefore(toDate);
+    }
+
+    @Override
+    public void updateState(Object response) {
+        // easystore API 無分頁 metadata，直接推進時間窗口
+        currentCheckpoint = currentCheckpoint.plus(batchWindow);
+        if (currentCheckpoint.isAfter(toDate)) {
+            currentCheckpoint = toDate;
+        }
+    }
+
+    @Override
+    public Map<String, Object> getNextParams() {
+        LocalDateTime nextCheckpoint = currentCheckpoint.plus(batchWindow);
+        if (nextCheckpoint.isAfter(toDate)) {
+            nextCheckpoint = toDate;
+        }
+        return Map.of(
+            "from_date", currentCheckpoint.toString(),
+            "to_date", nextCheckpoint.toString(),
+            "limit", 50
+        );
     }
 }
 ```
