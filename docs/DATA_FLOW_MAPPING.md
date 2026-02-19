@@ -1,251 +1,499 @@
 # SimpleEC OMS 資料流對應表
 
+## 0. 通路處理模式速查表
+
+每個通路有自己的訂單列表資料完整度，決定了處理模式：
+
+| 通路 | 模式 | 描述 | 特徵 |
+|------|------|------|------|
+| **Shopee** | **Mode B** | 列表 → 詳情 → 組織 | 列表 API 缺商品/物流詳情，必須逐單打詳情 API |
+| **Shopify** | **Mode A** | 直接組織 | 列表 API 已含完整商品/客戶資訊 |
+| **Momo** | ? | ? | 待確認 |
+| **Yahoo** | ? | ? | 待確認 |
+| **PChome** | ? | ? | 待確認 |
+| **easystore** | ? | ? | 待確認 |
+| **Cyberbiz** | ? | ? | 待確認 |
+
+---
+
 ## 1. 訂單資料流 (Order Flow)
 
-### 1.1 完整流程圖（含 Hash 去重）
+### 1.1 Mode B：列表 + 詳情模式（Shopee 等）
+
+**特徵：列表 API 缺少商品清單、物流詳情等，必須逐單再打詳情 API**
+
 ```
 Scheduler                    Channel Job                     Order Job                  Redis       Database
     │                             │                              │                        │              │
-    ├──[FETCH_ORDERS]────────────>│                              │                        │              │
+    ├──[FETCH_ORDERS]────────────>│ (slow queue)                │                        │              │
+    │  {timeRange}                │                              │                        │              │
+    │                             ├────────────────────────────────────────────────┐      │              │
+    │                             │ [抓訂單列表]                 │                   │      │              │
+    │                             │ (無商品/物流詳情)          │                   │      │              │
+    │                             │                              │                   ▼      │              │
+    │                             │ ┌──[FETCH_ORDER_DETAIL]──────────[slow queue]         │              │
+    │                             │ │ (每張訂單號一個)         │                   │      │              │
+    │                             │ │                            │                   │      │              │
+    │                        ┌────┴─┴────┐                      │                   │      │              │
+    │                        │呼叫詳情 API│                      │                   │      │              │
+    │                        │組成 OMS   │                      │                   │      │              │
+    │                        │計算 hash  │                      │                   │      │              │
+    │                        └────┬────┘                        │                   │      │              │
+    │                             │                              │                   │      │              │
+    │                             ├─────────────────────────────────────[讀 hash]────────>│              │
+    │                             │                                    (第一層)      │              │
+    │                             │                              │                        │              │
+    │                             ├──[ORDER_UPSERT]────────────>│ [檢查 hash]          │              │
+    │                             │  {完整 orderData}           │ (第二層)            │              │
+    │                             │  {orderHash}        ┌──────>│                        │              │
+    │                             │                     └──────────[寫入 hash]         │              │
+    │                             │                              │                        │              │
+    │                             │                              ├──────[SAVE/UPDATE]──>│              │
+```
+
+### 1.2 Mode A：直接模式（Shopify 等）
+
+**特徵：列表 API 已含完整商品、客戶資訊，無需詳情 API**
+
+```
+Scheduler                    Channel Job                     Order Job                  Redis       Database
+    │                             │                              │                        │              │
+    ├──[FETCH_ORDERS]────────────>│ (無詳情隊列)                │                        │              │
     │  {timeRange}                │                              │                        │              │
     │                             │                              │                        │              │
     │                        ┌────┴────┐                         │                        │              │
     │                        │呼叫列表 API                       │                        │              │
-    │                        │判斷是否需要詳情  │                │                        │              │
-    │                        │（同步呼叫詳情）  │               │                        │              │
-    │                        │計算 hash       │                 │                        │              │
+    │                        │(已含完整資訊)                    │                        │              │
+    │                        │組成 OMS                         │                        │              │
+    │                        │計算 hash                        │                        │              │
     │                        └────┬────┘                         │                        │              │
     │                             │                              │                        │              │
     │                             ├─────────────────────────────────────[讀 hash]────────>│              │
-    │                             │                                    (第一層：        │              │
-    │                             │                                    判斷是否跳過)      │              │
+    │                             │                                    (第一層)      │              │
     │                             │                              │                        │              │
     │                             ├──[ORDER_UPSERT]────────────>│ [檢查 hash]          │              │
-    │                             │  {orderData}                │ (第二層：             │              │
-    │                             │  {orderHash}        ┌──────>│ 並發安全)            │              │
-    │                             │                     │       │                        │              │
+    │                             │  {完整 orderData}           │ (第二層)            │              │
+    │                             │  {orderHash}        ┌──────>│                        │              │
     │                             │                     └──────────[寫入 hash]         │              │
-    │                             │                              │   (TTL 7天)          │              │
-    │                             │                              ├──────[SAVE/UPDATE]──>│              │
     │                             │                              │                        │              │
+    │                             │                              ├──────[SAVE/UPDATE]──>│              │
 ```
 
-### 1.2 資料轉換對應
-
-#### Shopee API → ORDER_UPSERT（基本列表資料）
-| Shopee API 欄位 | 訊息 Body 欄位 | Order Entity 欄位 | 說明 |
-|----------------|---------------|------------------|------|
-| order_sn | orderId | channel_order_id | 通路訂單號 |
-| order_status | metadata.status | - | Channel 判斷用 |
-| create_time | orderData.createTime | - | 原始資料 |
-| update_time | orderData.updateTime | - | 原始資料 |
-| total_amount | orderData.totalAmount | - | 原始資料 |
-| **(內存計算)** | **orderHash** | **（不存儲）** | **SHA-256，傳遞給 order.process** |
-
-#### ORDER_UPSERT（完整詳情資料）
-| API 欄位 | 訊息 Body 欄位 | Order Entity 欄位 | 說明 |
-|---------|---------------|------------------|------|
-| order_sn | orderId | channel_order_id | 訂單識別 |
-| item_list | fullOrderData.items | - | 商品明細 |
-| recipient_address | fullOrderData.shipping | shipping_address | 收件地址 |
-| total_amount | fullOrderData.payment.total | total_amount | 訂單金額 |
-| order_status | fullOrderData.status | order_status | 訂單狀態 |
-| **(內存計算)** | **orderHash** | **（不存儲）** | **SHA-256，用於去重驗證** |
+### 1.3 資料轉換與 Hash 計算規則
 
 **⚠️ 重要：orderHash 只在記憶體和 Redis 中**
-- ✓ Channel Job 內存計算
+- ✓ Channel Job 內存計算（基於完整資料）
 - ✓ Kafka 訊息傳遞
 - ✓ Redis 存儲（value，鍵為 order:hash:...）
 - ✓ OrderUpsertHandler 內存重新計算驗證
 - ✗ **不存儲在 Order Entity 或資料庫表**
 
-### 1.3 Channel 判斷邏輯（含 Hash 計算和去重）
+#### ORDER_UPSERT 統一結構
+| 欄位 | 來源 | 說明 |
+|------|------|------|
+| orderId | 訂單號 | 通路訂單號（Shopee order_sn / Shopify order id） |
+| orderData | 完整訂單資料 | **必須包含 items、shippingInfo、buyerInfo** |
+| orderHash | 內存計算 | SHA-256（不存儲） |
+
+### 1.4 Mode B 實現（需要詳情）- Shopee 示例
 
 ```javascript
-// Shopee Channel Job 內部邏輯
-function processOrderList(orders) {
+// ========== Mode B: Shopee Channel Job ==========
+// 第一個 Handler：FETCH_ORDERS 訊息 (slow queue)
+function processFetchOrders(message) {
+  const { merchantId, channelId, timeRange } = message;
+
+  // 呼叫 Shopee List API
+  const orders = shopeeApi.listOrders(timeRange);
+
   for (order of orders) {
-    // *** 第一步：判斷是否需要詳情，若需要則同步呼叫詳情 API ***
-    let fullOrderData = order;  // 預設用列表資料
-
-    if (shouldFetchDetail(order)) {
-      try {
-        // ⭐ 重要：同步呼叫 API 取得完整詳情（不是非同步訊息）
-        fullOrderData = fetchOrderDetailSync(order.order_sn);
-      } catch (error) {
-        log.warn(`Failed to fetch detail for ${order.order_sn}, using list data`, error);
-        // 降級處理：用列表資料繼續
-        fullOrderData = order;
-      }
-    }
-
-    // *** 第二步：計算訂單內容 Hash（必須在完整資料基礎上）***
-    const orderHash = calculateOrderHash({
-      orderStatus: fullOrderData.order_status,
-      totalAmount: fullOrderData.total_amount,
-      shippingStatus: fullOrderData.shipping_status,
-      paymentStatus: fullOrderData.payment_status,
-      items: fullOrderData.item_list,        // 完整的商品清單（可能來自詳情 API）
-      buyerInfo: fullOrderData.buyer_info,   // 完整的買家資訊
-      shippingInfo: fullOrderData.shipping_info  // 完整的物流資訊
+    // ⭐ Mode B 特點：列表無完整資訊，必須逐單抓詳情
+    sendMessage('FETCH_ORDER_DETAIL', {
+      merchantId,
+      channelId,
+      orderId: order.order_sn,
+      correlationId: generateCorrelationId()  // 用於追蹤
     });
+  }
+}
 
-    // *** 第三步：檢查 Redis 中的舊 Hash（避免重複處理）***
-    const redisKey = `order:hash:${merchantId}:${channelId}:${order.order_sn}`;
+// 第二個 Handler：FETCH_ORDER_DETAIL 訊息 (slow queue)
+function processOrderDetail(message) {
+  const { merchantId, channelId, orderId, correlationId } = message;
+
+  try {
+    // *** 第一步：呼叫詳情 API 取得完整訂單 ***
+    const detailResponse = shopeeApi.getOrderDetail(orderId);
+    const fullOrderData = detailResponse.data;
+
+    // *** 第二步：組織成 OMS 結構 ***
+    const omsOrder = {
+      orderId: fullOrderData.order_sn,
+      orderData: {
+        status: fullOrderData.order_status,
+        totalAmount: fullOrderData.total_amount,
+        items: fullOrderData.item_list,           // ✓ 來自詳情 API
+        shippingInfo: fullOrderData.shipping_info, // ✓ 來自詳情 API
+        buyerInfo: fullOrderData.buyer_info,      // ✓ 來自詳情 API
+        createTime: fullOrderData.create_time,
+        updateTime: fullOrderData.update_time
+      }
+    };
+
+    // *** 第三步：計算 Hash（基於完整資料）***
+    const orderHash = calculateOrderHash(omsOrder.orderData);
+
+    // *** 第四步：檢查 Redis（第一層去重）***
+    const redisKey = `order:hash:${merchantId}:${channelId}:${orderId}`;
     const existingHash = redis.get(redisKey);
 
     if (existingHash === orderHash) {
-      // Hash 相同，訂單內容未變化，跳過
-      log.debug(`Order unchanged (hash match): ${order.order_sn}`);
-      continue;
+      log.info(`Order unchanged: ${orderId}`, { correlationId });
+      return;  // 跳過
     }
 
-    // *** 第四步：發送 ORDER_UPSERT 訊息（帶完整資料和 Hash）***
+    // *** 第五步：發送 ORDER_UPSERT（帶完整資料）***
     sendMessage('ORDER_UPSERT', {
-      orderId: order.order_sn,
-      orderData: fullOrderData,  // ⭐ 必須是完整資料
-      orderHash: orderHash       // ⭐ 根據完整資料計算的 Hash
+      merchantId,
+      channelId,
+      orderId: omsOrder.orderId,
+      orderData: omsOrder.orderData,
+      orderHash: orderHash,
+      correlationId,
+      timestamp: new Date().toISOString()
     });
+
+    log.info(`Order sent to order.process: ${orderId}`, { correlationId, hash: orderHash });
+
+  } catch (error) {
+    log.error(`Failed to process order detail: ${orderId}`, error, { correlationId });
+    // TODO: 重試邏輯或死信隊列
   }
 }
 
-// 同步呼叫通路 API 取得訂單詳情
-function fetchOrderDetailSync(orderId) {
-  // 直接呼叫 Shopee API，非同步訊息
-  const response = await shopeeApi.get(`/order/${orderId}/detail`);
-  return response.data;
-}
-
-function shouldFetchDetail(order) {
-  // Shopee 特定判斷：判斷是否需要完整資料
-  // 列表 API 不含商品明細、買家資訊、物流詳情，這些在詳情 API 才有
-  return order.order_status === 'READY_TO_SHIP' ||   // 出貨需要完整物流資訊
-         order.order_status === 'PROCESSED' ||
-         order.return_status > 0 ||                    // 有退貨需要詳細項目資訊
-         !order.item_list;                            // 列表無商品資訊時必須取詳情
-}
-
-// ⭐ Hash 計算（須使用 TreeMap 確保欄位排序一致）
+// Hash 計算（TreeMap 確保排序）
 function calculateOrderHash(orderData) {
   const sortedData = {
-    orderStatus: orderData.orderStatus,
-    totalAmount: orderData.totalAmount,
-    shippingStatus: orderData.shippingStatus,
-    paymentStatus: orderData.paymentStatus,
-    items: orderData.items,
     buyerInfo: orderData.buyerInfo,
-    shippingInfo: orderData.shippingInfo
+    items: orderData.items,
+    shippingInfo: orderData.shippingInfo,
+    status: orderData.status,
+    totalAmount: orderData.totalAmount,
+    updateTime: orderData.updateTime
   };
   const json = JSON.stringify(sortedData);
-  return sha256(json);  // 使用 SHA-256
+  return sha256(json);
 }
 ```
 
-**⚠️ 重要：Channel Job 計算 Hash 的前提是完整資料**
-- 必須先判斷是否需要詳情，需要則同步呼叫詳情 API 獲得完整資料
-- 基於完整資料（items, shippingInfo 等）計算 Hash
-- 檢查 Redis 中是否存在相同 Hash，相同則跳過（資源優化）
-- 不同 Hash 或 Redis 無紀錄時才發送 ORDER_UPSERT 訊息
+**Mode B 特徵**
+- ✓ 兩個 Handler：FETCH_ORDERS → FETCH_ORDER_DETAIL
+- ✓ 列表 API 呼叫少，但詳情 API 呼叫多（=訂單數）
+- ✓ 提高資料準確性（完整的 items、shippingInfo）
+- ✓ 適合：Shopee（需要商品明細）
 
-**去重的兩層架構**
-- **第一層（Channel Job）**：讀 Redis，判斷是否跳過，避免發送重複訊息（資源優化）
-- **第二層（order.process OrderUpsertHandler）**：再次檢查 Redis + 資料庫，確保並發安全，避免並發重複寫入
+### 1.5 Mode A 實現（直接模式）- Shopify 示例
+
+```javascript
+// ========== Mode A: Shopify Channel Job ==========
+// 單一 Handler：FETCH_ORDERS 訊息 (fast queue)
+function processFetchOrders(message) {
+  const { merchantId, channelId, timeRange } = message;
+
+  try {
+    // *** 第一步：呼叫列表 API ***
+    // ⭐ Mode A 特點：列表 API 已含完整資訊（商品、客戶、地址）
+    const orders = shopifyApi.listOrders(timeRange);
+
+    // *** 第二步：逐單處理 ***
+    for (order of orders) {
+      // *** 直接組織成 OMS 結構（無需詳情 API）***
+      const omsOrder = {
+        orderId: order.id,
+        orderData: {
+          status: order.status,
+          totalAmount: order.total_price,
+          items: order.line_items,               // ✓ 列表 API 已有
+          shippingInfo: order.shipping_address,  // ✓ 列表 API 已有
+          buyerInfo: order.customer,             // ✓ 列表 API 已有
+          createTime: order.created_at,
+          updateTime: order.updated_at
+        }
+      };
+
+      // *** 第三步：計算 Hash（基於完整資料）***
+      const orderHash = calculateOrderHash(omsOrder.orderData);
+
+      // *** 第四步：檢查 Redis（第一層去重）***
+      const redisKey = `order:hash:${merchantId}:${channelId}:${order.id}`;
+      const existingHash = redis.get(redisKey);
+
+      if (existingHash === orderHash) {
+        log.debug(`Order unchanged: ${order.id}`);
+        continue;  // 跳過
+      }
+
+      // *** 第五步：發送 ORDER_UPSERT（帶完整資料）***
+      sendMessage('ORDER_UPSERT', {
+        merchantId,
+        channelId,
+        orderId: omsOrder.orderId,
+        orderData: omsOrder.orderData,
+        orderHash: orderHash,
+        timestamp: new Date().toISOString()
+      });
+
+      log.info(`Order sent to order.process: ${order.id}`, { hash: orderHash });
+    }
+
+  } catch (error) {
+    log.error('Failed to fetch orders', error);
+    // TODO: 重試邏輯
+  }
+}
+
+// Hash 計算（同 Mode B）
+function calculateOrderHash(orderData) {
+  const sortedData = {
+    buyerInfo: orderData.buyerInfo,
+    items: orderData.items,
+    shippingInfo: orderData.shippingInfo,
+    status: orderData.status,
+    totalAmount: orderData.totalAmount,
+    updateTime: orderData.updateTime
+  };
+  const json = JSON.stringify(sortedData);
+  return sha256(json);
+}
+```
+
+**Mode A 特徵**
+- ✓ 單一 Handler：FETCH_ORDERS 直接發送 ORDER_UPSERT
+- ✓ 無詳情 API 呼叫（=快速、低 API 配額消耗）
+- ✓ 但依賴列表 API 數據完整度
+- ✓ 適合：Shopify、Stripe、自有平台（API 設計完整）
+
+---
 
 ## 2. 退貨資料流 (Return Flow)
 
-### 2.1 流程圖（含 Hash 去重）
+### 2.1 Mode B：列表 + 詳情模式（Shopee 等）
+
+同訂單流程，退貨流程也有兩個 Handler：
+
 ```
 Scheduler                    Channel Job                     Return Job                 Redis        Database
     │                             │                              │                        │              │
-    ├──[FETCH_RETURNS]───────────>│                              │                        │              │
+    ├──[FETCH_RETURNS]───────────>│ (slow queue)                │                        │              │
+    │                             │                              │                        │              │
+    │                             ├─[FETCH_RETURN_DETAIL]───────────[slow queue]         │              │
+    │                             │ (每筆退貨號一個)          │                        │              │
     │                             │                              │                        │              │
     │                        ┌────┴────┐                         │                        │              │
-    │                        │呼叫列表 API                       │                        │              │
-    │                        │判斷是否需要詳情  │                │                        │              │
-    │                        │（同步呼叫詳情）  │               │                        │              │
-    │                        │計算 hash       │                 │                        │              │
+    │                        │呼叫詳情 API│                      │                        │              │
+    │                        │組成 OMS  │                       │                        │              │
+    │                        │計算 hash │                       │                        │              │
     │                        └────┬────┘                         │                        │              │
     │                             │                              │                        │              │
     │                             ├─────────────────────────────────────[讀 hash]────────>│              │
-    │                             │                                    (第一層：        │              │
-    │                             │                                    判斷是否跳過)      │              │
+    │                             │                                    (第一層)      │              │
     │                             │                              │                        │              │
     │                             ├──[RETURN_UPSERT]───────────>│ [檢查 hash]          │              │
-    │                             │  {returnData}               │ (第二層：             │              │
-    │                             │  {returnHash}       ┌──────>│ 並發安全)            │              │
-    │                             │                     │       │                        │              │
+    │                             │  {完整 returnData}          │ (第二層)            │              │
+    │                             │  {returnHash}       ┌──────>│                        │              │
     │                             │                     └──────────[寫入 hash]         │              │
-    │                             │                              │   (TTL 7天)          │              │
+    │                             │                              │                        │              │
     │                             │                              ├──────[SAVE/UPDATE]──>│              │
 ```
 
-### 2.2 退貨判斷邏輯（Channel Job 內含 Hash 計算和去重）
+### 2.2 Mode A：直接模式（Shopify 等）
+
+```
+Scheduler                    Channel Job                     Return Job                 Redis        Database
+    │                             │                              │                        │              │
+    ├──[FETCH_RETURNS]───────────>│ (無詳情隊列)                │                        │              │
+    │                             │                              │                        │              │
+    │                        ┌────┴────┐                         │                        │              │
+    │                        │呼叫列表 API                       │                        │              │
+    │                        │(已含完整資訊)                    │                        │              │
+    │                        │組成 OMS                         │                        │              │
+    │                        │計算 hash                        │                        │              │
+    │                        └────┬────┘                         │                        │              │
+    │                             │                              │                        │              │
+    │                             ├─────────────────────────────────────[讀 hash]────────>│              │
+    │                             │                                    (第一層)      │              │
+    │                             │                              │                        │              │
+    │                             ├──[RETURN_UPSERT]───────────>│ [檢查 hash]          │              │
+    │                             │  {完整 returnData}          │ (第二層)            │              │
+    │                             │  {returnHash}       ┌──────>│                        │              │
+    │                             │                     └──────────[寫入 hash]         │              │
+    │                             │                              │                        │              │
+    │                             │                              ├──────[SAVE/UPDATE]──>│              │
+```
+
+### 2.3 Mode B 實現（需要詳情）- Shopee 示例
 
 ```javascript
-// Shopee Channel Job 內部邏輯（退貨）
-function processReturnList(returns) {
+// ========== Mode B: Shopee Return Job ==========
+// 第一個 Handler：FETCH_RETURNS 訊息 (slow queue)
+function processFetchReturns(message) {
+  const { merchantId, channelId, timeRange } = message;
+
+  // 呼叫 Shopee Returns List API
+  const returns = shopeeApi.listReturns(timeRange);
+
   for (ret of returns) {
-    // *** 第一步：判斷是否需要詳情，若需要則同步呼叫詳情 API ***
-    let fullReturnData = ret;  // 預設用列表資料
-
-    if (shouldFetchReturnDetail(ret)) {
-      try {
-        // ⭐ 重要：同步呼叫 API 取得完整詳情（不是非同步訊息）
-        fullReturnData = fetchReturnDetailSync(ret.return_id);
-      } catch (error) {
-        log.warn(`Failed to fetch detail for return ${ret.return_id}, using list data`, error);
-        fullReturnData = ret;
-      }
-    }
-
-    // *** 第二步：計算退貨內容 Hash（必須在完整資料基礎上）***
-    const returnHash = calculateReturnHash({
-      returnStatus: fullReturnData.return_status,
-      reason: fullReturnData.reason,
-      items: fullReturnData.items,        // 完整的退貨項目清單
-      refundAmount: fullReturnData.refund_amount
-    });
-
-    // *** 第三步：檢查 Redis 中的舊 Hash（避免重複處理）***
-    const redisKey = `return:hash:${merchantId}:${channelId}:${ret.return_id}`;
-    const existingHash = redis.get(redisKey);
-
-    if (existingHash === returnHash) {
-      // Hash 相同，退貨內容未變化，跳過
-      log.debug(`Return unchanged (hash match): ${ret.return_id}`);
-      continue;
-    }
-
-    // *** 第四步：發送 RETURN_UPSERT 訊息（帶完整資料和 Hash）***
-    sendMessage('RETURN_UPSERT', {
+    // ⭐ Mode B 特點：列表無完整項目清單，必須逐筆抓詳情
+    sendMessage('FETCH_RETURN_DETAIL', {
+      merchantId,
+      channelId,
       returnId: ret.return_id,
-      returnData: fullReturnData,  // ⭐ 必須是完整資料
-      returnHash: returnHash       // ⭐ 根據完整資料計算的 Hash
+      correlationId: generateCorrelationId()
     });
   }
 }
 
-function shouldFetchReturnDetail(ret) {
-  // 判斷是否需要完整資料
-  return ret.return_status === 'PROCESSING' ||     // 處理中需要詳細項目
-         ret.return_status === 'APPROVED' ||       // 已批准需要詳細項目
-         !ret.items;                               // 列表無項目資訊時必須取詳情
+// 第二個 Handler：FETCH_RETURN_DETAIL 訊息 (slow queue)
+function processReturnDetail(message) {
+  const { merchantId, channelId, returnId, correlationId } = message;
+
+  try {
+    // *** 第一步：呼叫詳情 API ***
+    const detailResponse = shopeeApi.getReturnDetail(returnId);
+    const fullReturnData = detailResponse.data;
+
+    // *** 第二步：組織成 OMS 結構 ***
+    const omsReturn = {
+      returnId: fullReturnData.return_id,
+      returnData: {
+        status: fullReturnData.return_status,
+        reason: fullReturnData.reason,
+        items: fullReturnData.items,              // ✓ 來自詳情 API
+        refundAmount: fullReturnData.refund_amount,
+        createTime: fullReturnData.create_time,
+        updateTime: fullReturnData.update_time
+      }
+    };
+
+    // *** 第三步：計算 Hash ***
+    const returnHash = calculateReturnHash(omsReturn.returnData);
+
+    // *** 第四步：檢查 Redis（第一層去重）***
+    const redisKey = `return:hash:${merchantId}:${channelId}:${returnId}`;
+    const existingHash = redis.get(redisKey);
+
+    if (existingHash === returnHash) {
+      log.info(`Return unchanged: ${returnId}`, { correlationId });
+      return;
+    }
+
+    // *** 第五步：發送 RETURN_UPSERT ***
+    sendMessage('RETURN_UPSERT', {
+      merchantId,
+      channelId,
+      returnId: omsReturn.returnId,
+      returnData: omsReturn.returnData,
+      returnHash: returnHash,
+      correlationId,
+      timestamp: new Date().toISOString()
+    });
+
+    log.info(`Return sent to return.process: ${returnId}`, { correlationId, hash: returnHash });
+
+  } catch (error) {
+    log.error(`Failed to process return detail: ${returnId}`, error, { correlationId });
+  }
 }
 
-function fetchReturnDetailSync(returnId) {
-  // 直接呼叫 Shopee API，非同步訊息
-  const response = await shopeeApi.get(`/return/${returnId}/detail`);
-  return response.data;
+function calculateReturnHash(returnData) {
+  const sortedData = {
+    items: returnData.items,
+    reason: returnData.reason,
+    refundAmount: returnData.refundAmount,
+    status: returnData.status,
+    updateTime: returnData.updateTime
+  };
+  const json = JSON.stringify(sortedData);
+  return sha256(json);
 }
 ```
 
-**平台特定判斷**
+### 2.4 Mode A 實現（直接模式）- Shopify 示例
 
-| 通路 | 判斷條件 | Hash 欄位 | API 端點 |
-|------|---------|----------|----------|
-| Shopee | return_status ∈ [PROCESSING, APPROVED] 或 !items | returnStatus, reason, items, refundAmount | /api/v2/returns/{returnId}/detail |
-| Momo | 退貨記錄存在時 | returnStatus, reason, items, refundAmount | 包含在訂單 API |
-| Yahoo | 獨立退貨系統 | returnStatus, reason, items, refundAmount | /returns/{returnId}/detail |
+```javascript
+// ========== Mode A: Shopify Return Job ==========
+// 單一 Handler：FETCH_RETURNS 訊息 (fast queue)
+function processFetchReturns(message) {
+  const { merchantId, channelId, timeRange } = message;
+
+  try {
+    // *** 列表 API 已含完整退貨資訊 ***
+    const returns = shopifyApi.listReturns(timeRange);
+
+    for (ret of returns) {
+      const omsReturn = {
+        returnId: ret.id,
+        returnData: {
+          status: ret.status,
+          reason: ret.reason,
+          items: ret.line_items,              // ✓ 列表 API 已有
+          refundAmount: ret.refund_amount,
+          createTime: ret.created_at,
+          updateTime: ret.updated_at
+        }
+      };
+
+      const returnHash = calculateReturnHash(omsReturn.returnData);
+
+      const redisKey = `return:hash:${merchantId}:${channelId}:${ret.id}`;
+      const existingHash = redis.get(redisKey);
+
+      if (existingHash === returnHash) {
+        log.debug(`Return unchanged: ${ret.id}`);
+        continue;
+      }
+
+      sendMessage('RETURN_UPSERT', {
+        merchantId,
+        channelId,
+        returnId: omsReturn.returnId,
+        returnData: omsReturn.returnData,
+        returnHash: returnHash,
+        timestamp: new Date().toISOString()
+      });
+
+      log.info(`Return sent to return.process: ${ret.id}`, { hash: returnHash });
+    }
+
+  } catch (error) {
+    log.error('Failed to fetch returns', error);
+  }
+}
+
+function calculateReturnHash(returnData) {
+  const sortedData = {
+    items: returnData.items,
+    reason: returnData.reason,
+    refundAmount: returnData.refundAmount,
+    status: returnData.status,
+    updateTime: returnData.updateTime
+  };
+  const json = JSON.stringify(sortedData);
+  return sha256(json);
+}
+```
+
+**平台模式對應**
+
+| 通路 | 模式 | 特徵 |
+|------|------|------|
+| Shopee | Mode B | 需詳情 API（列表無 items） |
+| Shopify | Mode A | 列表已完整 |
+| Momo | ? | 待確認 |
+| Yahoo | ? | 待確認 |
+| PChome | ? | 待確認 |
+| easystore | ? | 待確認 |
+| Cyberbiz | ? | 待確認 |
 
 ## 3. 出貨資料流 (Shipping Flow)
 
