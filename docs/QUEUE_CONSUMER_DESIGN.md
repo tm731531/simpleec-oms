@@ -19,18 +19,15 @@
 | channel-job-cyberbiz-fast | cyberbiz.fast | FETCH_ORDERS, SHIP_ORDER, UPDATE_PRICE, UPDATE_INVENTORY, APPROVE_RETURN | 4 | HIGH | Cyberbiz 快速同步 |
 | channel-job-cyberbiz-slow | cyberbiz.slow | FETCH_ORDER_DETAIL, SYNC_PRODUCT, FETCH_RETURNS, FETCH_RETURN_DETAIL | 2 | NORMAL | Cyberbiz 詳情同步 |
 
-### Business Consumer Groups（6組）
+### Business Consumer Groups（5 組）
 
 | Consumer | Topic | Action | Concurrency | Priority | Note |
 |----------|-------|--------|-------------|----------|------|
-| order-process-handler | order.process | NEW_ORDER: 新訂單入庫 | 8 | HIGH | 訂單是核心業務，需要高吞吐 |
-| | | UPDATE_ORDER: 訂單狀態更新、出貨記錄 | | | |
-| return-process-handler | return.process | NEW_RETURN: 新退貨入庫 | 4 | NORMAL | 退貨流程 |
-| | | APPROVE_RETURN: 同意退貨 | | | |
-| product-sync-handler | product.sync | PRODUCT_SYNCED: 商品同步結果記錄 | 2 | LOW | 異步記錄，可低優先級 |
-| inventory-update-handler | inventory.update | INVENTORY_UPDATED: 庫存更新記錄 | 4 | HIGH | 庫存影響銷售，需重視 |
-| error-handler | task.failed | FAILED_TASK: 失敗重試邏輯 | 2 | HIGH | 處理可重試的錯誤 |
-| dlt-handler | task.dlt | DLT_MESSAGE: 死信記錄 & 告警 | 1 | CRITICAL | 無法處理的訊息，需立即告警 |
+| order-process-handler | order.process | NEW_ORDER: 新訂單入庫 / UPDATE_ORDER: 訂單更新 | 8 | HIGH | 核心業務，需高吞吐 |
+| return-process-handler | return.process | NEW_RETURN: 新退貨入庫 / APPROVE_RETURN: 同意退貨 | 4 | NORMAL | 退貨處理 |
+| backend-task-handler | task.backend | SYNC_PRODUCT, UPDATE_INVENTORY, UPDATE_PRICE, SYNC_STORE, SHIP_ORDER 等 | 4 | NORMAL | 所有後端非同步任務 |
+| error-handler | task.failed | FAILED_TASK: 失敗重試邏輯 | 2 | HIGH | 可重試的錯誤 |
+| dlt-handler | task.dlt | DLT_MESSAGE: 死信記錄 & 告警 | 1 | CRITICAL | 無法恢復的訊息 |
 
 ### System Consumer Groups（可選）
 
@@ -122,18 +119,29 @@
    - 觸發退貨相關的後續流程
 ```
 
-### Inventory Update Handler
+### Backend Task Handler
 
 **消費邏輯**:
 ```
-1. 從 inventory.update 接收 UPDATE_INVENTORY 訊息
-   - 通常來自 Channel Job（快速庫存更新）
+1. 從 task.backend 接收各類後端任務
+   - SYNC_PRODUCT: 商品同步
+   - UPDATE_INVENTORY: 庫存更新
+   - UPDATE_PRICE: 價格更新
+   - SYNC_STORE: 賣場同步
+   - SHIP_ORDER: 出貨指令（自動或手動）
+   - 其他後端業務邏輯
 
-2. 更新資料庫庫存
-   - 支援絕對值和相對值更新
+2. 根據 TaskType 路由到對應的業務邏輯
+   - 各 TaskType 有各自的處理邏輯
+   - Handler 根據訊息內容判斷如何處理
 
-3. 記錄 INVENTORY_UPDATED 結果
-   - 供後續追蹤
+3. 執行業務操作
+   - 更新資料庫
+   - 調用外部服務
+   - 發送後續事件
+
+4. 記錄結果
+   - 成功或失敗的狀態
 ```
 
 ### Error Handler (task.failed)
@@ -188,11 +196,12 @@ Scheduler 應該按以下邏輯分發任務：
 13:00 → FETCH_ORDERS(COMPLETED)    # 7~15天內已完成訂單
 ```
 
-### 商品同步策略
+### 商品和賣場同步策略
 
 ```
-06:00 → SYNC_PRODUCT(BATCH)        # 全量同步（每天一次）
-每分鐘 → UPDATE_PRICE/INVENTORY    # 快速同步（價格、庫存）
+06:00 → SYNC_PRODUCT(BATCH)        # 全量商品同步（每天一次）
+06:30 → SYNC_STORE(BATCH)          # 全量賣場同步（每天一次）
+每小時 → UPDATE_PRICE/INVENTORY    # 定期同步（價格、庫存）
 ```
 
 ---
@@ -201,26 +210,30 @@ Scheduler 應該按以下邏輯分發任務：
 
 ```
 scheduler
-  ↓
-  ├─→ momo.fast/slow (Channel Job)
-  ├─→ shopee.fast/slow (Channel Job)
-  ├─→ yahoo.fast/slow (Channel Job)
-  ├─→ pchome.fast/slow (Channel Job)
-  └─→ cyberbiz.fast/slow (Channel Job)
-        ↓
-        order.process (Order Process Handler)
-             ↓
-        ├─→ product.sync (Product Sync Handler)
-        ├─→ inventory.update (Inventory Handler)
-        ├─→ return.process (Return Handler)
-        └─→ task.backend (可選後續流程)
+  ├─→ {platform}.fast/slow (Channel Job)
+  │       ↓
+  │    order.process (Order Handler: 判斷新建/更新)
+  │    return.process (Return Handler)
+  │       ↓
+  │    [Redis Hash updated]
+  │
+  └─→ task.backend (排程分發後端任務)
+       ├─ SYNC_PRODUCT/SYNC_STORE (商品/賣場同步)
+       ├─ UPDATE_PRICE/UPDATE_INVENTORY (價格/庫存更新)
+       ├─ SHIP_ORDER (自動出貨)
+       └─ 其他後端任務 (Backend Task Handler 處理)
 
-        error during processing
+UI Trigger
+  └─→ task.frontend (UI Driver)
+       └─ SHIP_ORDER (用戶手動出貨)
+            ↓
+       task.backend (轉發給 Backend Handler 執行)
+
+[Error handling]
+Any failure → task.failed (Error Handler)
              ↓
-        task.failed (Error Handler)
-             ↓
-        [retry] ──→ 原始 topic
-        [max retry exceeded] ──→ task.dlt (DLT Handler)
+          [retry] ──→ 原始 topic
+          [max retries] ──→ task.dlt (DLT Handler)
 ```
 
 ---

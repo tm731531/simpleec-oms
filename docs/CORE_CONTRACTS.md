@@ -23,18 +23,16 @@
 
 平台列表：`momo`, `shopee`, `yahoo`, `pchome`, `cyberbiz`
 
-### 2.2 Business Topics (業務主題)
+### 2.2 Business Topics (業務主題 - 7 個)
 | Topic | 用途 | 資料特性 | Retention |
 |-------|------|---------|-----------|
-| `order.process` | 訂單資料處理 | Source of Truth | 1d→2h |
-| `return.process` | 退貨處理 | 退貨資料 | 1d |
-| `product.sync` | 商品同步結果 | 同步狀態 | 1d |
-| `inventory.update` | 庫存更新 | 庫存變動 | 1d |
-| `task.backend` | 後端任務 | 系統任務 | 1d |
-| `task.frontend` | 前端任務 | UI 觸發 | 1d |
-| `scheduler` | 排程分發 | 排程任務 | 1d |
-| `task.failed` | 失敗任務 | 可重試 | 1d |
-| `task.dlt` | 死信 | 不可處理 | 30d |
+| `order.process` | 訂單資料處理 | Source of Truth（核心） | 1d→2h |
+| `return.process` | 退貨資料處理 | Source of Truth | 1d |
+| `task.backend` | 後端非同步任務 | 商品同步、庫存更新、賣場同步、出貨等 | 1d |
+| `task.frontend` | 前端非同步任務 | UI 觸發的任務（匯出、批次更新等） | 1d |
+| `scheduler` | 排程分發 | 排程引擎分發 | 1d |
+| `task.failed` | 失敗任務 | 可重試的錯誤 | 1d |
+| `task.dlt` | 死信隊列 | 無法處理的訊息 | 30d |
 
 ## 3. 訊息結構
 
@@ -85,12 +83,13 @@
 | NEW_RETURN | return.process | - | 新退貨入庫 |
 | APPROVE_RETURN | {platform}.fast | return.process | 同意退貨 |
 
-### 4.3 商品相關
+### 4.3 商品相關（進入 task.backend）
 | TaskType | 來源 Topic | 目標 Topic | 說明 |
 |----------|-----------|------------|------|
-| SYNC_PRODUCT | {platform}.slow | product.sync | 同步商品 |
-| UPDATE_INVENTORY | {platform}.fast | inventory.update | 更新庫存 |
-| UPDATE_PRICE | {platform}.fast | product.sync | 更新價格 |
+| SYNC_PRODUCT | {platform}.slow | task.backend | 同步商品 |
+| UPDATE_INVENTORY | {platform}.fast | task.backend | 更新庫存 |
+| UPDATE_PRICE | {platform}.fast | task.backend | 更新價格 |
+| SYNC_STORE | {platform}.slow | task.backend | 同步賣場資訊 |
 
 ## 5. Body 資料規範
 
