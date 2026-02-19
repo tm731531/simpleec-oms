@@ -116,6 +116,14 @@ order.process Handler 只需專注業務邏輯（查 DB、決定新建/更新、
 - Channel Job **決定是否需要 DETAIL**（金額大、有異常狀態等）
 - Channel Job **最終組 OMS 結構**（統一 orderData 格式）
 
+**核心原則**：
+- Scheduler **決定時間窗口和篩選條件** (例如：抓 PENDING 狀態、最近 1 小時的訂單)
+- 不同平台的 API 規則差異很大：
+  - Shopee：用 `order_status` + `create_time_from/to` 查詢
+  - Momo：用物流類型 + 時間範圍查詢（沒有訂單狀態分類）
+  - Yahoo：只有更新時間，不分訂單狀態
+- Channel Job **根據通路規則決定如何執行**（見下方「Channel Job 的內部決策」）
+
 **Scheduler 發送到 {platform}.slow:**
 ```json
 {
@@ -126,14 +134,18 @@ order.process Handler 只需專注業務邏輯（查 DB、決定新建/更新、
   "body": {
     "fetchSpec": {
       "orderStatus": "PENDING",
-      "description": "1小時內新訂單"
-      // 或改成 timeRange，或改成其他通路特定規則
-      // Scheduler 只決定「時間範圍」和「篩選條件」
-      // Channel Job 根據通路 API 規則轉換成實際 API 參數
+      "timeRange": {
+        "startTime": "2026-02-13T08:00:00Z",
+        "endTime": "2026-02-13T09:00:00Z"
+      }
     }
   }
 }
 ```
+
+說明：
+- `orderStatus`: 篩選條件（可選）
+- `timeRange`: 時間窗口。Channel Job 根據通路 API 規則使用這個時間範圍
 
 **Channel Job 的內部決策**（根據通路規則）：
 ```
