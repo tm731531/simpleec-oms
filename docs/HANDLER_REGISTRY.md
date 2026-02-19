@@ -1,5 +1,36 @@
 # SimpleEC OMS Handler 註冊表
 
+## 0. Heartbeat + Scheduler 驅動模型
+
+**關鍵前提**：所有 Handler 的觸發源是 **Heartbeat + Scheduler** 系統
+
+```
+Heartbeat Job（每秒發脈搏）
+    ↓ timestamp-driven
+Scheduler Consumer（根據分鐘位判斷派發）
+    ↓
+Channel Job Handlers / Backend Handlers
+```
+
+### Scheduler 派發規則
+
+| 分鐘位 | 派發目標 | Handler 類型 | 範例 |
+|--------|---------|------------|------|
+| :00, :05, :10... (% 5 == 0) | All {platform}.slow | Channel Job | FETCH_ORDERS, FETCH_RETURNS |
+| :01, :06, :11... (% 5 == 1) | task.backend | Backend Job | Order Report Generation |
+| :02, :07, :12... (% 5 == 2) | task.backend | Backend Job | Inventory Report Generation |
+| :03, :08, :13... (% 5 == 3) | task.backend | Backend Job | Sales Report Generation |
+| :04, :09, :14... (% 5 == 4) | task.backend | Backend Job | Return Report Generation |
+| :05, :15, :25... (% 10 == 5) | task.backend | Backend Job | Kafka Health Check |
+| :00, :30 | task.backend | Backend Job | Daily Report Generation |
+
+**重點**：
+- Scheduler 只派發「時間驅動」的任務（FETCH_ORDERS, FETCH_RETURNS, 報表生成）
+- UI 觸發的任務（SYNC_PACK, SHIP_ORDER 由用戶手動點擊）直接發到對應 topic，不走 Scheduler
+- 所有時間判斷都基於 **Heartbeat timestamp**，NOT 本地時間
+
+---
+
 ## 1. Handler 架構設計
 
 ### 1.1 核心介面
