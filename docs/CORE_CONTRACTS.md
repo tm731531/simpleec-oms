@@ -21,7 +21,7 @@
 | `{platform}.fast` | 快速任務：狀態更新、出貨 | < 5s | 1d |
 | `{platform}.slow` | 慢速任務：訂單列表、批次處理 | < 5m | 1d |
 
-平台列表：`momo`, `shopee`, `yahoo`, `pchome`, `cyberbiz`
+平台列表：`momo`, `shopee`, `yahoo`, `pchome`, `cyberbiz`, `easystore`
 
 ### 2.2 Business Topics (業務主題 - 7 個)
 | Topic | 用途 | 資料特性 | Retention |
@@ -47,9 +47,9 @@
     "timestamp": "ISO-8601",    // 必填：訊息時間
     "source": "string",         // 必填：來源 (scheduler/api/webhook/manual)
     "version": 1,               // 必填：訊息版本
-    "retryCount": 0,           // 選填：重試次數
+    "retryCount": 0,            // 選填：重試次數
     "priority": "NORMAL",       // 選填：HIGH/NORMAL/LOW
-    "correlationId": "string"  // 選填：關聯識別碼
+    "correlationId": "string"   // 選填：關聯識別碼
   },
   "body": {
     // TaskType 特定資料
@@ -62,28 +62,33 @@
 - `merchantId`: 多商戶隔離，資料不互通
 - `channelId`: 通路實例，如 SHOPEE_001, SHOPEE_002（多帳號）
 - `requestId`: 唯一識別碼，用於追蹤和冪等性
-- `correlationId`: 串連相關訊息，如 list→detail 的關聯
+- `timestamp`: 訊息時間戳，用於追蹤和業務判斷（如 FETCH_ORDERS 的基準時間）
+- `correlationId`: 串連相關訊息，如 FETCH_ORDERS → FETCH_ORDER_DETAIL → PROCESS_ORDER 的關聯
 
 ## 4. 核心 TaskType 定義
 
-### 4.0 Channel Job 數據轉換原則
+### 4.0 Channel Job 角色：數據適配層
 **核心責任**：Channel Job 是數據適配層，負責將各通路 API 的五花八門格式轉換為 OMS 統一的訂單結構。
 
-- **FETCH_ORDERS**：快速掃描訂單列表，決定哪些訂單需要詳情
-- **FETCH_ORDER_DETAIL**：深度獲取完整信息，**轉換成 OMS 標準訂單結構**（這是關鍵）
-  - Shopee 的訂單 → orderData (OMS 格式)
-  - Momo 的訂單 → orderData (OMS 格式)
-  - Yahoo, PChome, Cyberbiz... → orderData (OMS 格式)
-- **PROCESS_ORDER**：發送轉換後的標準結構到 order.process
+- 各通路 API 特性天差地遠（數據結構、response 粒度、rate limit、費用等）
+- Channel Job 封裝所有通路差異，只向上游暴露統一的 OMS orderData
+- order.process Handler 無需處理多通路差異，只需專注業務邏輯（查 DB、決定新建/更新、去重）
 
-order.process Handler 只需專注業務邏輯（查 DB、決定新建/更新、去重），不需處理多通路差異。
+**Example：5 個通路，5 種 API 特性**
+| 平台 | API 特性 | Channel Job 責任 |
+|------|---------|-----------------|
+| Shopee | orders list 不完整，需打 detail API | 判斷何時打 detail，整合 items/payment/shipping |
+| Momo | item-level 記錄（非訂單層級），無 detail API | 按訂單號分組聚合，自己整合完整結構 |
+| Yahoo | 只有更新時間，無狀態分類 | 用時間範圍查詢，自己轉換為 OMS 狀態 |
+| easystore | 有 IP 限制，但一次可抓 50 張完整訂單 | 評估 rate limit，決定是否分批 |
+| PChome/Cyberbiz | ... | ... |
 
 ### 4.1 訂單相關
 | TaskType | 來源 Topic | 目標 Topic | 說明 |
 |----------|-----------|------------|------|
-| FETCH_ORDERS | {platform}.fast | order.process | 抓取訂單列表 |
-| FETCH_ORDER_DETAIL | {platform}.slow | order.process | 抓取訂單詳情 |
-| PROCESS_ORDER | order.process | - | 訂單入庫（Handler 查詢 DB 決定 INSERT 或 UPDATE） |
+| FETCH_ORDERS | scheduler | {platform}.slow | Scheduler 觸發，Channel Job fetch orders list |
+| FETCH_ORDER_DETAIL | {platform}.slow | order.process | Channel Job 決定某訂單需詳情，fetch detail 後發到 order.process |
+| PROCESS_ORDER | order.process | (內部消費) | Handler 查詢 DB 決定 INSERT 或 UPDATE，執行業務邏輯 |
 | SHIP_ORDER | {platform}.fast | task.backend | 出貨作業 |
 
 ### 4.2 退貨相關
@@ -91,7 +96,7 @@ order.process Handler 只需專注業務邏輯（查 DB、決定新建/更新、
 |----------|-----------|------------|------|
 | FETCH_RETURNS | {platform}.slow | return.process | 抓取退貨列表 |
 | FETCH_RETURN_DETAIL | {platform}.slow | return.process | 抓取退貨詳情 |
-| PROCESS_RETURN | return.process | - | 退貨入庫（Handler 查詢 DB 決定 INSERT 或 UPDATE） |
+| PROCESS_RETURN | return.process | (內部消費) | 退貨入庫（Handler 查詢 DB 決定 INSERT 或 UPDATE） |
 | APPROVE_RETURN | {platform}.fast | return.process | 同意退貨 |
 
 ### 4.3 商品相關（進入 task.backend）
@@ -102,18 +107,16 @@ order.process Handler 只需專注業務邏輯（查 DB、決定新建/更新、
 | UPDATE_PRICE | {platform}.fast | task.backend | 更新價格 |
 | SYNC_STORE | {platform}.slow | task.backend | 同步賣場資訊 |
 
-## 5. Body 資料規範
+## 5. 訂單 fetch 流程詳解
 
-### 5.1 FETCH_ORDERS
+### 5.1 FETCH_ORDERS：Scheduler 觸發
 
-**核心原則**：
-- Scheduler **只傳遞時間戳**（代表「從何時開始 fetch」）
-- Channel Job **根據通路規則和時間戳決定如何執行**：
-  - Shopee：用時間戳決定 `create_time_from`，根據通路能力設定時間窗口寬度
-  - Momo：API 每項次是一筆記錄，必須自己按訂單號分組和整合
-  - Yahoo：用時間戳作 `updated_after` 參數（只有更新時間，無狀態分類）
-- Channel Job **決定是否需要 DETAIL**（基於平台 API 規則和限制）
-- Channel Job **最終組 OMS 結構**（統一 orderData 格式）
+**架構原則**：
+- Scheduler **只傳遞時間戳**（header.timestamp），代表「從何時開始 fetch」
+- Channel Job **根據時間戳 + 通路 API 規則自行決策**，包括：
+  - 如何打 API（各通路規則不同）
+  - 是否需要 FETCH_ORDER_DETAIL（取決於 API 能力和 rate limit）
+  - 如何組成 OMS 統一結構
 
 **Scheduler 發送到 {platform}.slow:**
 ```json
@@ -121,7 +124,9 @@ order.process Handler 只需專注業務邏輯（查 DB、決定新建/更新、
   "header": {
     "taskType": "FETCH_ORDERS",
     "source": "scheduler",
-    "timestamp": "2026-02-13T09:00:00Z"
+    "timestamp": "2026-02-13T09:00:00Z",
+    "merchantId": "merchant_001",
+    "channelId": "SHOPEE_001"
   },
   "body": {
     "fetchSpec": {}
@@ -129,86 +134,65 @@ order.process Handler 只需專注業務邏輯（查 DB、決定新建/更新、
 }
 ```
 
-說明：
-- Channel Job 從 header 的 `timestamp` 取得基準時間戳，根據通路 API 規則使用此時間戳 fetch 訂單
+**Channel Job 的內部決策流程**（根據通路規則）：
 
-**Channel Job 的內部決策**（根據通路規則）：
+**第 1 步：讀取 header.timestamp**
+- 取得基準時間戳，決定查詢窗口
+
+**第 2 步：根據通路 API 規則打 orders list API**
 ```
-1️⃣ 收到 header.timestamp
-2️⃣ 根據通路 API 規則判斷如何打 API
-   ├─ Shopee: GET /api/orders?order_status=UNPAID&create_time_from=X&create_time_to=Y
-   ├─ Momo: GET /api/orders?status=pending&created_time_start=X&created_time_end=Y
-   └─ Yahoo: GET /api/orders?updated_after=X (不分狀態)
-3️⃣ 抓回訂單清單
-4️⃣ 判斷是否需要 DETAIL（根據平台能力和限制）
-   ├─ easystore 有 IP 限制次數，但 orders API 可一次抓 50 張 + 完整資訊 → NO DETAIL 需要
-   ├─ Shopee orders list 只回傳概要，必須打 DETAIL 才能拿完整 items/payment/shipping → YES DETAIL 必要
-   ├─ Momo API 特殊：每一個項次是一筆記錄（非訂單層級），detail API 不存在 → 必須在 Channel Job 內自己整合
-   └─ Channel Job **擁有最後決策權**（平台最熟）
-5️⃣ 組好 OMS 結構的 orderData
-   └─ Shopee shop_order_id → channelOrderId
-   └─ Shopee items[] → OMS items[] 統一格式
-   └─ Shopee shipping → OMS shipping 統一欄位
-6️⃣ 發到 order.process
+Shopee:  GET /api/orders?order_status=UNPAID&create_time_from=X&create_time_to=Y
+         (返回: 訂單摘要資訊，items 不完整)
+
+Momo:    GET /api/orders?created_time_start=X&created_time_end=Y
+         (特殊: 返回 item-level 記錄，每行是一個 item，非訂單層級)
+
+Yahoo:   GET /api/orders?updated_after=X
+         (特殊: 只有更新時間，不分訂單狀態)
+
+easystore: GET /api/orders?from_date=X&to_date=Y&limit=50
+           (優點: 一次可拿 50 張，且包含完整資訊)
 ```
 
-**Channel Job 回傳到 order.process (PROCESS_ORDER):**
-```json
-{
-  "header": {
-    "taskType": "PROCESS_ORDER",
-    "source": "channel_job",
-    "correlationId": "原始 requestId"
-  },
-  "body": {
-    "channelOrderId": "通路訂單號（保留原始格式，如 1002#100）",
-    "orderData": {
-      // ⭐ 已轉換成 OMS 統一結構（不是通路原始格式）
-      "orderStatus": "PENDING",        // 統一狀態
-      "orderDate": "2026-02-13T...",   // 統一日期格式
-      "customer": {                    // 統一客戶結構
-        "name": "...",
-        "phone": "...",
-        "email": "..."
-      },
-      "items": [                       // 統一項目結構
-        {
-          "productId": "SKU...",
-          "quantity": 1,
-          "unitPrice": 100,
-          "subtotal": 100
-        }
-      ],
-      "payment": { ... },              // 統一支付結構
-      "shipping": { ... }              // 統一配送結構
-    }
-  }
-}
-```
+**第 3 步：判斷是否需要 FETCH_ORDER_DETAIL**
 
-### 5.2 FETCH_ORDER_DETAIL
+| 平台 | 判斷標準 | 結論 |
+|------|---------|------|
+| **Shopee** | orders list API 只回傳概要（items 不完整、無 payment/shipping 詳情） | ✅ YES，必須打 DETAIL API |
+| **Momo** | API 返回 item-level，非訂單層級，detail API 根本不存在 | ❌ NO，改在 Channel Job 內自己按訂單號分組聚合 |
+| **easystore** | orders API 一次回傳 50 張 + 完整資訊（items、payment、shipping 都有） | ❌ NO，直接組 OMS 結構 |
+| **Yahoo** | 需評估 API response 內容是否足夠 | 視情況 |
 
-**說明**：
-- Channel Job 在 FETCH_ORDERS 階段判斷某些訂單需要詳情
-- 決定發送 FETCH_ORDER_DETAIL 到 {platform}.slow（背景非同步打詳情 API）
-- 根據通路 API 規則取得完整訊息（items、payments、shipping details 等）
-- 再組成 OMS 統一結構發到 order.process
+**第 4 步：組成 OMS 統一結構並發送**
 
-**Channel Job 內部決策後發送到 {platform}.slow:**
+若無需 DETAIL，直接發 PROCESS_ORDER；若需 DETAIL，先發 FETCH_ORDER_DETAIL 到 {platform}.slow。
+
+---
+
+### 5.2 FETCH_ORDER_DETAIL：Channel Job 決定是否需要
+
+**何時觸發**：
+- Channel Job 在 FETCH_ORDERS 階段判斷某些訂單需要詳情（如 Shopee）
+- 決定發送 FETCH_ORDER_DETAIL 到 {platform}.slow，背景非同步打詳情 API
+
+**Channel Job 發送到 {platform}.slow:**
 ```json
 {
   "header": {
     "taskType": "FETCH_ORDER_DETAIL",
-    "source": "channel_job"
+    "source": "channel_job",
+    "merchantId": "merchant_001",
+    "channelId": "SHOPEE_001",
+    "requestId": "detail_req_xxx",
+    "timestamp": "2026-02-13T09:30:00Z"
   },
   "body": {
     "orders": [
       {
-        "channelOrderId": "MOMO-2026021300001",
+        "channelOrderId": "2026021300001",
         "metadata": {
-          // 通路特定參數（如 Momo 的 API version、商店 ID 等）
           "apiVersion": "v3",
-          "storeId": "STORE123"
+          "shopId": "12345"
         }
       }
     ]
@@ -216,29 +200,72 @@ order.process Handler 只需專注業務邏輯（查 DB、決定新建/更新、
 }
 ```
 
-**Channel Job 根據通路規則打 DETAIL API，完成組 OMS 結構後發到 order.process：**
+**Channel Job 根據通路規則打 DETAIL API 後，發送 PROCESS_ORDER 到 order.process:**
 ```json
 {
   "header": {
     "taskType": "PROCESS_ORDER",
     "source": "channel_job",
-    "correlationId": "原始 requestId"
+    "merchantId": "merchant_001",
+    "channelId": "SHOPEE_001",
+    "requestId": "process_req_xxx",
+    "timestamp": "2026-02-13T09:35:00Z"
   },
   "body": {
-    "channelOrderId": "MOMO-2026021300001",
+    "channelOrderId": "2026021300001",
     "orderData": {
-      // ⭐ 完整的 OMS 統一結構
       "orderStatus": "PENDING",
       "orderDate": "2026-02-13T09:30:00Z",
-      "customer": { ... },
-      "items": [ ... ],           // 來自 DETAIL API 的完整項目清單
-      "payment": { ... },         // 來自 DETAIL API 的支付詳情
-      "shipping": { ... },        // 來自 DETAIL API 的配送詳情
-      "totals": { ... }           // 詳細金額分解
+      "customer": {
+        "name": "顧客名稱",
+        "phone": "0912345678",
+        "email": "customer@example.com"
+      },
+      "items": [
+        {
+          "productId": "SKU001",
+          "productName": "商品名稱",
+          "quantity": 2,
+          "unitPrice": 1000,
+          "subtotal": 2000
+        }
+      ],
+      "payment": {
+        "method": "CREDIT_CARD",
+        "status": "PAID",
+        "total": 2000
+      },
+      "shipping": {
+        "method": "HOME_DELIVERY",
+        "address": "台北市信義區...",
+        "estimatedArrival": "2026-02-15T23:59:59Z"
+      }
     }
   }
 }
 ```
+
+**重要提示**：
+- `orderData` 已是 **OMS 統一結構**（不是通路原始格式）
+- 特殊字元（如訂單號的 `#`, `-`, `@`）必須完整保留（用於冪等性判斷）
+- order.process Handler 無需解析通路格式，直接使用 orderData
+
+---
+
+### 5.3 PROCESS_ORDER：Handler 執行業務邏輯
+
+**Handler 的責任**：
+- 查詢 DB，決定是否已存在該訂單（根據 merchantId:channelId:orderId）
+- 若新訂單，INSERT；若已存在，UPDATE
+- 執行業務驗證（如庫存檢查、積分計算等）
+- 計算 order hash 用於後續變更偵測（存入 Redis）
+
+**Handler 不應做的事**：
+- ❌ 調用通路 API
+- ❌ 處理多通路的 API 格式差異
+- ❌ 解析通路特定欄位（Channel Job 已處理）
+
+---
 
 ## 6. 錯誤處理契約
 
@@ -255,17 +282,20 @@ order.process Handler 只需專注業務邏輯（查 DB、決定新建/更新、
 ```json
 {
   "header": {
-    "taskType": "FAILED_TASK"
+    "taskType": "FAILED_TASK",
+    "source": "channel_job",
+    "merchantId": "merchant_001",
+    "channelId": "SHOPEE_001"
   },
   "body": {
     "originalHeader": { },
     "originalBody": { },
     "errorInfo": {
       "errorCode": "API_TIMEOUT",
-      "errorMessage": "string",
+      "errorMessage": "Shopee API 連線逾時",
       "retryable": true,
       "maxRetries": 3,
-      "nextRetryTime": "ISO-8601"
+      "nextRetryTime": "2026-02-13T09:15:00Z"
     }
   }
 }
@@ -275,7 +305,7 @@ order.process Handler 只需專注業務邏輯（查 DB、決定新建/更新、
 
 ### 7.1 版本相容性
 - v1 Handler 必須能處理 v1 訊息
-- v2 Handler 必須能處理 v1 和 v2 訊息
+- v2 Handler 必須能處理 v1 和 v2 訊息（向下相容）
 - 版本升級需要並行期（兩版本共存）
 
 ### 7.2 版本升級流程
