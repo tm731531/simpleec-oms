@@ -10,32 +10,19 @@ Scheduler                    Channel Job                     Order Job          
     │  {timeRange}                │                              │                        │              │
     │                             │                              │                        │              │
     │                        ┌────┴────┐                         │                        │              │
-    │                        │呼叫 API │                         │                        │              │
-    │                        │計算 hash│                         │                        │              │
-    │                        │分頁處理 │                         │                        │              │
-    │                        │判斷邏輯 │                         │                        │              │
+    │                        │呼叫列表 API                       │                        │              │
+    │                        │判斷是否需要詳情  │                │                        │              │
+    │                        │（同步呼叫詳情）  │               │                        │              │
+    │                        │計算 hash       │                 │                        │              │
+    │                        │檢查 Redis      │                 │                        │              │
     │                        └────┬────┘                         │                        │              │
     │                             │                              │                        │              │
     │                             ├──[ORDER_UPSERT]────────────>│                        │              │
-    │                             │  {orderData}                │                        │              │
-    │                             │  {orderHash}         ┌──────>│ (檢查 hash)         │              │
-    │                             │  {needsDetail}       │       │                        │              │
-    │                             │                      └──────>│ (存入 Redis)         │              │
+    │                             │  {orderData}        ┌──────>│ (檢查 hash)          │              │
+    │                             │  {orderHash}        │       │ (新增或更新)         │              │
+    │                             │                     └──────>│ (存入 Redis)         │              │
     │                             │                              ├──────[SAVE/UPDATE]──>│              │
     │                             │                              │                        │              │
-    │                             ├──[FETCH_ORDER_DETAIL]───────>│                        │              │
-    │                             │  {orderIds[]}                │                        │              │
-    │                             │                              │                        │              │
-    │                        ┌────┴────┐                         │                        │              │
-    │                        │呼叫詳情 │                         │                        │              │
-    │                        │計算 hash│                         │                        │              │
-    │                        └────┬────┘                         │                        │              │
-    │                             │                              │                        │              │
-    │                             ├──[ORDER_UPSERT]────────────>│                        │              │
-    │                             │  {fullOrderData}             │ (詳情資料)            │              │
-    │                             │  {orderHash}         ┌──────>│ (驗證 hash)          │              │
-    │                             │                      └──────>│ (更新 Redis)         │              │
-    │                             │                              ├──────[UPDATE]───────>│              │
 ```
 
 ### 1.2 資料轉換對應
@@ -73,18 +60,32 @@ Scheduler                    Channel Job                     Order Job          
 // Shopee Channel Job 內部邏輯
 function processOrderList(orders) {
   for (order of orders) {
-    // *** 第一步：計算訂單內容 Hash（用於去重）***
+    // *** 第一步：判斷是否需要詳情，若需要則同步呼叫詳情 API ***
+    let fullOrderData = order;  // 預設用列表資料
+
+    if (shouldFetchDetail(order)) {
+      try {
+        // ⭐ 重要：同步呼叫 API 取得完整詳情（不是非同步訊息）
+        fullOrderData = fetchOrderDetailSync(order.order_sn);
+      } catch (error) {
+        log.warn(`Failed to fetch detail for ${order.order_sn}, using list data`, error);
+        // 降級處理：用列表資料繼續
+        fullOrderData = order;
+      }
+    }
+
+    // *** 第二步：計算訂單內容 Hash（必須在完整資料基礎上）***
     const orderHash = calculateOrderHash({
-      orderStatus: order.order_status,
-      totalAmount: order.total_amount,
-      shippingStatus: order.shipping_status,
-      paymentStatus: order.payment_status,
-      items: order.item_list,
-      buyerInfo: order.buyer_info,
-      shippingInfo: order.shipping_info
+      orderStatus: fullOrderData.order_status,
+      totalAmount: fullOrderData.total_amount,
+      shippingStatus: fullOrderData.shipping_status,
+      paymentStatus: fullOrderData.payment_status,
+      items: fullOrderData.item_list,        // 完整的商品清單（可能來自詳情 API）
+      buyerInfo: fullOrderData.buyer_info,   // 完整的買家資訊
+      shippingInfo: fullOrderData.shipping_info  // 完整的物流資訊
     });
 
-    // *** 第二步：檢查 Redis 中的舊 Hash（避免重複）***
+    // *** 第三步：檢查 Redis 中的舊 Hash（避免重複處理）***
     const redisKey = `order:hash:${merchantId}:${channelId}:${order.order_sn}`;
     const existingHash = redis.get(redisKey);
 
@@ -94,33 +95,29 @@ function processOrderList(orders) {
       continue;
     }
 
-    // *** 第三步：判斷是否需要詳情***
-    if (shouldFetchDetail(order)) {
-      sendMessage('FETCH_ORDER_DETAIL', {
-        orderId: order.order_sn,
-        metadata: {
-          status: order.order_status,
-          hasReturn: order.return_status > 0
-        }
-      });
-    }
-
-    // *** 第四步：發送 ORDER_UPSERT 訊息（帶 Hash）***
+    // *** 第四步：發送 ORDER_UPSERT 訊息（帶完整資料和 Hash）***
     sendMessage('ORDER_UPSERT', {
       orderId: order.order_sn,
-      orderData: order,  // 原始 API 資料
-      orderHash: orderHash,  // ⭐ 重要：傳遞 Hash 給 order.process
-      needsDetail: shouldFetchDetail(order)
+      orderData: fullOrderData,  // ⭐ 必須是完整資料
+      orderHash: orderHash       // ⭐ 根據完整資料計算的 Hash
     });
   }
 }
 
+// 同步呼叫通路 API 取得訂單詳情
+function fetchOrderDetailSync(orderId) {
+  // 直接呼叫 Shopee API，非同步訊息
+  const response = await shopeeApi.get(`/order/${orderId}/detail`);
+  return response.data;
+}
+
 function shouldFetchDetail(order) {
-  // Shopee 特定判斷
-  return order.order_status === 'READY_TO_SHIP' ||
+  // Shopee 特定判斷：判斷是否需要完整資料
+  // 列表 API 不含商品明細、買家資訊、物流詳情，這些在詳情 API 才有
+  return order.order_status === 'READY_TO_SHIP' ||   // 出貨需要完整物流資訊
          order.order_status === 'PROCESSED' ||
-         order.total_amount > 10000 ||
-         order.return_status > 0;
+         order.return_status > 0 ||                    // 有退貨需要詳細項目資訊
+         !order.item_list;                            // 列表無商品資訊時必須取詳情
 }
 
 // ⭐ Hash 計算（須使用 TreeMap 確保欄位排序一致）
@@ -139,44 +136,106 @@ function calculateOrderHash(orderData) {
 }
 ```
 
-**⚠️ 重要：Channel Job 必須計算 Hash**
-- 去重的第一層在 Channel Job（讀 Redis，判斷是否跳過此訂單）
-- 去重的第二層在 order.process 的 OrderUpsertHandler（寫 Redis，確保並發安全）
+**⚠️ 重要：Channel Job 計算 Hash 的前提是完整資料**
+- 必須先判斷是否需要詳情，需要則同步呼叫詳情 API 獲得完整資料
+- 基於完整資料（items, shippingInfo 等）計算 Hash
+- 檢查 Redis 中是否存在相同 Hash，相同則跳過（資源優化）
+- 不同 Hash 或 Redis 無紀錄時才發送 ORDER_UPSERT 訊息
+
+**去重的兩層架構**
+- **第一層（Channel Job）**：讀 Redis，判斷是否跳過，避免發送重複訊息（資源優化）
+- **第二層（order.process OrderUpsertHandler）**：再次檢查 Redis + 資料庫，確保並發安全，避免並發重複寫入
 
 ## 2. 退貨資料流 (Return Flow)
 
 ### 2.1 流程圖（含 Hash 去重）
 ```
-Channel Job                      Return Job                    Redis        Database
-    │                                │                            │              │
-    ├──[FETCH_RETURNS]──────────────>│                            │              │
-    │                                │                            │              │
-    ├──[RETURN_UPSERT]──────────────>│                            │              │
-    │  {returnData}                  │                            │              │
-    │  {returnHash}          ┌───────>│ (檢查 hash)               │              │
-    │                        │        │                            │              │
-    │                        └───────>│ (存入 Redis)              │              │
-    │                                 ├──────[SAVE/UPDATE]───────>│              │
-    │                                 │                            │              │
-    ├──[FETCH_RETURN_DETAIL]────────>│                            │              │
-    │  {returnIds[]}                 │                            │              │
-    │                                 │                            │              │
-    ├──[RETURN_UPSERT]──────────────>│                            │              │
-    │  {fullReturnData}              │ (詳情資料)                  │              │
-    │  {returnHash}          ┌───────>│ (驗證 hash)               │              │
-    │                        └───────>│ (更新 Redis)              │              │
-    │                                 ├──────[UPDATE]────────────>│              │
+Scheduler                    Channel Job                     Return Job                 Redis        Database
+    │                             │                              │                        │              │
+    ├──[FETCH_RETURNS]───────────>│                              │                        │              │
+    │                             │                              │                        │              │
+    │                        ┌────┴────┐                         │                        │              │
+    │                        │呼叫列表 API                       │                        │              │
+    │                        │判斷是否需要詳情  │                │                        │              │
+    │                        │（同步呼叫詳情）  │               │                        │              │
+    │                        │計算 hash       │                 │                        │              │
+    │                        │檢查 Redis      │                 │                        │              │
+    │                        └────┬────┘                         │                        │              │
+    │                             │                              │                        │              │
+    │                             ├──[RETURN_UPSERT]────────────>│                        │              │
+    │                             │  {returnData}       ┌──────>│ (檢查 hash)          │              │
+    │                             │  {returnHash}       │       │ (新增或更新)         │              │
+    │                             │                     └──────>│ (存入 Redis)         │              │
+    │                             │                              ├──────[SAVE/UPDATE]──>│              │
 ```
 
-### 2.2 退貨判斷邏輯（Channel Job 內含 Hash 計算）
+### 2.2 退貨判斷邏輯（Channel Job 內含 Hash 計算和去重）
+
+```javascript
+// Shopee Channel Job 內部邏輯（退貨）
+function processReturnList(returns) {
+  for (ret of returns) {
+    // *** 第一步：判斷是否需要詳情，若需要則同步呼叫詳情 API ***
+    let fullReturnData = ret;  // 預設用列表資料
+
+    if (shouldFetchReturnDetail(ret)) {
+      try {
+        // ⭐ 重要：同步呼叫 API 取得完整詳情（不是非同步訊息）
+        fullReturnData = fetchReturnDetailSync(ret.return_id);
+      } catch (error) {
+        log.warn(`Failed to fetch detail for return ${ret.return_id}, using list data`, error);
+        fullReturnData = ret;
+      }
+    }
+
+    // *** 第二步：計算退貨內容 Hash（必須在完整資料基礎上）***
+    const returnHash = calculateReturnHash({
+      returnStatus: fullReturnData.return_status,
+      reason: fullReturnData.reason,
+      items: fullReturnData.items,        // 完整的退貨項目清單
+      refundAmount: fullReturnData.refund_amount
+    });
+
+    // *** 第三步：檢查 Redis 中的舊 Hash（避免重複處理）***
+    const redisKey = `return:hash:${merchantId}:${channelId}:${ret.return_id}`;
+    const existingHash = redis.get(redisKey);
+
+    if (existingHash === returnHash) {
+      // Hash 相同，退貨內容未變化，跳過
+      log.debug(`Return unchanged (hash match): ${ret.return_id}`);
+      continue;
+    }
+
+    // *** 第四步：發送 RETURN_UPSERT 訊息（帶完整資料和 Hash）***
+    sendMessage('RETURN_UPSERT', {
+      returnId: ret.return_id,
+      returnData: fullReturnData,  // ⭐ 必須是完整資料
+      returnHash: returnHash       // ⭐ 根據完整資料計算的 Hash
+    });
+  }
+}
+
+function shouldFetchReturnDetail(ret) {
+  // 判斷是否需要完整資料
+  return ret.return_status === 'PROCESSING' ||     // 處理中需要詳細項目
+         ret.return_status === 'APPROVED' ||       // 已批准需要詳細項目
+         !ret.items;                               // 列表無項目資訊時必須取詳情
+}
+
+function fetchReturnDetailSync(returnId) {
+  // 直接呼叫 Shopee API，非同步訊息
+  const response = await shopeeApi.get(`/return/${returnId}/detail`);
+  return response.data;
+}
+```
+
+**平台特定判斷**
 
 | 通路 | 判斷條件 | Hash 欄位 | API 端點 |
 |------|---------|----------|----------|
-| Shopee | return_status > 0 | returnStatus, reason, items, refundAmount | /api/v2/returns/get_return_list |
-| Momo | order_type = 'RETURN' | returnStatus, reason, items, refundAmount | 包含在訂單 API |
-| Yahoo | 獨立退貨系統 | returnStatus, reason, items, refundAmount | /returns/list |
-
-**Channel Job 必須在發送 RETURN_UPSERT 前計算 Hash，並檢查 Redis 去重**
+| Shopee | return_status ∈ [PROCESSING, APPROVED] 或 !items | returnStatus, reason, items, refundAmount | /api/v2/returns/{returnId}/detail |
+| Momo | 退貨記錄存在時 | returnStatus, reason, items, refundAmount | 包含在訂單 API |
+| Yahoo | 獨立退貨系統 | returnStatus, reason, items, refundAmount | /returns/{returnId}/detail |
 
 ## 3. 出貨資料流 (Shipping Flow)
 
