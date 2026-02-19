@@ -141,16 +141,14 @@ public class HandlerRegistry {
 #### Order Process Job
 | TaskType | Handler Class | Topic | 說明 |
 |----------|--------------|-------|------|
-| NEW_ORDER | NewOrderHandler | order.process | 新訂單處理 |
-| UPDATE_ORDER | UpdateOrderHandler | order.process | 更新訂單 |
+| ORDER_UPSERT | OrderUpsertHandler | order.process | **新建或更新訂單**（內部根據 orderId 存在性判定） |
 | CANCEL_ORDER | CancelOrderHandler | order.process | 取消訂單 |
 | ORDER_STATUS_CHANGE | OrderStatusHandler | order.process | 狀態變更 |
 
 #### Return Process Job
 | TaskType | Handler Class | Topic | 說明 |
 |----------|--------------|-------|------|
-| NEW_RETURN | NewReturnHandler | return.process | 新退貨處理 |
-| UPDATE_RETURN | UpdateReturnHandler | return.process | 更新退貨 |
+| RETURN_UPSERT | ReturnUpsertHandler | return.process | **新建或更新退貨**（內部根據 returnId 存在性判定） |
 | APPROVE_RETURN | ApproveReturnHandler | return.process | 同意退貨 |
 | REJECT_RETURN | RejectReturnHandler | return.process | 拒絕退貨 |
 
@@ -224,36 +222,50 @@ public class ShopeeOrderListHandler implements ChannelTaskHandler {
 }
 ```
 
-### 3.2 Order Process Handler
+### 3.2 Order Process Handler (Upsert Pattern)
 ```java
 @Component
-public class NewOrderHandler implements TaskHandler {
+public class OrderUpsertHandler implements TaskHandler {
 
     private final OrderService orderService;
     private final OrderMapper orderMapper;
 
     @Override
     public String getTaskType() {
-        return "NEW_ORDER";
+        return "ORDER_UPSERT";
     }
 
     @Override
     public void handle(TaskMessage message) {
-        NewOrderRequest request = parseBody(message.getBody(), NewOrderRequest.class);
+        OrderUpsertRequest request = parseBody(message.getBody(), OrderUpsertRequest.class);
 
-        // 1. 檢查是否已存在
-        if (orderService.exists(request.getOrderId())) {
-            log.info("Order already exists: {}", request.getOrderId());
-            return; // 冪等性
-        }
-
-        // 2. 轉換資料格式
-        Order order = orderMapper.fromChannelData(
-            message.getHeader().getChannelId(),
-            request.getOrderData()
+        // 1. 檢查是否已存在（根據 channelOrderId）
+        Optional<Order> existing = orderService.findByChannelOrderId(
+            request.getChannelId(),
+            request.getChannelOrderId()
         );
 
-        // 3. 儲存訂單
+        Order order;
+        if (existing.isPresent()) {
+            // 2A. 更新現有訂單
+            order = existing.get();
+            order.update(orderMapper.fromChannelData(
+                message.getHeader().getChannelId(),
+                request.getOrderData()
+            ));
+            log.info("Updated order: {} from channel {}",
+                order.getOrderId(), request.getChannelId());
+        } else {
+            // 2B. 建立新訂單
+            order = orderMapper.fromChannelData(
+                message.getHeader().getChannelId(),
+                request.getOrderData()
+            );
+            log.info("Created new order: {} from channel {}",
+                order.getOrderId(), request.getChannelId());
+        }
+
+        // 3. 儲存訂單（insert or update）
         orderService.save(order);
 
         // 4. 觸發後續流程
