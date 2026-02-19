@@ -27,16 +27,17 @@
 ```
 
 ### Header 欄位說明
-- `taskType`: 決定使用哪個處理類別 (Handler Class)
-- `merchantId`: 商家識別碼，用於多商戶隔離
-- `channelId`: 通路實例 ID (如 MOMO_001, SHOPEE_002)
-- `requestId`: 追蹤用的唯一識別碼
-- `timestamp`: ISO 8601 格式時間戳記
-- `source`: 訊息來源 (scheduler/api/webhook/manual)
-- `version`: 訊息版本，用於向後相容
-- `retryCount`: 當前重試次數（可選）
-- `priority`: HIGH/NORMAL/LOW（可選）
-- `correlationId`: 關聯識別碼，串連 list→detail（可選）
+- `taskType`: 決定使用哪個處理類別 (Handler Class)（必填）
+- `merchantId`: 商家識別碼，用於多商戶隔離（必填）
+- `platformId`: 通路編號 (shopee/momo/yahoo/pchome/cyberbiz/easystore)（必填）
+- `channelId`: 通路實例 ID (如 MOMO_001, SHOPEE_002)（選填）
+- `requestId`: 追蹤用的唯一識別碼（必填）
+- `timestamp`: ISO 8601 格式時間戳記（必填）
+- `source`: 訊息來源 (scheduler/api/webhook/manual/channel_job)（必填）
+- `version`: 訊息版本，用於向後相容（必填）
+- `retryCount`: 當前重試次數（選填）
+- `priority`: HIGH/NORMAL/LOW（選填）
+- `correlationId`: 關聯識別碼，串連 list→detail→process（選填）
 
 ---
 
@@ -44,66 +45,42 @@
 
 ### 平台快速主題：momo.fast / shopee.fast / yahoo.fast / pchome.fast / cyberbiz.fast
 
-**TaskType: FETCH_ORDERS** - 從 scheduler 指定的時間區段/狀態抓訂單列表
+**TaskType: FETCH_ORDERS** - Scheduler 觸發，Channel Job 根據時間戳和訂單生命週期分批拉取
 
-Scheduler 根據策略決定要抓什麼狀態。例：
+Scheduler 只傳遞時間戳。Channel Job 自行決定如何分批：
 - 1小時內的新訂單（PENDING）
-- 3天內的出貨中訂單（PROCESSING）
-- 7天內的已完成訂單（COMPLETED）
-- 7~15天內的已出貨訂單（SHIPPED）
-
-Channel Job 只負責根據 scheduler 的指令抓取並轉換資料。
+- 3天內的待出貨訂單（CONFIRMED）
+- 5天內的出貨中訂單（SHIPPED）
+- 7天後的已完成訂單（COMPLETED）
 
 ```json
 {
   "header": {
     "taskType": "FETCH_ORDERS",
     "merchantId": "M001",
+    "platformId": "momo",
     "channelId": "MOMO_001",
-    "requestId": "sched-20260213-fetch-pending",
+    "requestId": "sched-20260213-fetch-001",
     "timestamp": "2026-02-13T10:00:00Z",
     "source": "scheduler",
     "version": 1,
-    "priority": "HIGH"
+    "priority": "NORMAL"
   },
   "body": {
-    "fetchSpec": {
-      "orderStatus": "PENDING",
-      "description": "1小時內新訂單"
-    },
-    "orders": [
-      {
-        "orderId": "MOMO-2026021300001",
-        "orderData": {
-          "orderStatus": "PENDING",
-          "orderDate": "2026-02-13T09:30:00Z",
-          "totalAmount": 15000
-        },
-        "needsDetail": true,
-        "metadata": {
-          "reason": "金額超過 10000，需要詳情"
-        }
-      },
-      {
-        "orderId": "MOMO-2026021300002",
-        "orderData": {
-          "orderStatus": "PENDING",
-          "orderDate": "2026-02-13T09:45:00Z",
-          "totalAmount": 500
-        },
-        "needsDetail": false,
-        "metadata": {}
-      }
-    ],
-    "summary": {
-      "total": 150,
-      "fetched": 2,
-      "hasMore": true,
-      "nextCursor": "cursor-abc123"
-    }
+    "fetchSpec": {}
   }
 }
 ```
+
+**Channel Job 內部流程**（不在訊息中，説明用）：
+1. 讀取 header.timestamp = 2026-02-13T10:00:00Z
+2. 分批打 API：
+   - API_1: PENDING 訂單（1小時內）
+   - API_2: CONFIRMED 訂單（3天內）
+   - API_3: SHIPPED 訂單（5天內）
+   - API_4: COMPLETED 訂單（7天後）
+3. 判斷是否需要 DETAIL API（根據平台能力）
+4. 組成 OMS 統一結構，發送 PROCESS_ORDER 訊息到 order.process
 
 **TaskType: SHIP_ORDER** - 出貨指令（主要用於 {platform}.fast）
 
@@ -112,6 +89,7 @@ Channel Job 只負責根據 scheduler 的指令抓取並轉換資料。
   "header": {
     "taskType": "SHIP_ORDER",
     "merchantId": "M001",
+    "platformId": "shopee",
     "channelId": "SHOPEE_001",
     "requestId": "req-20260213-100001",
     "timestamp": "2026-02-13T10:05:00Z",
@@ -138,6 +116,7 @@ Channel Job 只負責根據 scheduler 的指令抓取並轉換資料。
   "header": {
     "taskType": "UPDATE_PRICE",
     "merchantId": "M001",
+    "platformId": "yahoo",
     "channelId": "YAHOO_001",
     "requestId": "req-20260213-100002",
     "timestamp": "2026-02-13T10:10:00Z",
@@ -172,6 +151,7 @@ Channel Job 只負責根據 scheduler 的指令抓取並轉換資料。
   "header": {
     "taskType": "UPDATE_INVENTORY",
     "merchantId": "M001",
+    "platformId": "pchome",
     "channelId": "PCHOME_001",
     "requestId": "req-20260213-100003",
     "timestamp": "2026-02-13T10:15:00Z",
@@ -206,6 +186,7 @@ Channel Job 只負責根據 scheduler 的指令抓取並轉換資料。
   "header": {
     "taskType": "APPROVE_RETURN",
     "merchantId": "M001",
+    "platformId": "cyberbiz",
     "channelId": "CYBERBIZ_001",
     "requestId": "req-20260213-100004",
     "timestamp": "2026-02-13T10:20:00Z",
@@ -231,19 +212,20 @@ Channel Job 只負責根據 scheduler 的指令抓取並轉換資料。
 
 ### 平台慢速主題：momo.slow / shopee.slow / yahoo.slow / pchome.slow / cyberbiz.slow
 
-**TaskType: FETCH_ORDER_DETAIL** - 抓取訂單詳情
+**TaskType: FETCH_ORDER_DETAIL** - Channel Job 決定某訂單需詳情，打 DETAIL API
 
 ```json
 {
   "header": {
     "taskType": "FETCH_ORDER_DETAIL",
     "merchantId": "M001",
+    "platformId": "momo",
     "channelId": "MOMO_001",
-    "requestId": "req-20260213-200000",
+    "requestId": "detail_req_001",
     "timestamp": "2026-02-13T10:30:00Z",
-    "source": "order_process_job",
+    "source": "channel_job",
     "version": 1,
-    "correlationId": "req-20260213-100000",
+    "correlationId": "fetch_req_001",
     "priority": "NORMAL"
   },
   "body": {
@@ -439,66 +421,53 @@ Scheduler 根據時間和優先級，定期向各 Channel 的 fast/slow topics �
 Channel Job 收到訂單後，根據 Redis Hash 判斷是否需要詳情。然後發送到 order.process。
 order.process Handler 接收後，查詢資料庫判斷是新訂單還是已存在，決定 INSERT 或 UPDATE。
 
-**TaskType: PROCESS_ORDER** - 訂單資料（Channel Job 發送的完整訂單資料）
+**TaskType: PROCESS_ORDER** - Channel Job 發送的完整統一訂單資料
 
 ```json
 {
   "header": {
     "taskType": "PROCESS_ORDER",
     "merchantId": "M001",
+    "platformId": "momo",
     "channelId": "MOMO_001",
-    "requestId": "req-20260213-300000",
-    "timestamp": "2026-02-13T10:30:00Z",
+    "requestId": "process_req_001",
+    "timestamp": "2026-02-13T10:35:00Z",
     "source": "channel_job",
     "version": 1,
-    "correlationId": "req-20260213-100000"
+    "correlationId": "fetch_req_001"
   },
   "body": {
-    "channelOrderId": "MOMO-2026021300001",
     "orderData": {
+      "orderId": "ord_abc123def456",
+      "channelOrderId": "MOMO-2026021300001",
       "orderStatus": "PENDING",
-      "orderDate": "2026-02-13T09:30:00Z",
-      "customer": {
-        "name": "王小明",
-        "phone": "0912345678",
-        "email": "wang@example.com"
-      },
-      "shippingAddress": {
-        "recipient": "王小明",
-        "phone": "0912345678",
-        "postalCode": "10491",
-        "city": "台北市",
-        "district": "中山區",
-        "address": "南京東路三段100號"
-      },
+      "buyerName": "王小明",
+      "buyerPhone": "0912345678",
+      "buyerEmail": "wang@example.com",
+      "shippingAddress": "台北市中山區南京東路三段100號",
+      "shippingMethod": "HOME_DELIVERY",
+      "paymentMethod": "CREDIT_CARD",
+      "totalAmount": 43900.00,
+      "shippingFee": 0.00,
+      "discountAmount": 1000.00,
+      "channelCreatedAt": "2026-02-13T09:30:00Z",
+      "paidAt": "2026-02-13T09:31:00Z",
       "items": [
         {
-          "productId": "SKU001",
+          "sku": "IPHONE-15-PRO-MAX",
+          "productId": "pd_xyz789",
+          "channelProductId": "MOMO-SKU-001",
+          "channelSpecId": "MOMO-SPEC-001",
+          "channelItemId": "MOMO-ITEM-2026021300001",
+          "channelProductName": "iPhone 15 Pro Max",
+          "channelSpecName": "太空黑/256GB",
           "productName": "iPhone 15 Pro Max",
-          "channelSkuId": "MOMO-SKU-001",
           "quantity": 1,
-          "unitPrice": 44900,
-          "discount": 1000,
-          "subtotal": 43900
+          "unitPrice": 44900.00,
+          "subtotal": 44900.00,
+          "sellPackId": "sp_abc123"
         }
-      ],
-      "payment": {
-        "method": "CREDIT_CARD",
-        "status": "PAID",
-        "paidAmount": 43900
-      },
-      "shipping": {
-        "method": "HOME_DELIVERY",
-        "carrier": "BLACK_CAT",
-        "shippingFee": 0
-      },
-      "totals": {
-        "subtotal": 44900,
-        "discount": 1000,
-        "shippingFee": 0,
-        "tax": 2090,
-        "grandTotal": 43900
-      }
+      ]
     }
   }
 }
@@ -507,11 +476,11 @@ order.process Handler 接收後，查詢資料庫判斷是新訂單還是已存�
 **說明**: order.process Handler 接收後：
 1. 計算 orderData 的 hash（SHA256）
 2. 查詢資料庫是否已存在該 channelOrderId
-3. 不存在 → INSERT 新訂單
-4. 已存在 + Hash 不同 → UPDATE 訂單
-5. 已存在 + Hash 相同 → 跳過（已處理過）
+3. 新訂單 → INSERT（id=orderId）
+4. 已存在 + Hash 不同 → UPDATE
+5. 已存在 + Hash 相同 → 跳過（冪等性）
 
-Hash 和 orderId 都由 Handler 在接收時計算/查詢，不從 message 帶入。
+注：orderId 由 Handler 在新增時生成，更新時由 orderData 帶入。
 
 ---
 
