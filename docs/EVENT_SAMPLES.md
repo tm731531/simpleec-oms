@@ -455,7 +455,6 @@ order.process Handler 接收後，查詢資料庫判斷是新訂單還是已存�
   },
   "body": {
     "channelOrderId": "MOMO-2026021300001",
-    "orderHash": "sha256hash...",
     "orderData": {
       "orderStatus": "PENDING",
       "orderDate": "2026-02-13T09:30:00Z",
@@ -506,10 +505,13 @@ order.process Handler 接收後，查詢資料庫判斷是新訂單還是已存�
 ```
 
 **說明**: order.process Handler 接收後：
-- 查詢資料庫是否已存在該 channelOrderId
-- 不存在 → INSERT 新訂單（NEW_ORDER）
-- 已存在 + Hash 不同 → UPDATE 訂單（UPDATE_ORDER）
-- 已存在 + Hash 相同 → 跳過（已處理過）
+1. 計算 orderData 的 hash（SHA256）
+2. 查詢資料庫是否已存在該 channelOrderId
+3. 不存在 → INSERT 新訂單
+4. 已存在 + Hash 不同 → UPDATE 訂單
+5. 已存在 + Hash 相同 → 跳過（已處理過）
+
+Hash 和 orderId 都由 Handler 在接收時計算/查詢，不從 message 帶入。
 
 ---
 
@@ -534,7 +536,6 @@ order.process Handler 接收後，查詢資料庫判斷是新訂單還是已存�
   },
   "body": {
     "channelReturnId": "YH-RET-2026021300001",
-    "returnHash": "sha256hash...",
     "returnData": {
       "returnStatus": "PENDING_APPROVAL",
       "reason": "SIZE_MISMATCH",
