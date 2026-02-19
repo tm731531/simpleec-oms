@@ -1,5 +1,23 @@
 # Channel 實作指南
 
+⚠️ **重要警告 - API 相關內容是示例模板**
+
+本文件中關於各通路 API 的具體例子（如 Shopee GET /api/orders、Momo API 參數等）**目前是示例/模板**，**不是生產環境準確的 API 規範**。
+
+**待確認項目**：
+- Shopee, Momo, Yahoo, PChome, easystore, Cyberbiz 的實際 API 文件
+- 真實的 request/response 結構
+- 分頁方式（特別是 Yahoo 的假 cursor 機制）
+- Rate limit 策略
+- Error handling 細節
+
+**使用建議**：
+1. 當前代碼結構（PaginationStrategy 抽象、Channel Job 架構）**是正確的**
+2. 具體 API 呼叫邏輯需要根據實際 API 文件確認後再更新
+3. 看到真實 API 文件後，會更新本文件為準確內容
+
+---
+
 ## 1. Channel Job 職責界定
 
 ### 1.1 核心原則
