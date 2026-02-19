@@ -80,7 +80,7 @@
 **isRollback 適用範圍**：
 - ✅ **訂單相關**：FETCH_ORDERS, FETCH_ORDER_DETAIL, PROCESS_ORDER, SHIP_ORDER
 - ✅ **退貨相關**：FETCH_RETURNS, FETCH_RETURN_DETAIL, PROCESS_RETURN, APPROVE_RETURN
-- ❌ **商品相關**：SYNC_PRODUCT, UPDATE_INVENTORY, UPDATE_PRICE, SYNC_STORE（無需 isRollback）
+- ❌ **賣場/庫存/價格相關**：SYNC_STORE, UPDATE_INVENTORY, UPDATE_PRICE, SYNC_PRODUCT（無需 isRollback）
 
 **Channel Job 角色**：
 
@@ -117,13 +117,14 @@
 
 **備註**: PROCESS_RETURN 也遵循 isRollback 邏輯（與 PROCESS_ORDER 相同）
 
-### 4.3 商品相關（進入 task.backend）
+### 4.3 賣場相關（來自通路）
 | TaskType | 來源 Topic | 目標 Topic | 說明 |
 |----------|-----------|------------|------|
-| SYNC_PRODUCT | {platform}.slow | task.backend | 同步商品 |
+| SYNC_STORE | {platform}.slow | task.backend | 同步通路賣場資訊 |
 | UPDATE_INVENTORY | {platform}.fast | task.backend | 更新庫存 |
 | UPDATE_PRICE | {platform}.fast | task.backend | 更新價格 |
-| SYNC_STORE | {platform}.slow | task.backend | 同步賣場資訊 |
+
+**備註**: 通路只有「賣場」概念，沒有「商品」概念。商品聚合 (SYNC_PRODUCT) 是 OMS 內部邏輯（根據 SKU 聚合），由 task.backend Handler 內部觸發。
 
 ## 5. 訂單 fetch 流程詳解
 

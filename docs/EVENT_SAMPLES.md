@@ -244,63 +244,6 @@ Scheduler 只傳遞時間戳。Channel Job 自行決定如何分批：
 }
 ```
 
-**TaskType: SYNC_PRODUCT** - 同步商品（商品詳情、屬性、圖片等）
-
-```json
-{
-  "header": {
-    "taskType": "SYNC_PRODUCT",
-    "merchantId": "M001",
-    "channelId": "SHOPEE_001",
-    "requestId": "req-20260213-200001",
-    "timestamp": "2026-02-13T10:45:00Z",
-    "source": "product_sync_job",
-    "version": 1,
-    "priority": "LOW"
-  },
-  "body": {
-    "action": "FULL_SYNC",
-    "products": [
-      {
-        "productId": "SH-SKU-001",
-        "name": "iPhone 15 Pro Max",
-        "description": "最新款 iPhone",
-        "category": "Electronics > Mobile",
-        "price": 44900,
-        "images": [
-          "https://cdn.shopee.tw/product-001-01.jpg",
-          "https://cdn.shopee.tw/product-001-02.jpg"
-        ],
-        "variants": [
-          {
-            "variant": "256GB",
-            "sku": "SH-SKU-001-256",
-            "price": 44900,
-            "inventory": 50
-          },
-          {
-            "variant": "512GB",
-            "sku": "SH-SKU-001-512",
-            "price": 49900,
-            "inventory": 30
-          }
-        ],
-        "attributes": {
-          "brand": "Apple",
-          "color": "Black",
-          "warranty": "12 months"
-        }
-      }
-    ],
-    "totalProducts": 1,
-    "syncMetadata": {
-      "source": "api",
-      "lastModified": "2026-02-13T10:00:00Z"
-    }
-  }
-}
-```
-
 **TaskType: FETCH_RETURNS** - 抓取退貨列表
 
 ```json
@@ -703,8 +646,7 @@ order.process Handler 接收後，查詢資料庫判斷是新訂單還是已存�
 | SHIP_ORDER | {platform}.fast | task.backend | channel-job-{platform}-fast | 出貨指令 |
 | UPDATE_PRICE | {platform}.fast | task.backend | channel-job-{platform}-fast | 價格更新 |
 | UPDATE_INVENTORY | {platform}.fast | task.backend | channel-job-{platform}-fast | 庫存更新 |
-| SYNC_PRODUCT | {platform}.slow | task.backend | channel-job-{platform}-slow | 商品詳情 |
-| SYNC_STORE | {platform}.slow | task.backend | channel-job-{platform}-slow | 賣場同步 |
+| SYNC_STORE | {platform}.slow | task.backend | channel-job-{platform}-slow | 通路賣場同步 |
 | FETCH_RETURNS | {platform}.slow | return.process | channel-job-{platform}-slow | 退貨列表 |
 | FETCH_RETURN_DETAIL | {platform}.slow | return.process | channel-job-{platform}-slow | 退貨詳情 |
 | APPROVE_RETURN | {platform}.fast | return.process | channel-job-{platform}-fast | 同意退貨 |
