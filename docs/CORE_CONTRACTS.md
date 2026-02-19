@@ -110,7 +110,7 @@ order.process Handler 只需專注業務邏輯（查 DB、決定新建/更新、
 - Scheduler **只傳遞時間戳**（代表「從何時開始 fetch」）
 - Channel Job **根據通路規則和時間戳決定如何執行**：
   - Shopee：用時間戳決定 `create_time_from`，根據通路能力設定時間窗口寬度
-  - Momo：用時間戳去查物流類型，再用時間範圍查訂單
+  - Momo：API 每項次是一筆記錄，必須自己按訂單號分組和整合
   - Yahoo：用時間戳作 `updated_after` 參數（只有更新時間，無狀態分類）
 - Channel Job **決定是否需要 DETAIL**（基於平台 API 規則和限制）
 - Channel Job **最終組 OMS 結構**（統一 orderData 格式）
@@ -143,7 +143,7 @@ order.process Handler 只需專注業務邏輯（查 DB、決定新建/更新、
 4️⃣ 判斷是否需要 DETAIL（根據平台能力和限制）
    ├─ easystore 有 IP 限制次數，但 orders API 可一次抓 50 張 + 完整資訊 → NO DETAIL 需要
    ├─ Shopee orders list 只回傳概要，必須打 DETAIL 才能拿完整 items/payment/shipping → YES DETAIL 必要
-   ├─ Momo 評估 rate limit 與單次數據量的成本 → 根據情況決定
+   ├─ Momo API 特殊：每一個項次是一筆記錄（非訂單層級），detail API 不存在 → 必須在 Channel Job 內自己整合
    └─ Channel Job **擁有最後決策權**（平台最熟）
 5️⃣ 組好 OMS 結構的 orderData
    └─ Shopee shop_order_id → channelOrderId
