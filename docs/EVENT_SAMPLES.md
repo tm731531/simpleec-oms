@@ -1,6 +1,6 @@
-# SimpleEC OMS 事件流範例
+# SimpleEC OMS 事件流範例 v1.0
 
-本文件提供所有 Kafka topic 的訊息格式範例，用於開發參考與系統整合。
+本文件提供所有 Kafka topic 的訊息格式範例，確認事件流設計上下對應。
 
 ## 統一訊息結構
 
@@ -11,13 +11,14 @@
   "header": {
     "taskType": "具體任務類型",
     "merchantId": "商家ID",
-    "channelId": "通路ID",
+    "channelId": "通路ID（可選）",
     "requestId": "唯一請求識別碼",
     "timestamp": "訊息產生時間",
     "source": "訊息來源",
     "version": "訊息版本",
     "retryCount": "重試次數",
-    "priority": "優先級"
+    "priority": "優先級",
+    "correlationId": "關聯識別碼（可選）"
   },
   "body": {
     // 業務資料根據 taskType 而定
@@ -35,15 +36,16 @@
 - `version`: 訊息版本，用於向後相容
 - `retryCount`: 當前重試次數（可選）
 - `priority`: HIGH/NORMAL/LOW（可選）
+- `correlationId`: 關聯識別碼，串連 list→detail（可選）
 
-## 1. Channel Topics (通路主題)
+---
 
-### 1.1 Fast Topics (快速處理)
-用於訂單抓取、快速商品同步等需要即時處理的任務。
+## Channel Topics (通路主題 - 10個)
 
-#### momo.fast / shopee.fast / yahoo.fast / pchome.fast / cyberbiz.fast
+### 平台快速主題：momo.fast / shopee.fast / yahoo.fast / pchome.fast / cyberbiz.fast
 
-**範例 1: 抓取訂單 (FETCH_ORDERS)**
+**TaskType: FETCH_ORDERS** - 通路發送訂單列表給 order.process（需要判斷是否需詳情）
+
 ```json
 {
   "header": {
@@ -53,132 +55,354 @@
     "requestId": "req-20260213-100000",
     "timestamp": "2026-02-13T10:00:00Z",
     "source": "scheduler",
-    "version": 1
-  },
-  "body": {
-    "startTime": "2026-02-13T09:00:00Z",
-    "endTime": "2026-02-13T10:00:00Z",
-    "orderStatus": ["PENDING", "PROCESSING"],
-    "pageSize": 100
-  }
-}
-```
-
-**範例 2: 快速商品同步 (SYNC_PRODUCT_FAST)**
-```json
-{
-  "header": {
-    "taskType": "SYNC_PRODUCT_FAST",
-    "merchantId": "M001",
-    "channelId": "SHOPEE_001",
-    "requestId": "req-20260213-100100",
-    "timestamp": "2026-02-13T10:01:00Z",
-    "source": "api",
     "version": 1,
     "priority": "HIGH"
   },
   "body": {
-    "products": [
+    "timeRange": {
+      "start": "2026-02-13T09:00:00Z",
+      "end": "2026-02-13T10:00:00Z"
+    },
+    "orders": [
       {
-        "productId": "SKU001",
-        "action": "UPDATE_PRICE",
-        "price": 999
+        "orderId": "MOMO-2026021300001",
+        "orderData": {
+          "orderStatus": "READY_TO_SHIP",
+          "totalAmount": 15000,
+          "shippingStatus": "PROCESSING"
+        },
+        "needsDetail": true,
+        "metadata": {
+          "reason": "大單需詳情"
+        }
       },
       {
-        "productId": "SKU002",
-        "action": "UPDATE_STOCK",
-        "stock": 100
+        "orderId": "MOMO-2026021300002",
+        "orderData": {
+          "orderStatus": "PENDING",
+          "totalAmount": 500
+        },
+        "needsDetail": false,
+        "metadata": {}
       }
     ],
-    "batchId": "batch-001"
+    "summary": {
+      "total": 100,
+      "fetched": 2,
+      "hasMore": true
+    }
   }
 }
 ```
 
-### 1.2 Slow Topics (慢速處理)
-用於商品詳細資訊同步、大批量處理等耗時操作。
+**TaskType: SHIP_ORDER** - 出貨指令（主要用於 {platform}.fast）
 
-#### momo.slow / shopee.slow / yahoo.slow / pchome.slow / cyberbiz.slow
-
-**範例 1: 抓取商品詳情 (FETCH_PRODUCT_DETAIL)**
 ```json
 {
   "header": {
-    "taskType": "FETCH_PRODUCT_DETAIL",
+    "taskType": "SHIP_ORDER",
+    "merchantId": "M001",
+    "channelId": "SHOPEE_001",
+    "requestId": "req-20260213-100001",
+    "timestamp": "2026-02-13T10:05:00Z",
+    "source": "admin_ui",
+    "version": 1,
+    "priority": "HIGH"
+  },
+  "body": {
+    "orderId": "SH202602130456",
+    "shippingMethod": "SHOPEE_PICKUP",
+    "trackingNumber": "SE123456789",
+    "carrierInfo": {
+      "name": "7-ELEVEN",
+      "storeId": "131415"
+    }
+  }
+}
+```
+
+**TaskType: UPDATE_PRICE** - 更新商品價格（快速同步）
+
+```json
+{
+  "header": {
+    "taskType": "UPDATE_PRICE",
+    "merchantId": "M001",
+    "channelId": "YAHOO_001",
+    "requestId": "req-20260213-100002",
+    "timestamp": "2026-02-13T10:10:00Z",
+    "source": "price_sync_job",
+    "version": 1,
+    "priority": "NORMAL"
+  },
+  "body": {
+    "products": [
+      {
+        "productId": "YH-SKU-001",
+        "price": 2999,
+        "originalPrice": 3500,
+        "currency": "TWD",
+        "effectiveTime": "2026-02-13T10:10:00Z"
+      },
+      {
+        "productId": "YH-SKU-002",
+        "price": 1999,
+        "originalPrice": 2500,
+        "currency": "TWD"
+      }
+    ]
+  }
+}
+```
+
+**TaskType: UPDATE_INVENTORY** - 更新庫存（快速同步）
+
+```json
+{
+  "header": {
+    "taskType": "UPDATE_INVENTORY",
+    "merchantId": "M001",
+    "channelId": "PCHOME_001",
+    "requestId": "req-20260213-100003",
+    "timestamp": "2026-02-13T10:15:00Z",
+    "source": "inventory_sync",
+    "version": 1,
+    "priority": "HIGH"
+  },
+  "body": {
+    "updates": [
+      {
+        "productId": "PC-SKU-001",
+        "quantity": 50,
+        "type": "ABSOLUTE",
+        "warehouseId": "WH-001"
+      },
+      {
+        "productId": "PC-SKU-002",
+        "quantity": -3,
+        "type": "RELATIVE",
+        "warehouseId": "WH-001",
+        "reason": "SALE"
+      }
+    ]
+  }
+}
+```
+
+**TaskType: APPROVE_RETURN** - 同意退貨
+
+```json
+{
+  "header": {
+    "taskType": "APPROVE_RETURN",
+    "merchantId": "M001",
+    "channelId": "CYBERBIZ_001",
+    "requestId": "req-20260213-100004",
+    "timestamp": "2026-02-13T10:20:00Z",
+    "source": "api",
+    "version": 1,
+    "priority": "NORMAL"
+  },
+  "body": {
+    "returnId": "RET-CYBER-2026021300001",
+    "status": "APPROVED",
+    "returnShippingMethod": "STORE_PICKUP",
+    "pickupInfo": {
+      "storeId": "ST001",
+      "storeName": "台北信義門市"
+    },
+    "approvedAmount": 10000,
+    "approvedAt": "2026-02-13T10:20:00Z"
+  }
+}
+```
+
+---
+
+### 平台慢速主題：momo.slow / shopee.slow / yahoo.slow / pchome.slow / cyberbiz.slow
+
+**TaskType: FETCH_ORDER_DETAIL** - 抓取訂單詳情
+
+```json
+{
+  "header": {
+    "taskType": "FETCH_ORDER_DETAIL",
     "merchantId": "M001",
     "channelId": "MOMO_001",
-    "requestId": "req-20260213-100200",
-    "timestamp": "2026-02-13T10:02:00Z",
-    "source": "api",
+    "requestId": "req-20260213-200000",
+    "timestamp": "2026-02-13T10:30:00Z",
+    "source": "order_process_job",
+    "version": 1,
+    "correlationId": "req-20260213-100000",
+    "priority": "NORMAL"
+  },
+  "body": {
+    "orders": [
+      {
+        "orderId": "MOMO-2026021300001",
+        "metadata": {
+          "apiVersion": "v3",
+          "includeItems": true,
+          "includePayment": true
+        }
+      }
+    ]
+  }
+}
+```
+
+**TaskType: SYNC_PRODUCT** - 同步商品（商品詳情、屬性、圖片等）
+
+```json
+{
+  "header": {
+    "taskType": "SYNC_PRODUCT",
+    "merchantId": "M001",
+    "channelId": "SHOPEE_001",
+    "requestId": "req-20260213-200001",
+    "timestamp": "2026-02-13T10:45:00Z",
+    "source": "product_sync_job",
     "version": 1,
     "priority": "LOW"
   },
   "body": {
-    "productIds": ["SKU001", "SKU002", "SKU003"],
-    "includeFields": ["description", "images", "attributes", "variants"],
-    "parentTaskId": "task-fast-001"
+    "action": "FULL_SYNC",
+    "products": [
+      {
+        "productId": "SH-SKU-001",
+        "name": "iPhone 15 Pro Max",
+        "description": "最新款 iPhone",
+        "category": "Electronics > Mobile",
+        "price": 44900,
+        "images": [
+          "https://cdn.shopee.tw/product-001-01.jpg",
+          "https://cdn.shopee.tw/product-001-02.jpg"
+        ],
+        "variants": [
+          {
+            "variant": "256GB",
+            "sku": "SH-SKU-001-256",
+            "price": 44900,
+            "inventory": 50
+          },
+          {
+            "variant": "512GB",
+            "sku": "SH-SKU-001-512",
+            "price": 49900,
+            "inventory": 30
+          }
+        ],
+        "attributes": {
+          "brand": "Apple",
+          "color": "Black",
+          "warranty": "12 months"
+        }
+      }
+    ],
+    "totalProducts": 1,
+    "syncMetadata": {
+      "source": "api",
+      "lastModified": "2026-02-13T10:00:00Z"
+    }
   }
 }
 ```
 
-**範例 2: 批次庫存同步 (SYNC_INVENTORY_BATCH)**
+**TaskType: FETCH_RETURNS** - 抓取退貨列表
+
 ```json
 {
   "header": {
-    "taskType": "SYNC_INVENTORY_BATCH",
+    "taskType": "FETCH_RETURNS",
     "merchantId": "M001",
-    "channelId": "PCHOME_001",
-    "requestId": "req-20260213-100300",
-    "timestamp": "2026-02-13T10:03:00Z",
-    "source": "manual",
-    "version": 1
+    "channelId": "YAHOO_001",
+    "requestId": "req-20260213-200002",
+    "timestamp": "2026-02-13T11:00:00Z",
+    "source": "scheduler",
+    "version": 1,
+    "priority": "NORMAL"
   },
   "body": {
-    "inventoryUpdates": [
+    "timeRange": {
+      "start": "2026-02-13T10:00:00Z",
+      "end": "2026-02-13T11:00:00Z"
+    },
+    "returns": [
       {
-        "productId": "SKU001",
-        "warehouseId": "WH001",
-        "quantity": 100,
-        "type": "ABSOLUTE"
-      },
-      {
-        "productId": "SKU002",
-        "warehouseId": "WH001",
-        "quantity": -5,
-        "type": "RELATIVE"
+        "returnId": "YH-RET-2026021300001",
+        "orderId": "YH-ORD-2026021300100",
+        "returnStatus": "PENDING_APPROVAL",
+        "reason": "SIZE_MISMATCH",
+        "requestedAmount": 5000,
+        "needsDetail": true
       }
     ],
-    "updateMode": "BATCH",
-    "validateStock": true
+    "summary": {
+      "total": 10,
+      "fetched": 1,
+      "hasMore": true
+    }
   }
 }
 ```
 
-## 2. Business Topics (業務主題)
+**TaskType: FETCH_RETURN_DETAIL** - 抓取退貨詳情
 
-### 2.1 order.process
-訂單處理主題，存放**完整訂單資料**作為事實來源 (Source of Truth)。
+```json
+{
+  "header": {
+    "taskType": "FETCH_RETURN_DETAIL",
+    "merchantId": "M001",
+    "channelId": "CYBERBIZ_001",
+    "requestId": "req-20260213-200003",
+    "timestamp": "2026-02-13T11:15:00Z",
+    "source": "return_process_job",
+    "version": 1,
+    "correlationId": "req-20260213-200002",
+    "priority": "NORMAL"
+  },
+  "body": {
+    "returns": [
+      {
+        "returnId": "CYBER-RET-2026021300001",
+        "metadata": {
+          "includePhotos": true,
+          "includeShippingInfo": true
+        }
+      }
+    ]
+  }
+}
+```
 
-**範例 1: 新訂單 (NEW_ORDER)**
+---
+
+## Business Topics (業務主題 - 6個)
+
+### order.process - 訂單處理（Source of Truth）
+保留時間：1d（穩定後考慮降至 2h）
+
+**TaskType: NEW_ORDER** - 新訂單（Channel Job 抓取的訂單列表）
+
 ```json
 {
   "header": {
     "taskType": "NEW_ORDER",
     "merchantId": "M001",
     "channelId": "MOMO_001",
-    "requestId": "req-20260213-100400",
-    "timestamp": "2026-02-13T10:04:00Z",
-    "source": "order_fetch",
-    "version": 1
+    "requestId": "req-20260213-300000",
+    "timestamp": "2026-02-13T10:30:00Z",
+    "source": "channel_job",
+    "version": 1,
+    "correlationId": "req-20260213-100000"
   },
   "body": {
-    "order": {
-      "orderId": "ORD20260213001",
-      "channelOrderId": "MOMO-2026021300123",
+    "orderId": "ORD-SYS-20260213-001",
+    "channelOrderId": "MOMO-2026021300001",
+    "orderData": {
       "orderStatus": "PENDING",
       "orderDate": "2026-02-13T09:30:00Z",
       "customer": {
-        "customerId": "CUST001",
         "name": "王小明",
         "phone": "0912345678",
         "email": "wang@example.com"
@@ -189,37 +413,33 @@
         "postalCode": "10491",
         "city": "台北市",
         "district": "中山區",
-        "address": "南京東路三段100號5樓"
+        "address": "南京東路三段100號"
       },
       "items": [
         {
-          "lineId": "L001",
           "productId": "SKU001",
-          "productName": "iPhone 15 Pro Max 256GB",
+          "productName": "iPhone 15 Pro Max",
           "channelSkuId": "MOMO-SKU-001",
           "quantity": 1,
           "unitPrice": 44900,
           "discount": 1000,
-          "lineTotal": 43900
+          "subtotal": 43900
         }
       ],
       "payment": {
         "method": "CREDIT_CARD",
         "status": "PAID",
-        "paidAmount": 43900,
-        "paidTime": "2026-02-13T09:31:00Z",
-        "transactionId": "TXN123456789"
+        "paidAmount": 43900
       },
       "shipping": {
         "method": "HOME_DELIVERY",
         "carrier": "BLACK_CAT",
-        "shippingFee": 0,
-        "estimatedDelivery": "2026-02-15"
+        "shippingFee": 0
       },
       "totals": {
         "subtotal": 44900,
+        "discount": 1000,
         "shippingFee": 0,
-        "totalDiscount": 1000,
         "tax": 2090,
         "grandTotal": 43900
       }
@@ -228,218 +448,151 @@
 }
 ```
 
-**範例 2: 訂單更新 (UPDATE_ORDER)**
+**TaskType: UPDATE_ORDER** - 訂單狀態更新（Channel Job 抓取的詳情）
+
 ```json
 {
   "header": {
     "taskType": "UPDATE_ORDER",
     "merchantId": "M001",
     "channelId": "SHOPEE_001",
-    "requestId": "req-20260213-100500",
+    "requestId": "req-20260213-300001",
     "timestamp": "2026-02-13T14:00:00Z",
-    "source": "order_fetch",
-    "version": 1
+    "source": "channel_job",
+    "version": 1,
+    "correlationId": "req-20260213-200000"
   },
   "body": {
-    "orderId": "ORD20260213002",
+    "orderId": "ORD-SYS-20260213-002",
     "channelOrderId": "SH202602130456",
-    "updateType": "STATUS_CHANGE",
-    "previousStatus": "PROCESSING",
-    "newStatus": "SHIPPED",
-    "shipmentInfo": {
-      "shippedTime": "2026-02-13T14:00:00Z",
-      "trackingNumber": "SE123456789",
-      "carrier": "7-ELEVEN",
-      "storeId": "131415",
-      "storeName": "台中西屯門市"
-    },
-    "fullOrder": {
-      // 完整訂單資料（同 NEW_ORDER 結構）
+    "orderData": {
+      "orderStatus": "SHIPPED",
+      "shipmentInfo": {
+        "shippedTime": "2026-02-13T14:00:00Z",
+        "trackingNumber": "SE123456789",
+        "carrier": "7-ELEVEN",
+        "storeId": "131415"
+      },
+      "items": [],
+      "totals": {}
     }
   }
 }
 ```
 
-### 2.2 task.backend
-後端任務主題，處理系統內部任務。
+---
 
-**範例 1: 產生報表 (GENERATE_REPORT)**
+### return.process - 退貨處理（Source of Truth）
+保留時間：1d
+
+**TaskType: NEW_RETURN** - 新退貨
+
 ```json
 {
   "header": {
-    "taskType": "GENERATE_REPORT",
+    "taskType": "NEW_RETURN",
     "merchantId": "M001",
-    "requestId": "req-20260213-100600",
-    "timestamp": "2026-02-13T10:06:00Z",
-    "source": "scheduler",
-    "version": 1
-  },
-  "body": {
-    "reportType": "DAILY_SALES",
-    "reportDate": "2026-02-13",
-    "format": "PDF",
-    "includeDetails": true,
-    "emailTo": ["manager@example.com"]
-  }
-}
-```
-
-**範例 2: 同步主資料 (SYNC_MASTER_DATA)**
-```json
-{
-  "header": {
-    "taskType": "SYNC_MASTER_DATA",
-    "merchantId": "M001",
-    "requestId": "req-20260213-100700",
-    "timestamp": "2026-02-13T10:07:00Z",
-    "source": "manual",
-    "version": 1
-  },
-  "body": {
-    "dataType": "PRODUCT_CATEGORY",
-    "action": "FULL_SYNC",
-    "sourceSystem": "ERP",
-    "targetChannels": ["MOMO", "SHOPEE", "YAHOO"]
-  }
-}
-```
-
-### 2.3 task.frontend
-前端任務主題，處理與前端相關的非同步任務。
-
-**範例 1: 匯出資料 (EXPORT_DATA)**
-```json
-{
-  "header": {
-    "taskType": "EXPORT_DATA",
-    "merchantId": "M001",
-    "requestId": "req-20260213-100800",
-    "timestamp": "2026-02-13T10:08:00Z",
-    "source": "admin_ui",
-    "version": 1
-  },
-  "body": {
-    "userId": "USER001",
-    "exportType": "ORDER_LIST",
-    "filters": {
-      "startDate": "2026-02-01",
-      "endDate": "2026-02-13",
-      "status": ["SHIPPED", "DELIVERED"],
-      "channels": ["MOMO", "SHOPEE"]
-    },
-    "format": "EXCEL",
-    "callbackUrl": "/api/exports/callback"
-  }
-}
-```
-
-**範例 2: 批次更新 (BULK_UPDATE)**
-```json
-{
-  "header": {
-    "taskType": "BULK_UPDATE",
-    "merchantId": "M001",
-    "requestId": "req-20260213-100900",
-    "timestamp": "2026-02-13T10:09:00Z",
-    "source": "admin_ui",
+    "channelId": "YAHOO_001",
+    "requestId": "req-20260213-310000",
+    "timestamp": "2026-02-13T11:30:00Z",
+    "source": "channel_job",
     "version": 1,
-    "priority": "HIGH"
+    "correlationId": "req-20260213-200002"
   },
   "body": {
-    "userId": "USER002",
-    "entityType": "PRODUCT",
+    "returnId": "RET-SYS-20260213-001",
+    "channelReturnId": "YH-RET-2026021300001",
+    "orderId": "ORD-SYS-20260213-XXX",
+    "returnData": {
+      "returnStatus": "PENDING_APPROVAL",
+      "reason": "SIZE_MISMATCH",
+      "requestedAmount": 5000,
+      "requestDate": "2026-02-13T11:00:00Z",
+      "items": [
+        {
+          "productId": "SKU002",
+          "quantity": 1,
+          "unitPrice": 5000
+        }
+      ]
+    }
+  }
+}
+```
+
+---
+
+### product.sync - 商品同步結果
+保留時間：1d
+
+**TaskType: PRODUCT_SYNCED** - 商品同步結果（Handler 處理結果寫回）
+
+```json
+{
+  "header": {
+    "taskType": "PRODUCT_SYNCED",
+    "merchantId": "M001",
+    "channelId": "SHOPEE_001",
+    "requestId": "req-20260213-320000",
+    "timestamp": "2026-02-13T11:00:00Z",
+    "source": "product_sync_handler",
+    "version": 1,
+    "correlationId": "req-20260213-200001"
+  },
+  "body": {
+    "syncStatus": "SUCCESS",
+    "totalProducts": 100,
+    "successCount": 98,
+    "failureCount": 2,
+    "syncTime": "2026-02-13T11:00:00Z",
+    "failures": [
+      {
+        "productId": "SKU-INVALID",
+        "reason": "Missing required field: description"
+      }
+    ]
+  }
+}
+```
+
+---
+
+### inventory.update - 庫存更新事件
+保留時間：1d
+
+**TaskType: INVENTORY_UPDATED** - 庫存更新完成
+
+```json
+{
+  "header": {
+    "taskType": "INVENTORY_UPDATED",
+    "merchantId": "M001",
+    "channelId": "PCHOME_001",
+    "requestId": "req-20260213-330000",
+    "timestamp": "2026-02-13T10:30:00Z",
+    "source": "inventory_update_handler",
+    "version": 1,
+    "correlationId": "req-20260213-100003"
+  },
+  "body": {
+    "updateStatus": "SUCCESS",
     "updates": [
       {
-        "id": "SKU001",
-        "fields": {
-          "price": 999,
-          "name": "Updated Product Name"
-        }
-      },
-      {
-        "id": "SKU002",
-        "fields": {
-          "price": 1299,
-          "stock": 50
-        }
+        "productId": "SKU-001",
+        "previousQuantity": 100,
+        "newQuantity": 50,
+        "difference": -50
       }
     ],
-    "validateBeforeUpdate": true
+    "updateTime": "2026-02-13T10:30:00Z"
   }
 }
 ```
 
-### 2.4 scheduler
-排程器主題，用於分發排程任務。
+---
 
-**範例 1: 分發訂單抓取任務 (DISPATCH_ORDER_FETCH)**
-```json
-{
-  "header": {
-    "taskType": "DISPATCH_ORDER_FETCH",
-    "merchantId": "M001",
-    "requestId": "req-20260213-101000",
-    "timestamp": "2026-02-13T10:10:00Z",
-    "source": "scheduler",
-    "version": 1
-  },
-  "body": {
-    "scheduleId": "SCH001",
-    "action": "FETCH_ALL_ORDERS",
-    "channels": [
-      {"channelId": "MOMO_001", "enabled": true},
-      {"channelId": "SHOPEE_001", "enabled": true},
-      {"channelId": "YAHOO_001", "enabled": false}
-    ],
-    "timeRange": {
-      "start": "2026-02-13T10:00:00Z",
-      "end": "2026-02-13T11:00:00Z"
-    },
-    "scheduleConfig": {
-      "mode": "interval",
-      "intervalSeconds": 300,
-      "retryOnFailure": true
-    }
-  }
-}
-```
-
-**範例 2: 健康檢查 (HEALTH_CHECK)**
-```json
-{
-  "header": {
-    "taskType": "HEALTH_CHECK",
-    "merchantId": "M001",
-    "requestId": "req-20260213-101100",
-    "timestamp": "2026-02-13T10:11:00Z",
-    "source": "scheduler",
-    "version": 1
-  },
-  "body": {
-    "checkTargets": [
-      {
-        "type": "API_STATUS",
-        "channels": ["MOMO", "SHOPEE", "YAHOO", "PCHOME", "CYBERBIZ"]
-      },
-      {
-        "type": "DATABASE",
-        "databases": ["PRIMARY", "REPLICA"]
-      },
-      {
-        "type": "KAFKA",
-        "topics": ["order.process", "task.backend"]
-      }
-    ],
-    "alertConfig": {
-      "threshold": 3,
-      "notifyChannels": ["EMAIL", "SLACK"]
-    }
-  }
-}
-```
-
-### 2.5 task.failed
-失敗任務主題，記錄處理失敗的任務。
+### task.failed - 失敗任務
+保留時間：1d
 
 ```json
 {
@@ -447,247 +600,99 @@
     "taskType": "FAILED_TASK",
     "merchantId": "M001",
     "channelId": "MOMO_001",
-    "requestId": "req-20260213-100000",
-    "timestamp": "2026-02-13T10:15:00Z",
-    "source": "task_processor",
+    "requestId": "req-20260213-400000",
+    "timestamp": "2026-02-13T10:35:00Z",
+    "source": "error_handler",
     "version": 1
   },
   "body": {
     "originalTopic": "momo.fast",
-    "originalHeader": {
-      "taskType": "FETCH_ORDERS",
-      "merchantId": "M001",
-      "channelId": "MOMO_001",
-      "requestId": "req-20260213-100000",
-      "timestamp": "2026-02-13T10:00:00Z",
-      "source": "scheduler",
-      "version": 1
-    },
-    "originalBody": {
-      "startTime": "2026-02-13T09:00:00Z",
-      "endTime": "2026-02-13T10:00:00Z"
-    },
+    "originalTaskType": "FETCH_ORDERS",
+    "originalRequestId": "req-20260213-100000",
     "failureInfo": {
       "errorCode": "API_TIMEOUT",
       "errorMessage": "MOMO API request timeout after 30s",
-      "stackTrace": "java.net.SocketTimeoutException: Read timed out...",
-      "failedAt": "2026-02-13T10:15:00Z",
       "retryCount": 3,
       "maxRetries": 3,
-      "processingNode": "worker-01"
+      "isRetryable": false,
+      "failedAt": "2026-02-13T10:35:00Z"
     }
   }
 }
 ```
 
-### 2.6 task.dlt (Dead Letter Topic)
-死信主題，存放無法處理的訊息。
+---
+
+### task.dlt - 死信隊列
+保留時間：30d
 
 ```json
 {
   "header": {
     "taskType": "DLT_MESSAGE",
     "merchantId": "UNKNOWN",
-    "requestId": "dlt-20260213-101500",
-    "timestamp": "2026-02-13T10:15:00Z",
-    "source": "error_handler",
+    "requestId": "dlt-20260213-500000",
+    "timestamp": "2026-02-13T10:40:00Z",
+    "source": "kafka_handler",
     "version": 1
   },
   "body": {
     "originalTopic": "shopee.slow",
-    "originalMessage": "{corrupted or unparseable JSON}",
-    "originalKey": "key-001",
-    "dltInfo": {
-      "reason": "DESERIALIZATION_ERROR",
-      "errorMessage": "Cannot deserialize message: Invalid JSON structure",
-      "processingAttempts": 5,
-      "lastProcessor": "backend-job-02",
-      "kafkaMetadata": {
-        "partition": 3,
-        "offset": 12345,
-        "timestamp": 1707820500000
-      }
+    "originalMessage": "{corrupted JSON...}",
+    "dltReason": "DESERIALIZATION_ERROR",
+    "errorMessage": "Cannot deserialize message",
+    "processingAttempts": 5,
+    "kafkaMetadata": {
+      "partition": 2,
+      "offset": 54321,
+      "timestamp": 1707820500000
     }
   }
 }
 ```
 
-## 3. 特殊案例
+---
 
-### 3.1 Yahoo CSV Webhook
-Yahoo 商品同步透過 webhook 接收 CSV，直接寫入 yahoo.slow。
+## Redis 去重策略
 
-```json
-{
-  "header": {
-    "taskType": "PROCESS_YAHOO_CSV",
-    "merchantId": "M001",
-    "channelId": "YAHOO_001",
-    "requestId": "webhook-20260213-101200",
-    "timestamp": "2026-02-13T10:12:00Z",
-    "source": "webhook",
-    "version": 1,
-    "priority": "NORMAL"
-  },
-  "body": {
-    "csvUrl": "https://storage.example.com/yahoo/products_20260213.csv",
-    "csvMetadata": {
-      "fileSize": 1048576,
-      "rows": 5000,
-      "columns": ["product_id", "name", "price", "inventory"],
-      "encoding": "UTF-8",
-      "delimiter": ","
-    },
-    "webhookInfo": {
-      "webhookId": "WH001",
-      "receivedAt": "2026-02-13T10:12:00Z",
-      "signature": "sha256=..."
-    },
-    "processingOptions": {
-      "validateData": true,
-      "updateExisting": true,
-      "createNew": false
-    }
-  }
-}
-```
+見 `REDIS_DEDUPLICATION.md`
 
-### 3.2 大批量商品同步
-分批處理 10000 筆商品。
+- **Key 格式**: `order:hash:{merchantId}:{channelId}:{orderId}`
+- **特殊字元保留**: 訂單號中的 `#`, `-`, `@` 等字元必須完整保留
+- **例子**:
+  - `order:hash:M001:SHOPIFY_001:1002#100` (不同於 `order:hash:M001:SHOPIFY_001:1002100`)
+  - `order:hash:M001:CYBERBIZ_002:ORD@2024-001`
 
-```json
-{
-  "header": {
-    "taskType": "SYNC_PRODUCT_BATCH",
-    "merchantId": "M001",
-    "channelId": "PCHOME_001",
-    "requestId": "batch-20260213-001-01",
-    "timestamp": "2026-02-13T10:13:00Z",
-    "source": "batch_processor",
-    "version": 1,
-    "priority": "LOW"
-  },
-  "body": {
-    "batchInfo": {
-      "batchId": "BATCH-20260213-001",
-      "totalProducts": 10000,
-      "totalBatches": 100,
-      "currentBatch": 1,
-      "batchSize": 100
-    },
-    "products": [
-      {
-        "id": "SKU001",
-        "name": "Product 1",
-        "price": 1000,
-        "inventory": 50,
-        "attributes": {
-          "color": "red",
-          "size": "M"
-        }
-      },
-      {
-        "id": "SKU002",
-        "name": "Product 2",
-        "price": 2000,
-        "inventory": 30,
-        "attributes": {
-          "color": "blue",
-          "size": "L"
-        }
-      }
-      // ... 98 more products
-    ],
-    "syncOptions": {
-      "updatePrice": true,
-      "updateInventory": true,
-      "updateAttributes": false
-    }
-  }
-}
-```
+---
 
-## 4. TaskType 對應 Handler Class
+## 冪等性保證
 
-根據 header.taskType 決定使用哪個處理類別：
+### TaskType 路由
+| TaskType | Handler | 來源 Topic | 目標 Topic | 說明 |
+|----------|---------|-----------|-----------|------|
+| FETCH_ORDERS | FetchOrdersHandler | {platform}.fast | order.process | 通路訂單列表 |
+| FETCH_ORDER_DETAIL | FetchOrderDetailHandler | {platform}.slow | order.process | 訂單詳情 |
+| SHIP_ORDER | ShipOrderHandler | {platform}.fast | order.process | 出貨指令 |
+| UPDATE_PRICE | UpdatePriceHandler | {platform}.fast | product.sync | 價格更新 |
+| UPDATE_INVENTORY | UpdateInventoryHandler | {platform}.fast | inventory.update | 庫存更新 |
+| SYNC_PRODUCT | SyncProductHandler | {platform}.slow | product.sync | 商品詳情 |
+| FETCH_RETURNS | FetchReturnsHandler | {platform}.slow | return.process | 退貨列表 |
+| FETCH_RETURN_DETAIL | FetchReturnDetailHandler | {platform}.slow | return.process | 退貨詳情 |
+| APPROVE_RETURN | ApproveReturnHandler | {platform}.fast | return.process | 同意退貨 |
+| NEW_ORDER | NewOrderHandler | order.process | - | 新訂單入庫 |
+| UPDATE_ORDER | UpdateOrderHandler | order.process | - | 訂單狀態更新 |
+| NEW_RETURN | NewReturnHandler | return.process | - | 新退貨入庫 |
+| PRODUCT_SYNCED | ProductSyncedHandler | product.sync | - | 同步完成 |
+| INVENTORY_UPDATED | InventoryUpdatedHandler | inventory.update | - | 庫存完成 |
+| FAILED_TASK | FailedTaskHandler | task.failed | - | 失敗紀錄 |
+| DLT_MESSAGE | DltHandler | task.dlt | - | 死信處理 |
 
-| TaskType | Handler Class | Topic |
-|----------|--------------|-------|
-| FETCH_ORDERS | FetchOrdersHandler | {platform}.fast |
-| SYNC_PRODUCT_FAST | SyncProductFastHandler | {platform}.fast |
-| FETCH_PRODUCT_DETAIL | FetchProductDetailHandler | {platform}.slow |
-| SYNC_INVENTORY_BATCH | SyncInventoryBatchHandler | {platform}.slow |
-| PROCESS_YAHOO_CSV | ProcessYahooCsvHandler | yahoo.slow |
-| NEW_ORDER | NewOrderHandler | order.process |
-| UPDATE_ORDER | UpdateOrderHandler | order.process |
-| GENERATE_REPORT | GenerateReportHandler | task.backend |
-| SYNC_MASTER_DATA | SyncMasterDataHandler | task.backend |
-| EXPORT_DATA | ExportDataHandler | task.frontend |
-| BULK_UPDATE | BulkUpdateHandler | task.frontend |
-| DISPATCH_ORDER_FETCH | DispatchOrderFetchHandler | scheduler |
-| HEALTH_CHECK | HealthCheckHandler | scheduler |
-| FAILED_TASK | FailedTaskHandler | task.failed |
-| DLT_MESSAGE | DltMessageHandler | task.dlt |
+---
 
-## 5. 版本管理
+## 文件交叉參考
 
-- 所有訊息 header 都包含 `version` 欄位
-- 目前版本: 1
-- 不支援的版本會被路由到 task.dlt
-- 版本升級策略：
-  - v1 → v2: Handler 需同時支援兩個版本
-  - 逐步遷移，確保向後相容
-  - 廢棄舊版本前需公告週期
-
-## 6. 錯誤處理流程
-
-1. **可重試錯誤** → task.failed (保留 1 天)
-   - API timeout
-   - Rate limiting
-   - Temporary network issues
-   - Database connection issues
-
-2. **不可重試錯誤** → task.dlt (保留 30 天)
-   - Deserialization errors
-   - Version mismatch (unsupported version)
-   - Invalid message structure
-   - Missing required fields in header
-
-## 7. 配置覆寫
-
-所有 topic 保留時間可透過 application.yml 覆寫：
-
-```yaml
-simpleec:
-  kafka:
-    retention:
-      channel: 1d        # 所有 channel topics (fast/slow)
-      order-process: 1d  # 未來穩定後會降至 2h
-      task-backend: 1d
-      task-frontend: 1d
-      scheduler: 1d
-      task-failed: 1d
-      task-dlt: 30d      # 死信保留較久以便調查
-```
-
-## 8. 最佳實踐
-
-1. **Header 設計原則**
-   - Header 只包含路由和追蹤資訊
-   - 業務資料全部放在 body
-   - Header 欄位保持精簡，避免過度設計
-
-2. **Body 設計原則**
-   - 根據 taskType 定義明確的資料結構
-   - 使用嵌套物件而非扁平結構
-   - 保留擴展性，使用物件而非基本型別
-
-3. **TaskType 命名規範**
-   - 使用 UPPER_SNAKE_CASE
-   - 動詞_名詞格式 (如 FETCH_ORDERS)
-   - 避免過於通用的名稱
-
-4. **錯誤處理**
-   - 可重試的暫時性錯誤送往 task.failed
-   - 無法解析或結構錯誤送往 task.dlt
-   - 保留完整錯誤上下文以便除錯
+- **CORE_CONTRACTS.md**: 核心契約和 TaskType 定義
+- **REDIS_DEDUPLICATION.md**: Redis 去重和特殊字元處理
+- **DATA_FLOW_MAPPING.md**: 通路資料流轉
+- **HANDLER_REGISTRY.md**: Handler 實現對應
+- **CHANNEL_IMPLEMENTATION_GUIDE.md**: Channel Job 實作指南

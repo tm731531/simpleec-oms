@@ -219,8 +219,11 @@
 - 訂單：`{merchantId}:{channelId}:{orderId}`
 - 商品：`{merchantId}:{channelId}:{productId}`
 - 任務：`{requestId}`
+- **重要**：訂單號碼中的特殊字元（如 `#`, `-`, `@`）具有業務意義，必須完整保留
+- 詳見：`REDIS_DEDUPLICATION.md`
 
 ### 8.2 重複處理策略
-- 使用 Redis 記錄已處理的 requestId
+- 使用 Redis 記錄已處理的 requestId 和資源 Hash
 - TTL = 7 天
-- 重複訊息直接 ACK 不處理
+- Hash 變更檢測：Channel Job 讀取，Process Job 寫入
+- 詳見：`REDIS_DEDUPLICATION.md`
