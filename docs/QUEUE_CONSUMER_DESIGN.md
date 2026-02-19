@@ -281,7 +281,89 @@ FETCH_RETURNS { timestamp: "..." }  # 類似邏輯
 沒有定時排程，完全由用戶需求驅動。
 ```
 
-### 報表生成策略（task.backend） — 時區感知 + 任務分散
+### 報表生成策略（task.backend） — 時區感知 + 任務分散 + 增量快取
+
+**兩層設計**：避免每筆訂單都重算（性能浪費）
+
+#### 第一層：訂單狀態變更 → 寫快取標記
+
+```
+訂單狀態更新時（如出貨、完成、退貨等）：
+  1. 不做任何報表計算
+  2. 只寫一筆快取：
+     cache["channel_recompute"][channel_id] = true
+
+  例如：
+    訂單 ORD-001 在 Shopee 出貨 → cache["channel_recompute"]["SHOPEE_001"] = true
+    訂單 ORD-002 在 Momo 完成   → cache["channel_recompute"]["MOMO_001"] = true
+    訂單 ORD-003 在 Shopee 退貨 → cache["channel_recompute"]["SHOPEE_001"] = true
+
+  ✅ 優點：零計算成本，只是標記需要重算的通路
+```
+
+#### 第二層：Scheduler 定期檢查快取 → 批量派發
+
+```
+每 5 分鐘，Scheduler 執行：
+  1. 檢查 cache["channel_recompute"]
+  2. 收集所有 channel_id
+  3. 根據 reportType 計算偏移，分散派發：
+
+     if (current_minute % 5 == offset_for_orders) {
+         // 訂單報表：發送需要重算的 channel 列表
+         for (channelId in cache["channel_recompute"].keys()) {
+             task.backend.send({
+                 taskType: "RECOMPUTE_ORDER_REPORT",
+                 channelId: channelId,
+                 timestamp: current_timestamp
+             })
+         }
+         // 清空快取
+         cache["channel_recompute"].clear()
+     }
+
+  4. 不同報表類型在不同分鐘觸發：
+     - 01, 06, 11... → 訂單報表
+     - 02, 07, 12... → 庫存報表
+     - 03, 08, 13... → 銷售額報表
+     - 04, 09, 14... → 退貨報表
+```
+
+#### 第三層：Backend Handler 根據 Channel 重算報表
+
+```
+Handler 接收 RECOMPUTE_ORDER_REPORT：
+  1. 根據 channelId 查詢該通路所有訂單
+  2. 計算聚合數據（銷售額、數量、狀態分佈等）
+  3. 更新（或新增）銷售統計表：
+
+     UPDATE sales_stats
+     SET
+       total_sales = xxx,
+       order_count = xxx,
+       avg_price = xxx,
+       updated_at = now()
+     WHERE channel_id = ? AND report_date = ?
+
+  4. 記錄處理時間，便於監控
+
+⚠️  關鍵優勢：
+  - 只在狀態變更時寫快取（成本低）
+  - 每 5 分鐘批量重算一次（不是每筆訂單）
+  - 多個訂單更新同一通路 → 一次重算搞定
+```
+
+---
+
+**原理對比**：
+
+| 方式 | 性能 | 準確性 | 複雜度 |
+|------|------|--------|--------|
+| 每筆訂單直接重算 | ❌ 浪費（大量重複計算） | ✅ 實時 | 低 |
+| **快取 + 定期批量** | ✅ 高效 | ⚠️ 延遲 5 分鐘 | 中 |
+| 每天重算一次 | ✅ 最高效 | ❌ 延遲太大 | 低 |
+
+---
 
 ```
 ⚠️  關鍵：避免 Thundering Herd 問題 — 不同「事項（報表類型）」在不同分鐘觸發！
