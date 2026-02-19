@@ -434,7 +434,8 @@ order.process Handler 接收後，查詢資料庫判斷是新訂單還是已存�
     "timestamp": "2026-02-13T10:35:00Z",
     "source": "channel_job",
     "version": 1,
-    "correlationId": "fetch_req_001"
+    "correlationId": "fetch_req_001",
+    "isRollback": false
   },
   "body": {
     "orderData": {

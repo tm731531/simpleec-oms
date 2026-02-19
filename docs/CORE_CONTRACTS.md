@@ -69,6 +69,9 @@
 - `correlationId`: 串連相關訊息，如 FETCH_ORDERS → FETCH_ORDER_DETAIL → PROCESS_ORDER 的關聯（選填）
 - `retryCount`: 重試次數（選填）
 - `priority`: 優先度 HIGH/NORMAL/LOW（選填）
+- `isRollback`: 是否為回補訂單（遺漏的過往訂單）（選填，預設 false）
+  - `true`: 過去遺漏、現在回補；業績/統計/庫存計算邏輯不同
+  - `false`: 新訂單，正常計入當日營業額
 
 ## 4. 核心 TaskType 定義
 
@@ -245,7 +248,8 @@ easystore:
     "channelId": "SHOPEE_001",
     "requestId": "process_req_001",
     "timestamp": "2026-02-13T09:35:00Z",
-    "version": 1
+    "version": 1,
+    "isRollback": false
   },
   "body": {
     "orderData": {
@@ -303,6 +307,16 @@ easystore:
 - 若新訂單，INSERT；若已存在，UPDATE
 - 執行業務驗證（如庫存檢查、積分計算等）
 - 計算 order hash 用於後續變更偵測（存入 Redis）
+- **根據 `header.isRollback` 調整業務邏輯**：
+  - `isRollback=false`：正常訂單
+    - 業績計入當日（based on `channelCreatedAt`）
+    - 庫存正常扣減
+    - 統計數據正常計入
+  - `isRollback=true`：回補訂單（遺漏的過往訂單）
+    - 業績追溯原日期（based on `channelCreatedAt`，不是當日）
+    - 庫存調整時可能需要特殊處理
+    - 統計數據標記為回補，可能不計入排名
+    - 發送回補專用事件通知（如重新計算日報）
 
 **Handler 不應做的事**：
 - ❌ 調用通路 API
