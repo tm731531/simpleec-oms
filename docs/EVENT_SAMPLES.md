@@ -472,29 +472,28 @@ order.process Handler 接收後，查詢資料庫判斷是新訂單還是已存�
 ### task.backend - 後端非同步任務
 保留時間：1d
 
-**TaskType: SYNC_PRODUCT** - 商品同步
+**TaskType: SYNC_PRODUCT** - 商品同步（由 {platform}.slow 派發，獨立 Handler 處理）
 
 ```json
 {
   "header": {
     "taskType": "SYNC_PRODUCT",
     "merchantId": "M001",
+    "platformId": "shopee",
     "channelId": "SHOPEE_001",
     "requestId": "req-20260213-320000",
     "timestamp": "2026-02-13T11:00:00Z",
-    "source": "scheduler",
+    "source": "channel_job",
     "version": 1
   },
   "body": {
-    "action": "FULL_SYNC",
-    "products": [
-      {
-        "productId": "SH-SKU-001",
-        "name": "iPhone 15 Pro Max",
-        "price": 44900,
-        "inventory": 50
-      }
-    ]
+    "sku": "SH-SKU-001",
+    "name": "iPhone 15 Pro Max",
+    "price": 44900,
+    "attributes": {
+      "color": "Space Black",
+      "capacity": "256GB"
+    }
   }
 }
 ```
@@ -546,33 +545,34 @@ order.process Handler 接收後，查詢資料庫判斷是新訂單還是已存�
 }
 ```
 
-**TaskType: SYNC_STORE** - 賣場同步
+**TaskType: SYNC_PACK** - 套包同步（UI 驅動，{platform}.slow 執行雙層檢查 + 條件派發）
 
 ```json
 {
   "header": {
-    "taskType": "SYNC_STORE",
+    "taskType": "SYNC_PACK",
     "merchantId": "M001",
+    "platformId": "pchome",
     "channelId": "PCHOME_001",
     "requestId": "req-20260213-350000",
     "timestamp": "2026-02-13T06:30:00Z",
-    "source": "scheduler",
+    "source": "admin_ui",
     "version": 1
   },
   "body": {
-    "action": "FULL_SYNC",
-    "stores": [
-      {
-        "storeId": "PCHOME_FLAGSHIP",
-        "storeName": "官方自營旗艦店",
-        "status": "ACTIVE",
-        "settings": {
-          "shippingMethods": ["HOME", "STORE_PICKUP"],
-          "shippingFee": 0,
-          "paymentMethods": ["CREDIT_CARD", "CASH"]
-        }
-      }
-    ]
+    "platformId": "pchome",
+    "specId": "SPEC-001",
+    "packName": "iPhone 15 Pro Max - Space Black 256GB",
+    "sku": "PCHOME-SKU-001",
+    "attributes": {
+      "color": "Space Black",
+      "capacity": "256GB"
+    },
+    "price": 44900,
+    "packInfo": {
+      "packStatus": "ACTIVE",
+      "visibility": "VISIBLE"
+    }
   }
 }
 ```
