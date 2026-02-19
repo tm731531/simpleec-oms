@@ -69,18 +69,17 @@
 ### 4.1 訂單相關
 | TaskType | 來源 Topic | 目標 Topic | 說明 |
 |----------|-----------|------------|------|
-| FETCH_ORDERS | {platform}.slow | order.process | 抓取訂單列表 |
+| FETCH_ORDERS | {platform}.fast | order.process | 抓取訂單列表 |
 | FETCH_ORDER_DETAIL | {platform}.slow | order.process | 抓取訂單詳情 |
-| NEW_ORDER | order.process | - | 新訂單入庫 |
-| UPDATE_ORDER | order.process | - | 訂單狀態更新 |
-| SHIP_ORDER | {platform}.fast | order.process | 出貨作業 |
+| PROCESS_ORDER | order.process | - | 訂單入庫（Handler 查詢 DB 決定 INSERT 或 UPDATE） |
+| SHIP_ORDER | {platform}.fast | task.backend | 出貨作業 |
 
 ### 4.2 退貨相關
 | TaskType | 來源 Topic | 目標 Topic | 說明 |
 |----------|-----------|------------|------|
 | FETCH_RETURNS | {platform}.slow | return.process | 抓取退貨列表 |
 | FETCH_RETURN_DETAIL | {platform}.slow | return.process | 抓取退貨詳情 |
-| NEW_RETURN | return.process | - | 新退貨入庫 |
+| PROCESS_RETURN | return.process | - | 退貨入庫（Handler 查詢 DB 決定 INSERT 或 UPDATE） |
 | APPROVE_RETURN | {platform}.fast | return.process | 同意退貨 |
 
 ### 4.3 商品相關（進入 task.backend）
@@ -94,56 +93,52 @@
 ## 5. Body 資料規範
 
 ### 5.1 FETCH_ORDERS
+
+**Scheduler 發送到 {platform}.fast:**
 ```json
 {
+  "header": {
+    "taskType": "FETCH_ORDERS",
+    "source": "scheduler"
+  },
   "body": {
-    "timeRange": {
-      "start": "2024-01-01T00:00:00Z",
-      "end": "2024-01-01T23:59:59Z"
-    },
-    "filters": {
-      // 選填：額外過濾條件
+    "fetchSpec": {
+      "orderStatus": "PENDING",
+      "description": "1小時內新訂單"
     }
   }
 }
 ```
 
-**Channel 回傳到 order.process:**
+**Channel Job 回傳到 order.process (PROCESS_ORDER):**
 ```json
 {
   "header": {
-    "taskType": "NEW_ORDER",
+    "taskType": "PROCESS_ORDER",
+    "source": "channel_job",
     "correlationId": "原始 requestId"
   },
   "body": {
-    "orders": [
-      {
-        "orderId": "通路訂單號",
-        "orderData": {
-          // 通路原始資料
-        },
-        "needsDetail": true,  // 是否需要抓詳情
-        "metadata": {
-          // Channel 判斷用資料
-        }
-      }
-    ],
-    "summary": {
-      "total": 100,
-      "fetched": 50,
-      "hasMore": true
+    "channelOrderId": "通路訂單號",
+    "orderData": {
+      // 通路原始資料
     }
   }
 }
 ```
 
 ### 5.2 FETCH_ORDER_DETAIL
+
+**slow Consumer 發送到 {platform}.slow:**
 ```json
 {
+  "header": {
+    "taskType": "FETCH_ORDER_DETAIL"
+  },
   "body": {
     "orders": [
       {
-        "orderId": "string",
+        "channelOrderId": "string",
         "metadata": {
           // Channel 特定參數
         }
@@ -153,16 +148,17 @@
 }
 ```
 
-**Channel 回傳到 order.process:**
+**Channel Job 回傳到 order.process (PROCESS_ORDER):**
 ```json
 {
   "header": {
-    "taskType": "UPDATE_ORDER",
+    "taskType": "PROCESS_ORDER",
+    "source": "channel_job",
     "correlationId": "原始 requestId"
   },
   "body": {
-    "orderId": "通路訂單號",
-    "fullOrderData": {
+    "channelOrderId": "通路訂單號",
+    "orderData": {
       // 完整訂單資料
     }
   }
