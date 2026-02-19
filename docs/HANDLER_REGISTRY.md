@@ -268,7 +268,9 @@ public class OrderUpsertHandler implements TaskHandler {
             order = existing.get();
 
             // 只有當 hash 不同時才真正更新（檢測是否有實質變化）
-            if (!orderHash.equals(existing.get().getContentHash())) {
+            // 重新計算 DB 中訂單的 hash（內存中，不是從 DB 欄位讀）
+            String dbOrderHash = calculateOrderHash(existing.get());
+            if (!orderHash.equals(dbOrderHash)) {
                 order.update(orderMapper.fromChannelData(channelId, request.getOrderData()));
                 log.info("Updated order: {} from channel {} (hash changed)",
                     order.getOrderId(), channelId);
@@ -383,7 +385,9 @@ public class ReturnUpsertHandler implements TaskHandler {
             returnRecord = existing.get();
 
             // 只有當 hash 不同時才真正更新（檢測是否有實質變化）
-            if (!returnHash.equals(existing.get().getContentHash())) {
+            // 重新計算 DB 中退貨的 hash（內存中，不是從 DB 欄位讀）
+            String dbReturnHash = calculateReturnHash(existing.get());
+            if (!returnHash.equals(dbReturnHash)) {
                 returnRecord.update(returnMapper.fromChannelData(channelId, request.getReturnData()));
                 log.info("Updated return: {} from channel {} (hash changed)",
                     returnRecord.getReturnId(), channelId);

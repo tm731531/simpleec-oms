@@ -48,7 +48,7 @@ Scheduler                    Channel Job                     Order Job          
 | create_time | orderData.createTime | - | 原始資料 |
 | update_time | orderData.updateTime | - | 原始資料 |
 | total_amount | orderData.totalAmount | - | 原始資料 |
-| **(計算的)** | **orderHash** | - | **SHA-256(訂單狀態+金額+物流+付款+項目等)** |
+| **(內存計算)** | **orderHash** | **（不存儲）** | **SHA-256，傳遞給 order.process** |
 
 #### ORDER_UPSERT（完整詳情資料）
 | API 欄位 | 訊息 Body 欄位 | Order Entity 欄位 | 說明 |
@@ -58,7 +58,14 @@ Scheduler                    Channel Job                     Order Job          
 | recipient_address | fullOrderData.shipping | shipping_address | 收件地址 |
 | total_amount | fullOrderData.payment.total | total_amount | 訂單金額 |
 | order_status | fullOrderData.status | order_status | 訂單狀態 |
-| **(計算的)** | **orderHash** | - | **SHA-256(訂單狀態+金額+物流+付款+項目等)** |
+| **(內存計算)** | **orderHash** | **（不存儲）** | **SHA-256，用於去重驗證** |
+
+**⚠️ 重要：orderHash 只在記憶體和 Redis 中**
+- ✓ Channel Job 內存計算
+- ✓ Kafka 訊息傳遞
+- ✓ Redis 存儲（value，鍵為 order:hash:...）
+- ✓ OrderUpsertHandler 內存重新計算驗證
+- ✗ **不存儲在 Order Entity 或資料庫表**
 
 ### 1.3 Channel 判斷邏輯（含 Hash 計算和去重）
 
@@ -251,12 +258,19 @@ sha256(json({
 
 ```
 訂單:  order:hash:{merchantId}:{channelId}:{channelOrderId}
+       value: SHA-256 hash（不是 Order Entity 的欄位）
+
 退貨:  return:hash:{merchantId}:{channelId}:{channelReturnId}
+       value: SHA-256 hash（不是 Return Entity 的欄位）
 
 範例：
-order:hash:M001:SHOPEE_001:20240210#1234
-return:hash:M001:SHOPEE_001:R20240210#5678
+order:hash:M001:SHOPEE_001:20240210#1234  →  "a1b2c3d4e5..."
+return:hash:M001:SHOPEE_001:R20240210#5678 →  "f6g7h8i9j0..."
 ```
+
+**⚠️ Hash 只在 Redis value 中，不在 DB 表**
+- Redis: 存儲 hash 值用於快速查詢和去重
+- Database: 訂單/退貨實體不含 hash 欄位，只含業務資料
 
 ### 4.4 去重流程示例
 
