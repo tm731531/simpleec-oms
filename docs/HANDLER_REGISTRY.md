@@ -319,6 +319,100 @@ public class OrderUpsertHandler implements TaskHandler {
 - `items` — 項目列表（包含 SKU、數量等）
 - `buyerInfo` — 買家信息
 
+**⚠️ Hash 計算務必使用 TreeMap 排序，避免 JSON 亂序**：
+```java
+// 正確做法：使用 TreeMap 排序欄位
+TreeMap<String, Object> sortedData = new TreeMap<>();
+sortedData.put("orderStatus", orderData.getOrderStatus());
+sortedData.put("paymentStatus", orderData.getPaymentStatus());
+// ... 其他欄位
+String json = objectMapper.writeValueAsString(sortedData);
+String hash = DigestUtils.sha256Hex(json);
+```
+
+### 3.3 Return Process Handler (Upsert Pattern with Hash Deduplication)
+```java
+@Component
+public class ReturnUpsertHandler implements TaskHandler {
+
+    private final ReturnService returnService;
+    private final ReturnMapper returnMapper;
+    private final RedisTemplate<String, String> redisTemplate;
+
+    @Override
+    public String getTaskType() {
+        return "RETURN_UPSERT";
+    }
+
+    @Transactional
+    @Override
+    public void handle(TaskMessage message) {
+        ReturnUpsertRequest request = parseBody(message.getBody(), ReturnUpsertRequest.class);
+        String merchantId = message.getHeader().getMerchantId();
+        String channelId = request.getChannelId();
+        String channelReturnId = request.getChannelReturnId();
+        String returnHash = request.getReturnHash();  // 從 Channel Job 傳入
+
+        // 0. 構建 Redis Key
+        String redisKey = String.format("return:hash:%s:%s:%s",
+            merchantId, channelId, channelReturnId);
+
+        // 1. 再次檢查 Redis（避免並發重複）
+        String existingHashInRedis = redisTemplate.opsForValue().get(redisKey);
+        if (returnHash.equals(existingHashInRedis)) {
+            log.info("Return already processed (Redis hash match): {}", channelReturnId);
+            return;
+        }
+
+        // 2. 檢查資料庫中是否已存在
+        Optional<Return> existing = returnService.findByChannelReturnId(channelId, channelReturnId);
+
+        Return returnRecord;
+        if (existing.isPresent()) {
+            // 2A. 更新現有退貨
+            returnRecord = existing.get();
+
+            // 只有當 hash 不同時才真正更新（檢測是否有實質變化）
+            if (!returnHash.equals(existing.get().getContentHash())) {
+                returnRecord.update(returnMapper.fromChannelData(channelId, request.getReturnData()));
+                log.info("Updated return: {} from channel {} (hash changed)",
+                    returnRecord.getReturnId(), channelId);
+            } else {
+                log.debug("Return content unchanged: {}", channelReturnId);
+                return;
+            }
+        } else {
+            // 2B. 建立新退貨
+            returnRecord = returnMapper.fromChannelData(channelId, request.getReturnData());
+            log.info("Created new return: {} from channel {}",
+                returnRecord.getReturnId(), channelId);
+        }
+
+        // 3. 儲存退貨到資料庫（insert or update）
+        returnService.save(returnRecord);
+
+        // 4. 更新 Redis Hash 快取（確保與 DB 同步）
+        redisTemplate.opsForValue().set(
+            redisKey,
+            returnHash,
+            Duration.ofDays(7)  // TTL 7 天
+        );
+
+        // 5. 觸發後續流程
+        if (returnRecord.needsApproval()) {
+            // 發送審批通知
+            producer.send(getChannelTopic(returnRecord), buildApprovalMessage(returnRecord));
+        }
+    }
+}
+```
+
+**Hash 包含的欄位**：
+- `returnStatus` — 退貨狀態
+- `reason` — 退貨原因
+- `items` — 退貨項目（數量、SKU 等）
+- `refundAmount` — 退款金額
+
 ## 4. Handler 生命週期
 
 ### 4.1 初始化階段
