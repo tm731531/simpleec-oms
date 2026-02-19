@@ -387,17 +387,64 @@ Channel Job 只負責根據 scheduler 的指令抓取並轉換資料。
 
 ---
 
-## Business Topics (業務主題 - 6個)
+## Business Topics (業務主題 - 7 個)
 
-### order.process - 訂單處理（Source of Truth）
-保留時間：1d（穩定後考慮降至 2h）
+### scheduler - 排程分發
+保留時間：1d
 
-**TaskType: NEW_ORDER** - 新訂單（Channel Job 抓取的訂單列表）
+Scheduler 根據時間和優先級，定期向各 Channel 的 fast/slow topics 發送任務指令。
+
+**TaskType: DISPATCH_ORDER_FETCH** - 分發訂單抓取任務
 
 ```json
 {
   "header": {
-    "taskType": "NEW_ORDER",
+    "taskType": "DISPATCH_ORDER_FETCH",
+    "merchantId": "M001",
+    "channelId": "MOMO_001",
+    "requestId": "sched-20260213-080000",
+    "timestamp": "2026-02-13T08:00:00Z",
+    "source": "scheduler",
+    "version": 1,
+    "priority": "HIGH"
+  },
+  "body": {
+    "fetchSpec": {
+      "orderStatus": "PENDING",
+      "description": "1小時內新訂單（08:00-09:00）"
+    }
+  }
+}
+```
+
+**Scheduler 策略示例**：
+```
+08:00 → DISPATCH(PENDING)      # 1小時內新訂單
+09:00 → DISPATCH(PENDING)      # 滑動窗口
+...
+12:00 → DISPATCH(PROCESSING)   # 3天內出貨中訂單
+12:30 → DISPATCH(SHIPPED)      # 7天內已出貨訂單
+13:00 → DISPATCH(COMPLETED)    # 7~15天內已完成訂單
+06:00 → DISPATCH(FULL_SYNC)    # 全量商品同步（每天一次）
+每小時 → UPDATE_PRICE/INVENTORY # 定期同步
+```
+
+---
+
+### order.process - 訂單處理（Source of Truth）
+保留時間：1d（穩定後考慮降至 2h）
+
+**Flow: Channel Job → order.process → Handler 判斷新建/更新**
+
+Channel Job 收到訂單後，根據 Redis Hash 判斷是否需要詳情。然後發送到 order.process。
+order.process Handler 接收後，查詢資料庫判斷是新訂單還是已存在，決定 INSERT 或 UPDATE。
+
+**TaskType: PROCESS_ORDER** - 訂單資料（Channel Job 發送的完整訂單資料）
+
+```json
+{
+  "header": {
+    "taskType": "PROCESS_ORDER",
     "merchantId": "M001",
     "channelId": "MOMO_001",
     "requestId": "req-20260213-300000",
@@ -407,8 +454,8 @@ Channel Job 只負責根據 scheduler 的指令抓取並轉換資料。
     "correlationId": "req-20260213-100000"
   },
   "body": {
-    "orderId": "ORD-SYS-20260213-001",
     "channelOrderId": "MOMO-2026021300001",
+    "orderHash": "sha256hash...",
     "orderData": {
       "orderStatus": "PENDING",
       "orderDate": "2026-02-13T09:30:00Z",
@@ -458,49 +505,25 @@ Channel Job 只負責根據 scheduler 的指令抓取並轉換資料。
 }
 ```
 
-**TaskType: UPDATE_ORDER** - 訂單狀態更新（Channel Job 抓取的詳情）
-
-```json
-{
-  "header": {
-    "taskType": "UPDATE_ORDER",
-    "merchantId": "M001",
-    "channelId": "SHOPEE_001",
-    "requestId": "req-20260213-300001",
-    "timestamp": "2026-02-13T14:00:00Z",
-    "source": "channel_job",
-    "version": 1,
-    "correlationId": "req-20260213-200000"
-  },
-  "body": {
-    "orderId": "ORD-SYS-20260213-002",
-    "channelOrderId": "SH202602130456",
-    "orderData": {
-      "orderStatus": "SHIPPED",
-      "shipmentInfo": {
-        "shippedTime": "2026-02-13T14:00:00Z",
-        "trackingNumber": "SE123456789",
-        "carrier": "7-ELEVEN",
-        "storeId": "131415"
-      },
-      "items": [],
-      "totals": {}
-    }
-  }
-}
-```
+**說明**: order.process Handler 接收後：
+- 查詢資料庫是否已存在該 channelOrderId
+- 不存在 → INSERT 新訂單（NEW_ORDER）
+- 已存在 + Hash 不同 → UPDATE 訂單（UPDATE_ORDER）
+- 已存在 + Hash 相同 → 跳過（已處理過）
 
 ---
 
 ### return.process - 退貨處理（Source of Truth）
 保留時間：1d
 
-**TaskType: NEW_RETURN** - 新退貨
+**Flow: Channel Job → return.process → Handler 判斷新建/更新**
+
+同 order.process 邏輯，Handler 判斷是新退貨還是已存在。
 
 ```json
 {
   "header": {
-    "taskType": "NEW_RETURN",
+    "taskType": "PROCESS_RETURN",
     "merchantId": "M001",
     "channelId": "YAHOO_001",
     "requestId": "req-20260213-310000",
@@ -510,9 +533,8 @@ Channel Job 只負責根據 scheduler 的指令抓取並轉換資料。
     "correlationId": "req-20260213-200002"
   },
   "body": {
-    "returnId": "RET-SYS-20260213-001",
     "channelReturnId": "YH-RET-2026021300001",
-    "orderId": "ORD-SYS-20260213-XXX",
+    "returnHash": "sha256hash...",
     "returnData": {
       "returnStatus": "PENDING_APPROVAL",
       "reason": "SIZE_MISMATCH",
@@ -532,33 +554,108 @@ Channel Job 只負責根據 scheduler 的指令抓取並轉換資料。
 
 ---
 
-### product.sync - 商品同步結果
+### task.backend - 後端非同步任務
 保留時間：1d
 
-**TaskType: PRODUCT_SYNCED** - 商品同步結果（Handler 處理結果寫回）
+**TaskType: SYNC_PRODUCT** - 商品同步
 
 ```json
 {
   "header": {
-    "taskType": "PRODUCT_SYNCED",
+    "taskType": "SYNC_PRODUCT",
     "merchantId": "M001",
     "channelId": "SHOPEE_001",
     "requestId": "req-20260213-320000",
     "timestamp": "2026-02-13T11:00:00Z",
-    "source": "product_sync_handler",
-    "version": 1,
-    "correlationId": "req-20260213-200001"
+    "source": "scheduler",
+    "version": 1
   },
   "body": {
-    "syncStatus": "SUCCESS",
-    "totalProducts": 100,
-    "successCount": 98,
-    "failureCount": 2,
-    "syncTime": "2026-02-13T11:00:00Z",
-    "failures": [
+    "action": "FULL_SYNC",
+    "products": [
       {
-        "productId": "SKU-INVALID",
-        "reason": "Missing required field: description"
+        "productId": "SH-SKU-001",
+        "name": "iPhone 15 Pro Max",
+        "price": 44900,
+        "inventory": 50
+      }
+    ]
+  }
+}
+```
+
+**TaskType: UPDATE_INVENTORY** - 庫存更新
+
+```json
+{
+  "header": {
+    "taskType": "UPDATE_INVENTORY",
+    "merchantId": "M001",
+    "channelId": "PCHOME_001",
+    "requestId": "req-20260213-330000",
+    "timestamp": "2026-02-13T10:30:00Z",
+    "source": "channel_job",
+    "version": 1
+  },
+  "body": {
+    "updates": [
+      {
+        "productId": "SKU-001",
+        "quantity": 50,
+        "type": "ABSOLUTE"
+      }
+    ]
+  }
+}
+```
+
+**TaskType: SHIP_ORDER** - 出貨指令
+
+```json
+{
+  "header": {
+    "taskType": "SHIP_ORDER",
+    "merchantId": "M001",
+    "channelId": "SHOPEE_001",
+    "requestId": "req-20260213-340000",
+    "timestamp": "2026-02-13T12:00:00Z",
+    "source": "scheduler",
+    "version": 1
+  },
+  "body": {
+    "orderId": "ORD-SYS-20260213-001",
+    "channelOrderId": "SH202602130456",
+    "shippingMethod": "SHOPEE_PICKUP",
+    "trackingNumber": "SE123456789"
+  }
+}
+```
+
+**TaskType: SYNC_STORE** - 賣場同步
+
+```json
+{
+  "header": {
+    "taskType": "SYNC_STORE",
+    "merchantId": "M001",
+    "channelId": "PCHOME_001",
+    "requestId": "req-20260213-350000",
+    "timestamp": "2026-02-13T06:30:00Z",
+    "source": "scheduler",
+    "version": 1
+  },
+  "body": {
+    "action": "FULL_SYNC",
+    "stores": [
+      {
+        "storeId": "PCHOME_FLAGSHIP",
+        "storeName": "官方自營旗艦店",
+        "status": "ACTIVE",
+        "settings": {
+          "shippingMethods": ["HOME", "STORE_PICKUP"],
+          "shippingFee": 0,
+          "paymentMethods": ["CREDIT_CARD", "CASH"]
+        }
       }
     ]
   }
@@ -567,99 +664,47 @@ Channel Job 只負責根據 scheduler 的指令抓取並轉換資料。
 
 ---
 
-### inventory.update - 庫存更新事件
+### task.frontend - 前端非同步任務
 保留時間：1d
 
-**TaskType: INVENTORY_UPDATED** - 庫存更新完成
+前端 UI 觸發的非同步任務，如資料匯出、批次更新等。
+
+**TaskType: SHIP_ORDER** (手動出貨)
 
 ```json
 {
   "header": {
-    "taskType": "INVENTORY_UPDATED",
+    "taskType": "SHIP_ORDER",
     "merchantId": "M001",
-    "channelId": "PCHOME_001",
-    "requestId": "req-20260213-330000",
-    "timestamp": "2026-02-13T10:30:00Z",
-    "source": "inventory_update_handler",
+    "channelId": "SHOPEE_001",
+    "requestId": "req-20260213-360000",
+    "timestamp": "2026-02-13T14:00:00Z",
+    "source": "admin_ui",
     "version": 1,
-    "correlationId": "req-20260213-100003"
+    "priority": "HIGH"
   },
   "body": {
-    "updateStatus": "SUCCESS",
-    "updates": [
-      {
-        "productId": "SKU-001",
-        "previousQuantity": 100,
-        "newQuantity": 50,
-        "difference": -50
-      }
-    ],
-    "updateTime": "2026-02-13T10:30:00Z"
+    "orderId": "ORD-SYS-20260213-002",
+    "channelOrderId": "SH202602130500",
+    "shippingMethod": "BLACK_CAT",
+    "carrier": "BLACK_CAT",
+    "trackingNumber": "BC123456789"
   }
 }
 ```
+
+**說明**：task.frontend 訊息隨後會被轉發到 task.backend 由 backend-task-handler 實際執行。
 
 ---
 
-### task.failed - 失敗任務
-保留時間：1d
+### task.failed - 失敗任務與死信隊列
+保留時間：1d (task.failed) / 30d (task.dlt)
 
-```json
-{
-  "header": {
-    "taskType": "FAILED_TASK",
-    "merchantId": "M001",
-    "channelId": "MOMO_001",
-    "requestId": "req-20260213-400000",
-    "timestamp": "2026-02-13T10:35:00Z",
-    "source": "error_handler",
-    "version": 1
-  },
-  "body": {
-    "originalTopic": "momo.fast",
-    "originalTaskType": "FETCH_ORDERS",
-    "originalRequestId": "req-20260213-100000",
-    "failureInfo": {
-      "errorCode": "API_TIMEOUT",
-      "errorMessage": "MOMO API request timeout after 30s",
-      "retryCount": 3,
-      "maxRetries": 3,
-      "isRetryable": false,
-      "failedAt": "2026-02-13T10:35:00Z"
-    }
-  }
-}
-```
+**說明**：
+- task.failed：可重試的失敗訊息，error-handler 會根據錯誤類型決定是否重試或轉移到 task.dlt
+- task.dlt：無法恢復的訊息，dlt-handler 記錄詳細資訊並發出告警
 
----
-
-### task.dlt - 死信隊列
-保留時間：30d
-
-```json
-{
-  "header": {
-    "taskType": "DLT_MESSAGE",
-    "merchantId": "UNKNOWN",
-    "requestId": "dlt-20260213-500000",
-    "timestamp": "2026-02-13T10:40:00Z",
-    "source": "kafka_handler",
-    "version": 1
-  },
-  "body": {
-    "originalTopic": "shopee.slow",
-    "originalMessage": "{corrupted JSON...}",
-    "dltReason": "DESERIALIZATION_ERROR",
-    "errorMessage": "Cannot deserialize message",
-    "processingAttempts": 5,
-    "kafkaMetadata": {
-      "partition": 2,
-      "offset": 54321,
-      "timestamp": 1707820500000
-    }
-  }
-}
-```
+詳見 CORE_CONTRACTS.md 第 6 章「錯誤處理契約」
 
 ---
 
@@ -675,27 +720,41 @@ Channel Job 只負責根據 scheduler 的指令抓取並轉換資料。
 
 ---
 
-## 冪等性保證
+## TaskType 路由對應表
 
-### TaskType 路由
-| TaskType | Handler | 來源 Topic | 目標 Topic | 說明 |
-|----------|---------|-----------|-----------|------|
-| FETCH_ORDERS | FetchOrdersHandler | {platform}.fast | order.process | 通路訂單列表 |
-| FETCH_ORDER_DETAIL | FetchOrderDetailHandler | {platform}.slow | order.process | 訂單詳情 |
-| SHIP_ORDER | ShipOrderHandler | {platform}.fast | order.process | 出貨指令 |
-| UPDATE_PRICE | UpdatePriceHandler | {platform}.fast | product.sync | 價格更新 |
-| UPDATE_INVENTORY | UpdateInventoryHandler | {platform}.fast | inventory.update | 庫存更新 |
-| SYNC_PRODUCT | SyncProductHandler | {platform}.slow | product.sync | 商品詳情 |
-| FETCH_RETURNS | FetchReturnsHandler | {platform}.slow | return.process | 退貨列表 |
-| FETCH_RETURN_DETAIL | FetchReturnDetailHandler | {platform}.slow | return.process | 退貨詳情 |
-| APPROVE_RETURN | ApproveReturnHandler | {platform}.fast | return.process | 同意退貨 |
-| NEW_ORDER | NewOrderHandler | order.process | - | 新訂單入庫 |
-| UPDATE_ORDER | UpdateOrderHandler | order.process | - | 訂單狀態更新 |
-| NEW_RETURN | NewReturnHandler | return.process | - | 新退貨入庫 |
-| PRODUCT_SYNCED | ProductSyncedHandler | product.sync | - | 同步完成 |
-| INVENTORY_UPDATED | InventoryUpdatedHandler | inventory.update | - | 庫存完成 |
-| FAILED_TASK | FailedTaskHandler | task.failed | - | 失敗紀錄 |
-| DLT_MESSAGE | DltHandler | task.dlt | - | 死信處理 |
+### 通路主題 → 業務主題 的 TaskType 對應
+
+| TaskType | 來源 Topic | 目標 Topic | Consumer Group | 說明 |
+|----------|-----------|-----------|----------------|------|
+| FETCH_ORDERS | {platform}.fast | order.process | channel-job-{platform}-fast | 通路訂單列表 |
+| FETCH_ORDER_DETAIL | {platform}.slow | order.process | channel-job-{platform}-slow | 訂單詳情 |
+| SHIP_ORDER | {platform}.fast | task.backend | channel-job-{platform}-fast | 出貨指令 |
+| UPDATE_PRICE | {platform}.fast | task.backend | channel-job-{platform}-fast | 價格更新 |
+| UPDATE_INVENTORY | {platform}.fast | task.backend | channel-job-{platform}-fast | 庫存更新 |
+| SYNC_PRODUCT | {platform}.slow | task.backend | channel-job-{platform}-slow | 商品詳情 |
+| SYNC_STORE | {platform}.slow | task.backend | channel-job-{platform}-slow | 賣場同步 |
+| FETCH_RETURNS | {platform}.slow | return.process | channel-job-{platform}-slow | 退貨列表 |
+| FETCH_RETURN_DETAIL | {platform}.slow | return.process | channel-job-{platform}-slow | 退貨詳情 |
+| APPROVE_RETURN | {platform}.fast | return.process | channel-job-{platform}-fast | 同意退貨 |
+
+### 業務主題 → 處理邏輯 的 TaskType 對應
+
+| TaskType | 來源 Topic | Handler | 說明 |
+|----------|-----------|---------|------|
+| PROCESS_ORDER | order.process | order-process-handler | 訂單入庫（Handler 查詢 DB 決定 INSERT 或 UPDATE） |
+| PROCESS_RETURN | return.process | return-process-handler | 退貨入庫（Handler 查詢 DB 決定 INSERT 或 UPDATE） |
+| SYNC_PRODUCT | task.backend | backend-task-handler | 商品同步 |
+| UPDATE_INVENTORY | task.backend | backend-task-handler | 庫存更新 |
+| UPDATE_PRICE | task.backend | backend-task-handler | 價格更新 |
+| SYNC_STORE | task.backend | backend-task-handler | 賣場同步 |
+| SHIP_ORDER | task.backend | backend-task-handler | 出貨作業 |
+
+### 錯誤處理 TaskType
+
+| TaskType | 來源 Topic | Handler | 說明 |
+|----------|-----------|---------|------|
+| FAILED_TASK | task.failed | error-handler | 可重試的失敗訊息（max retry 後轉移到 task.dlt） |
+| DLT_MESSAGE | task.dlt | dlt-handler | 無法恢復的訊息，記錄並發出告警 |
 
 ---
 
