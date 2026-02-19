@@ -163,9 +163,6 @@ public class HandlerRegistry {
 | RETURN_REPORT | ReturnReportHandler | task.backend | 生成退貨報表（統計各通路退貨） | 每5分鐘 (% 5 == 4) |
 | KAFKA_HEALTH_CHECK | KafkaHealthHandler | task.backend | Kafka 健康檢查 | 每10分鐘 (% 10 == 5) |
 | DAILY_REPORT | DailyReportHandler | task.backend | 每日報表生成 | 每日 :00 和 :30 |
-| UPDATE_INVENTORY | UpdateInventoryHandler | task.backend | 更新庫存 | 由通路或用戶派發 |
-| UPDATE_PRICE | UpdatePriceHandler | task.backend | 更新價格 | 由通路或用戶派發 |
-| SHIP_ORDER | ShipOrderHandler | task.backend | 執行出貨（後端自動或用戶手動） | 由通路或用戶派發 |
 
 ## 3. Handler 實作範例
 
