@@ -60,7 +60,7 @@ const microApps: RegistrableApp<Record<string, any>>[] = [
   },
   {
     name: 'simpleec-oms-user',
-    entry: 'http://localhost:8082',
+    entry: 'http://localhost:8083',
     container: '#qiankun-container',
     activeRule: '/app/',
     props: {
