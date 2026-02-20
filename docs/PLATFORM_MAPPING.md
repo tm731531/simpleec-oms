@@ -155,9 +155,9 @@
 {
   "sellPackId": "string",                 // OMS 上架記錄 ID（unique key）
   "merchantId": "string",                 // 商家 ID
-  "productId": "string",                  // FK → Product.productId（可能為 null = 孤立上架）
+  "productId": "string",                  // FK → Product.productId（可能為 null：客戶不想管 或 還沒建品）
   "channelId": "string",                  // FK → Channel.id（通路實例）
-  "sku": "string",                        // 通路上的 SKU（用於 match product.sku，但可能找不到）
+  "sku": "string",                        // 通路上的 SKU（用於 match product.sku，但客戶可能還沒建）
   "channelProductId": "string",           // 通路方給的商品 ID（e.g., Shopee item_id）
   "channelSpecId": "string",              // 通路上的規格 ID（e.g., Shopee variation_id）
   "channelProductName": "string",         // 通路上展示的商品名稱
@@ -184,8 +184,13 @@
 - 1 個 Product 在 1 個 Channel 可以有**多個 SellPack**（不同規格/SKU 組合）
   - 例：iPhone 在 Shopee 有 3 個上架：紅色/128G、紅色/256G、黑色/128G
   - 每個上架是獨立的 SellPack 記錄（不同 channelSpecId 和 sku）
-- **Unique Key**：(channelId, channelSpecId, sku) = 唯一
+- **Unique Key**：(channelId, channelProductId, channelSpecId) = 唯一
   - 允許同一 product 重複上架（不同規格組合）
+- **productId 可以為 null**（兩種情況）：
+  1. 客戶決定不在 OMS 維護該產品（只在通路管理）
+  2. 產品先上架到通路，OMS 尚未建立對應 Product 記錄
+  - SellPack.sku 用來嘗試 match Product.sku，但 match 可能失敗（客戶還沒建品）
+  - Handler 遇到 productId=null 時應記錄但不中斷流程
 - Product.sku = 我們的內部 SKU，SellPack.sku = 平台上的 SKU（可能不同）
 - SellPack.quantity = 平台顯示的庫存，與 Product.quantity 獨立
 - 平台決定「我的 channel 要上架哪些 product + 規格組合」
