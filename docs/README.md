@@ -1,9 +1,11 @@
-# SimpleEC OMS 文檔指南 v2.0
+# SimpleEC OMS 文檔指南 v2.3
 
 本目錄包含 SimpleEC OMS 多通路訂單管理系統的完整設計文檔。
++ **上層**：[PLAN/](../PLAN/) 資料夾（架構規劃與實施指南）
++ **本層**：docs/ 資料夾（詳細設計與執行參考）
 
 > **最後更新**：2026-02-20
-> **版本**：2.1（Mode A/B 架構模式新增，Core Contracts 與 Queue Design 同步）
+> **版本**：2.3（PLAN/ 資料夾新增，包含 5 份架構規劃文檔）
 
 ---
 
@@ -29,6 +31,28 @@
 ---
 
 ## 📚 文檔導覽
+
+### ⭐ **第零層：架構規劃與實施指南 (PLAN)**
+
+#### **[../PLAN/](../PLAN/)** — 從零開始的系統設計藍圖
+
+新開發者 / 架構師必讀。5 份設計文檔涵蓋從概念到上線的完整規劃：
+
+| 文檔 | 用途 | 讀者 |
+|------|------|------|
+| **[00-OVERVIEW.md](../PLAN/00-OVERVIEW.md)** | 5 分鐘快速理解系統定位、設計原則、11 個模組、16 個 Topic | 所有新人 |
+| **[01-KAFKA-TOPOLOGY.md](../PLAN/01-KAFKA-TOPOLOGY.md)** | Producer/Consumer/Topic 完整拓撲圖、Consumer Group 分配、故障排查 | 架構師、後端 |
+| **[02-MODULE-DESIGN.md](../PLAN/02-MODULE-DESIGN.md)** | 11 個 Gradle 模組的詳細設計、職責邊界、依賴關係、關鍵類別 | 後端開發 |
+| **[03-IMPLEMENTATION-ORDER.md](../PLAN/03-IMPLEMENTATION-ORDER.md)** | 5 個開發階段 (Phase I-V)、4-5 個月交付計劃、里程碑與測試計劃 | PM、架構師 |
+| **[04-INTERFACE-CONTRACTS.md](../PLAN/04-INTERFACE-CONTRACTS.md)** | 9 個 Consumer 介面定義、Platform Adapter 介面、Kafka 訊息 Schema、異常處理 | 後端開發 |
+
+**推薦閱讀順序**：
+1. 所有新人：PLAN/00-OVERVIEW.md（5 分鐘）
+2. 架構師：PLAN/01-KAFKA-TOPOLOGY.md → 02-MODULE-DESIGN.md
+3. 後端開發：PLAN/02-MODULE-DESIGN.md → 04-INTERFACE-CONTRACTS.md
+4. 專案經理：PLAN/03-IMPLEMENTATION-ORDER.md
+
+---
 
 ### 🔴 **第一層：設計契約（必讀所有）**
 
@@ -304,6 +328,7 @@ git commit -m "Updated CORE_CONTRACTS & EVENT_SAMPLES for PROCESS_ORDER design"
 
 | 版本 | 日期 | 主要變更 |
 |------|------|---------|
+| **2.3** | 2026-02-20 | **新增 PLAN/ 資料夾（第零層）** — 5 份架構規劃文檔：00-OVERVIEW、01-KAFKA-TOPOLOGY、02-MODULE-DESIGN、03-IMPLEMENTATION-ORDER、04-INTERFACE-CONTRACTS；包含 Heartbeat+Scheduler、Mode A/B、兩層 Redis 去重、11 模組設計、5 階段實施計劃 |
 | **2.2** | 2026-02-20 | **新增 ARCHITECTURE_OVERVIEW.md** 統整全系統；HANDLER_REGISTRY.md Mode A/B 平台分類；所有角色路線圖更新；12 份文檔完全同步 |
 | **2.1** | 2026-02-20 | Mode A/B 架構模式新增至 CORE_CONTRACTS + CHANNEL_IMPLEMENTATION_GUIDE + QUEUE_CONSUMER_DESIGN；DATA_FLOW_MAPPING.md 升至第一層；文檔同步一致性確認 |
 | **2.0** | 2026-02-19 | 刪除過時文檔（STATUS/ABSTRACT_DESIGN/IMPLEMENTATION_PLAN）；重整文檔層級；強調 Channel Job 數據轉換責任；PROCESS_ORDER 統一設計 |
