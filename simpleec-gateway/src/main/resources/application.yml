@@ -1,0 +1,12 @@
+spring:
+  application:
+    name: simpleec-gateway
+  kafka:
+    bootstrap-servers: localhost:9092
+
+server:
+  port: 8088
+
+logging:
+  level:
+    com.simpleec: DEBUG

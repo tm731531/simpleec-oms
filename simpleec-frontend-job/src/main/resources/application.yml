@@ -1,0 +1,19 @@
+spring:
+  application:
+    name: simpleec-frontend-job
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  datasource:
+    url: jdbc:postgresql://localhost:5432/simpleec
+    username: simpleec
+    password: simpleec123
+  kafka:
+    bootstrap-servers: localhost:9092
+
+server:
+  port: 8089
+
+logging:
+  level:
+    com.simpleec: DEBUG

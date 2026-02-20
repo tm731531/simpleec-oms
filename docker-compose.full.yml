@@ -1,0 +1,239 @@
+version: '3.8'
+
+services:
+  # ============ 基礎設施 ============
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: simpleec_postgres
+    environment:
+      POSTGRES_DB: simpleec
+      POSTGRES_USER: simpleec
+      POSTGRES_PASSWORD: simpleec123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U simpleec" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: simpleec_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: simpleec_zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    healthcheck:
+      test: [ "CMD", "nc", "-z", "localhost", "2181" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: simpleec_kafka
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_NUM_PARTITIONS: 8
+    ports:
+      - "9092:9092"
+    healthcheck:
+      test: [ "CMD", "kafka-broker-api-versions.sh", "--bootstrap-server=localhost:9092" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ============ OMS 核心服務 ============
+
+  scheduler-job:
+    build:
+      context: .
+      dockerfile: Dockerfile.scheduler-job
+    container_name: simpleec_scheduler_job
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/simpleec
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    ports:
+      - "8083:8083"
+    restart: on-failure
+
+  channel-job:
+    build:
+      context: .
+      dockerfile: Dockerfile.channel-job
+    container_name: simpleec_channel_job
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/simpleec
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    ports:
+      - "8084:8084"
+    restart: on-failure
+
+  order-job:
+    build:
+      context: .
+      dockerfile: Dockerfile.order-job
+    container_name: simpleec_order_job
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/simpleec
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SPRING_REDIS_HOST: redis
+    ports:
+      - "8085:8085"
+    restart: on-failure
+
+  backend-job:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend-job
+    container_name: simpleec_backend_job
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/simpleec
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    ports:
+      - "8086:8086"
+    restart: on-failure
+
+  retry-job:
+    build:
+      context: .
+      dockerfile: Dockerfile.retry-job
+    container_name: simpleec_retry_job
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/simpleec
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    ports:
+      - "8087:8087"
+    restart: on-failure
+
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.gateway
+    container_name: simpleec_gateway
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    ports:
+      - "8088:8088"
+    restart: on-failure
+
+  frontend-job:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend-job
+    container_name: simpleec_frontend_job
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/simpleec
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    ports:
+      - "8089:8089"
+    restart: on-failure
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: simpleec_api
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/simpleec
+    ports:
+      - "8082:8082"
+    restart: on-failure
+
+  # ============ 監控 & 管理工具 ============
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: simpleec_kafka_ui
+    depends_on:
+      - kafka
+    environment:
+      KAFKA_CLUSTERS_0_NAME: simpleec
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+    ports:
+      - "8080:8080"
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: simpleec_pgadmin
+    depends_on:
+      - postgres
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@simpleec.local
+      PGADMIN_DEFAULT_PASSWORD: simpleec123
+    ports:
+      - "5050:80"
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  default:
+    name: simpleec-network
