@@ -113,14 +113,17 @@ onMounted(async () => {
     await start({
       singular: true,
       sandbox: {
-        strictStyleIsolation: false,
-        experimentalStyleIsolation: true
+        strictStyleIsolation: true,
+        experimentalStyleIsolation: false
       }
     })
 
     console.log('Qiankun started successfully')
   } catch (err) {
-    console.error('Failed to initialize qiankun:', err)
+    const errorMessage = err instanceof Error
+      ? err.message
+      : String(err)
+    console.error('Failed to initialize qiankun:', errorMessage)
     error.value = 'Failed to initialize container'
   }
 })
