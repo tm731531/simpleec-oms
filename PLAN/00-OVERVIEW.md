@@ -106,40 +106,53 @@ task.dlt          ← 死信隊列（最終棄置）
 
 ---
 
-## 19 張資料庫表總覽
+## 資料庫表設計原則
 
-### 核心表（5 張）
-- `orders` — 聚合訂單
-- `order_items` — 訂單商品行項目
-- `returns` — 退貨單
-- `return_items` — 退貨行項目
-- `inventory_snapshots` — 庫存快照（每日分區）
+### 訂單為完整業務單位
+- `orders` 包含 `items` **JSON 欄位**（而非拆分為 order_items 表）
+- `returns` 包含 `items` **JSON 欄位**（而非拆分為 return_items 表）
+- **原因**：Kafka 訊息中訂單/退貨以完整單位流動 → Consumer 層一次性 INSERT/UPDATE → 保證 ACID
+- 不需要跨表 JOIN，減少複雜度
 
-### 商業表（7 張）
+---
+
+## 16 張資料庫表總覽
+
+### 核心表（2 張）
+- `orders` — 聚合訂單（items JSONB）
+  - PK: order_id (NanoID)
+  - 重要欄位: platform, channel_order_id, customer (JSON/AES), items (JSONB), status, amount
+
+- `returns` — 退貨單（items JSONB）
+  - PK: return_id (NanoID)
+  - 重要欄位: order_id (FK), reason, items (JSONB), status, refund_amount
+
+### 商業表（8 張）
 - `products` — 聚合商品主檔
-- `skus` — 商品 SKU
-- `platforms` — 通路平台設定
+- `skus` — 商品 SKU（platform_sku 映射）
+- `platforms` — 通路平台設定（mode: A/B）
 - `platform_mappings` — 通路欄位映射規則
 - `categories` — 商品分類
-- `shipments` — 出貨紀錄
+- `shipments` — 出貨紀錄（tracking 追蹤）
 - `daily_statistics` — 日統計（分區表）
+- `warehouse_queues` — 倉庫佇列（待出貨訂單）
 
-### 通知表（3 張）
-- `notifications` — 事件通知隊列
-- `audit_logs` — 稽核日誌
-- `error_logs` — 錯誤日誌
+### 稽核 & 死信表（2 張）
+- `dlt_messages` — DLT 死信內容存儲（人工檢視）
+- `audit_logs` — 稽核日誌（操作追蹤）
 
 ### 設定表（4 張）
-- `platform_credentials` — 通路 API 金鑰（AES 加密）
-- `sync_rules` — 同步規則
-- `dlt_messages` — DLT 死信內容存儲
-- `job_configs` — Job 排程設定
+- `platform_credentials` — 通路 API 金鑰（AES-256-GCM 加密）
+- `sync_rules` — 同步規則（何時拉單、商品）
+- `job_configs` — Job 排程設定（Cron 表達式）
+- `feature_flags` — 功能開關（A/B test、灰度發佈）
 
-**特點**：
-- PK：NanoID（VARCHAR(20)）；自動生成，有序，分散式安全
-- Items 欄位：JSONB 格式，靈活存儲動態屬性
-- PII 加密：AES-256-GCM（客戶名、電話、地址、電郵）
-- 分區：`daily_statistics` 按日期分區
+**表設計特點**：
+- **PK**: NanoID（VARCHAR(20)），自動生成、有序、分散式安全
+- **Items JSON**: 訂單/退貨中的項目用 JSONB 儲存（一個訂單 = 一筆記錄）
+- **PII 加密**: 客戶名、電話、地址、電郵用 AES-256-GCM 加密存儲
+- **分區**: daily_statistics 按日期分區；dlt_messages 適時清理（90 天）
+- **JSON 結構**: 各 JSON 欄位有 JSON Schema 定義，API 返回時解密
 
 ---
 
