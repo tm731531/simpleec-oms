@@ -108,51 +108,69 @@ task.dlt          ← 死信隊列（最終棄置）
 
 ## 資料庫表設計原則
 
-### 訂單為完整業務單位
-- `orders` 包含 `items` **JSON 欄位**（而非拆分為 order_items 表）
-- `returns` 包含 `items` **JSON 欄位**（而非拆分為 return_items 表）
-- **原因**：Kafka 訊息中訂單/退貨以完整單位流動 → Consumer 層一次性 INSERT/UPDATE → 保證 ACID
-- 不需要跨表 JOIN，減少複雜度
+### 三維商品觀點
+1. **客戶視角**：orders（客戶買了什麼）→ items 引用 products
+2. **平台視角**：platform_products（各平台商品映射）
+3. **倉庫視角**：packs（出貨單位、庫存）→ product_pack_mappings SKU 對應
+
+### 訂單/退貨設計
+- `orders` 包含 `items` **JSON 欄位**（訂單項目）
+- **退貨**：orders.return_items 欄位（而非獨立 returns 表）
+  - 原因：有訂單才有退貨，應作為 orders 的子項
+- **待出貨**：orders.status 狀態判定（無需 warehouse_queues 表）
 
 ---
 
-## 16 張資料庫表總覽
+## 13 張資料庫表總覽
 
-### 核心表（2 張）
-- `orders` — 聚合訂單（items JSONB）
+### 訂單表（1 張）
+- `orders` — 聚合訂單（items JSONB, return_items JSONB）
   - PK: order_id (NanoID)
-  - 重要欄位: platform, channel_order_id, customer (JSON/AES), items (JSONB), status, amount
+  - 重要欄位: platform, channel_order_id, customer (JSON/AES), items (JSONB), return_items (JSONB), status, amount
 
-- `returns` — 退貨單（items JSONB）
-  - PK: return_id (NanoID)
-  - 重要欄位: order_id (FK), reason, items (JSONB), status, refund_amount
+### 商品表（4 張）
+- `products` — **聚合商品主檔**（跨平台統一視圖，「客戶買了什麼」）
+  - PK: product_id (NanoID)
+  - 欄位: name, base_price, description, attributes (JSONB)
 
-### 商業表（8 張）
-- `products` — 聚合商品主檔
-- `skus` — 商品 SKU（platform_sku 映射）
+- `platform_products` — **各平台商品映射**（「平台上是什麼」）
+  - PK: (platform, platform_product_id)
+  - FK: product_id
+  - 欄位: platform_name, platform_price, platform_sku, platform_attrs (JSONB)
+
+- `packs` — **出貨單位**（「倉庫有什麼」，實體 SKU）
+  - PK: pack_id (NanoID)
+  - 欄位: sku, weight, dimensions, quantity_per_box
+
+- `product_pack_mappings` — **product ↔ pack 對應**（規格品映射，替代原 skus 表）
+  - PK: (product_id, pack_id)
+  - 欄位: specification, cost, stock_reserved
+
+### 通路表（3 張）
 - `platforms` — 通路平台設定（API 端點、認證、規則）
-  - ⚠️ **注意**：Mode A/B 判定在代碼層面（ChannelAdapter），不在資料庫配置
-  - 原因：只有通路開發者知道 API 特性，且平台 API 可能變化
-- `platform_mappings` — 通路欄位映射規則
-- `categories` — 商品分類
-- `shipments` — 出貨紀錄（tracking 追蹤）
-- `daily_statistics` — 日統計（分區表）
-- `warehouse_queues` — 倉庫佇列（待出貨訂單）
+  - ⚠️ Mode A/B 判定在代碼層面（ChannelAdapter），不在資料庫配置
+
+- `platform_mappings` — 通路欄位映射規則（欄位轉換 SOP）
+
+- `platform_credentials` — 通路 API 金鑰（AES-256-GCM 加密）
+
+### 規則表（2 張）
+- `sync_rules` — 同步規則（何時拉單、商品）
+- `job_configs` — Job 排程設定（Cron 表達式）
 
 ### 稽核 & 死信表（2 張）
 - `dlt_messages` — DLT 死信內容存儲（人工檢視）
 - `audit_logs` — 稽核日誌（操作追蹤）
 
-### 設定表（4 張）
-- `platform_credentials` — 通路 API 金鑰（AES-256-GCM 加密）
-- `sync_rules` — 同步規則（何時拉單、商品）
-- `job_configs` — Job 排程設定（Cron 表達式）
-- `feature_flags` — 功能開關（A/B test、灰度發佈）
+### 統計表（1 張）
+- `daily_statistics` — 日統計（分區表）
 
 **表設計特點**：
 - **PK**: NanoID（VARCHAR(20)），自動生成、有序、分散式安全
-- **Items JSON**: 訂單/退貨中的項目用 JSONB 儲存（一個訂單 = 一筆記錄）
+- **items / return_items JSON**: 訂單中的項目用 JSONB 儲存（一個訂單 = 一筆記錄，退貨作為子項）
+- **三維商品**：products（統一視圖）+ platform_products（平台映射）+ packs（倉庫單位）
 - **PII 加密**: 客戶名、電話、地址、電郵用 AES-256-GCM 加密存儲
+- **狀態驅動**: 待出貨判定用 orders.status，無需 warehouse_queues 表
 - **分區**: daily_statistics 按日期分區；dlt_messages 適時清理（90 天）
 - **JSON 結構**: 各 JSON 欄位有 JSON Schema 定義，API 返回時解密
 

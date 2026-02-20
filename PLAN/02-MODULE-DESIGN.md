@@ -95,16 +95,20 @@ com.simpleec.core.
 
 **資料庫表設計**：
 ```sql
--- 16 張表（訂單為完整業務單位）
--- 核心表（2）: Orders (items JSONB), Returns (items JSONB)
--- 商業表（8）: Products, SKUs, Platforms, PlatformMappings,
---             Categories, Shipments, DailyStatistics, WarehouseQueues
+-- 13 張表（三維商品視角：客戶買了什麼 / 平台上是什麼 / 倉庫有什麼）
+-- 訂單表（1）: Orders (items JSONB, return_items JSONB)
+-- 商品表（4）: Products (聚合主檔), PlatformProducts (平台映射),
+--             Packs (倉庫單位), ProductPackMappings (SKU 對應)
+-- 通路表（3）: Platforms, PlatformMappings, PlatformCredentials
+-- 規則表（2）: SyncRules, JobConfigs
 -- 稽核表（2）: AuditLogs, DltMessages
--- 設定表（4）: PlatformCredentials, SyncRules, JobConfigs, FeatureFlags
+-- 統計表（1）: DailyStatistics (分區)
 
 -- 設計原則：
 -- • PK: NanoID (VARCHAR(20)) — 自動生成、有序、分散式安全
--- • Items: JSONB 儲存（訂單/退貨作為完整單位）
+-- • items/return_items: JSONB（訂單項目、退貨作為子項，而非獨立表）
+-- • 三維視角: products(統一視圖) + platform_products(平台映射) + packs(倉庫單位)
+-- • 無需: categories (用 platform_mappings), warehouse_queues (用 orders.status), skus (用 product_pack_mappings)
 -- • PII: AES-256-GCM 加密（客戶名、電話、地址、電郵）
 -- • 一個訂單 = 一筆 INSERT/UPDATE（保證 ACID）
 ```
