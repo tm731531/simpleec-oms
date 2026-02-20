@@ -67,111 +67,138 @@
   "channelId": "string",                  // 通路實例（e.g., SHOPEE_001, MOMO_002）
   "merchantId": "string",                 // 商家 ID
   "orderStatus": "PENDING|CONFIRMED|SHIPPED|COMPLETED|CANCELLED",
-  "orderDate": "ISO-8601",                // 訂單建立時間
+  "channelCreatedAt": "ISO-8601",         // 通路上的訂單建立時間
+  "buyerName": "string",                  // 買家名稱（PII，AES-256-GCM 加密存儲）
+  "buyerPhone": "string",                 // 買家電話（PII，AES-256-GCM 加密存儲）
+  "buyerEmail": "string",                 // 買家郵箱（PII，AES-256-GCM 加密存儲）
+  "shippingAddress": "string",            // 收貨地址（PII，AES-256-GCM 加密存儲）
   "totalAmount": "number",                // 訂單總金額（含運費）
-  "currency": "TWD|USD",                  // 幣別
   "shippingFee": "number",                // 運費
   "discountAmount": "number",             // 折扣
-  "items": [                              // 訂單項目
+  "items": [                              // 訂單項目（JSONB 陣列）
     {
-      "itemId": "string",
-      "productId": "string",              // 指向 Product.productId
-      "packId": "string",                 // 指向 Pack.packId（if applicable）
-      "channelSku": "string",             // 通路 SKU
-      "quantity": "number",
-      "unitPrice": "number",
-      "subtotal": "number"
+      "sku": "string",                    // 我們的 SKU
+      "productId": "string",              // FK → Product.productId
+      "channelProductId": "string",       // 通路的商品 ID（e.g., Shopee item_id）
+      "channelSpecId": "string",          // 通路的規格 ID（e.g., Shopee variation_id）
+      "channelItemId": "string",          // 通路的行項目 ID（用於追蹤）
+      "channelProductName": "string",     // 通路上的商品名稱
+      "channelSpecName": "string",        // 通路上的規格名稱（「紅色/M」）
+      "productName": "string",            // 我們的商品名稱
+      "quantity": "number",               // 數量
+      "unitPrice": "number",              // 單位售價
+      "subtotal": "number",               // 小計
+      "sellPackId": "string"              // FK → SellPack.id
     }
   ],
-  "shipping": {
-    "recipientName": "string",
-    "phone": "string",
-    "address": "string",
-    "shippingStatus": "PENDING|SHIPPED|DELIVERED",
-    "trackingNumber": "string"
-  },
-  "payment": {
-    "paymentMethod": "CREDIT_CARD|BANK_TRANSFER|COD",
-    "paymentStatus": "UNPAID|PAID|REFUNDED",
-    "paidAt": "ISO-8601"
-  },
+  "shippingMethod": "string",             // 配送方式（HOME_DELIVERY, STORE_PICKUP 等）
+  "paymentMethod": "string",              // 支付方式（CREDIT_CARD, BANK_TRANSFER, COD 等）
+  "paidAt": "ISO-8601",                   // 支付時間
   "isRollback": "boolean",                // 是否為回補訂單（遺漏的過往訂單）
-  "createdAt": "ISO-8601",
+  "createdAt": "ISO-8601",                // OMS 建立時間
   "updatedAt": "ISO-8601"
 }
 ```
 
-### 1.2 Product Schema
+### 1.2 Product Schema（我們的倉庫 SKU）
 
 ```json
 {
   "productId": "string",                  // OMS 系統產品 ID（unique key）
-  "sku": "string",                        // OMS SKU（多通路聚合後的唯一識別）
-  "productName": "string",
-  "categoryId": "string",
-  "attributes": [                         // 產品屬性（e.g., 顏色、尺寸）
-    {
-      "name": "string",
-      "value": "string"
-    }
-  ],
-  "basePrice": "number",                  // 基礎價格
-  "cost": "number",                       // 成本
-  "stock": "number",                      // 庫存數量
-  "warehouseId": "string",                // 倉庫 ID
-  "status": "ACTIVE|INACTIVE",
+  "merchantId": "string",                 // 商家 ID
+  "sku": "string",                        // OMS SKU（商家內唯一）
+  "productName": "string",                // 我們的商品名稱
+  "specSummary": "string",                // 規格摘要（如「紅色/M」）
+  "productGroupId": "string",             // 所屬群組（可選，可 null）
+  "costPrice": "number",                  // 成本價
+  "suggestPrice": "number",               // 建議售價
+  "quantity": "integer",                  // 當前庫存量
+  "safetyQuantity": "integer",            // 安全庫存量（低於此值警告）
+  "status": "active|inactive",            // 產品狀態
   "createdAt": "ISO-8601",
   "updatedAt": "ISO-8601"
 }
 ```
 
-### 1.3 Pack Schema
+**重點說明**：
+- Product 是我們倉庫的 SKU 級別庫存單位
+- quantity = 我們實際有多少
+- 各平台各自決定要不要上架、要上架多少（通過 SellPack）
+- 無 categoryId, attributes, warehouseId（不在 OMS 層級管理）
+
+### 1.3 SellPack Schema（通路上架映射）
+
+> **架構原則**：一個 Product（我們的 SKU）可以在多個 Channel 上架，
+> 每次上架是一個 SellPack 記錄。**平台決定要不要上架這個 Product**。
+>
+> Product → 倉庫視角（我們有什麼）
+> SellPack → 平台視角（平台怎麼賣它）
 
 ```json
 {
-  "packId": "string",                     // OMS 系統套包 ID（unique key）
-  "platformId": "string",                 // 通路識別（shopee, momo, yahoo 等）
-  "specId": "string",                     // 通路上的規格 ID
-  "packName": "string",                   // 套包名稱（e.g., "蘋果紅禮盒組"）
-  "products": [                           // 套包包含的產品
-    {
-      "productId": "string",              // 指向 Product.productId
-      "quantity": "number",
-      "isMainProduct": "boolean"
-    }
-  ],
-  "packPrice": "number",                  // 套包價格
-  "discountAmount": "number",             // 套包折扣
-  "status": "ACTIVE|INACTIVE",
-  "channelUrl": "string",                 // 通路上的套包 URL
+  "sellPackId": "string",                 // OMS 上架記錄 ID（unique key）
+  "merchantId": "string",                 // 商家 ID
+  "productId": "string",                  // FK → Product.productId（我們的 SKU）
+  "channelId": "string",                  // FK → Channel.id（通路實例）
+  "sku": "string",                        // 通路上的 SKU（可能與 product.sku 不同）
+  "channelProductId": "string",           // 通路方給的商品 ID（e.g., Shopee item_id）
+  "channelSpecId": "string",              // 通路上的規格 ID（e.g., Shopee variation_id）
+  "channelProductName": "string",         // 通路上展示的商品名稱
+  "channelSpecName": "string",            // 通路上的規格名稱（「紅色/M」）
+  "channelProductUrl": "string",          // 通路上的商品頁面 URL
+  "title": "string",                      // 上架標題（可能與 channelProductName 不同）
+  "attributes": {                         // 通路特定的屬性（JSONB）
+    "color": "string",
+    "size": "string",
+    "other": "string"
+  },
+  "sellingPrice": "number",               // 通路上的售價
+  "quantity": "integer",                  // 通路顯示的庫存（平台各自管理）
+  "status": "draft|active|inactive",      // 上架狀態
+  "visibility": "VISIBLE|HIDDEN",         // 通路上的可見性
+  "lastSyncAt": "ISO-8601",               // 最後同步時間
   "createdAt": "ISO-8601",
   "updatedAt": "ISO-8601"
 }
 ```
 
-### 1.4 Return Schema
+**重點說明**：
+- SellPack **不是套包**，是「Product 在 Channel 上的配置」
+- 1 個 Product × 1 個 Channel = 1 個 SellPack
+- Product.sku = 我們的內部 SKU，SellPack.sku = 平台上的 SKU（可能不同）
+- SellPack.quantity = 平台顯示的庫存，與 Product.quantity 獨立
+- 平台決定「我的 channel 要上架哪些 product」
+
+### 1.4 RefundOrder Schema（退貨單）
 
 ```json
 {
-  "returnId": "string",                   // OMS 系統退貨 ID（unique key）
-  "orderId": "string",                    // 指向 Order.orderId
-  "channelReturnId": "string",            // 通路的退貨 ID
-  "returnStatus": "PENDING|APPROVED|REJECTED|COMPLETED|REFUNDED",
+  "refundOrderId": "string",              // OMS 系統退款單 ID（unique key）
+  "orderId": "string",                    // FK → Order.orderId
+  "merchantId": "string",                 // 商家 ID
+  "channelRefundId": "string",            // 通路的退貨/退款 ID
+  "refundStatus": "pending|approved|rejected|completed|refunded",
   "reason": "string",                     // 退貨原因
-  "items": [                              // 退貨項目
+  "items": [                              // 退款項目（JSONB）
     {
-      "itemId": "string",                 // 指向 Order.items[x].itemId
-      "quantity": "number"
+      "productId": "string",              // FK → Product.productId
+      "channelProductId": "string",       // 通路的商品 ID
+      "channelSpecId": "string",          // 通路的規格 ID
+      "quantity": "number",               // 退貨數量
+      "unitPrice": "number"               // 單位退款價
     }
   ],
-  "refundAmount": "number",               // 退款金額
-  "requestedAt": "ISO-8601",
-  "approvedAt": "ISO-8601",
-  "completedAt": "ISO-8601",
+  "refundAmount": "number",               // 總退款金額
+  "requestedAt": "ISO-8601",              // 退貨申請時間
   "createdAt": "ISO-8601",
   "updatedAt": "ISO-8601"
 }
 ```
+
+**重點說明**：
+- RefundOrder 是獨立的退款記錄，FK 到原 Order
+- items 中包含該筆退貨的所有項目（JSONB 陣列）
+- 通路特定信息（channelProductId, channelSpecId）用於追蹤
 
 ---
 
