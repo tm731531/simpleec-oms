@@ -317,18 +317,12 @@ CREATE TABLE public.product (
 - 消息包含 `attributes: {color, capacity}`
 - product 表没有 attributes/spec_summary 字段来存储这些详情
 - **解决方案**：
-  - 在 product 表添加 attributes JSON 字段
-  - 或在 sell_pack 表存储（更合适，因为规格是通路特定的）
+  - 在 sell_pack 表添加 attributes JSON 字段（更合适，因为规格是通路特定的）
+  - 如 sell_pack.channel_spec_attrs
 
-**问题 9：缺少 cost_price**
-- product 表有 cost_price（成本价）
-- 消息中没有提供
-- **建议**：从通路 API 获取成本数据
-
-**问题 10：SYNC_PRODUCT 缺少 channelId**
-- 消息有 channelId，但 product 表没有直接使用
-- Product 是商家层级的，channel 是上架关系
-- **这是正常的**，上架关系应存储在 sell_pack 中
+**问题 10（已移除）：库存管理不用管**
+- product.quantity = 我们的库存，sell_pack.quantity = 平台库存，各自独立管理
+- UPDATE_INVENTORY 和 SYNC_PRODUCT 不涉及库存，只处理通路同步的元数据
 
 ---
 
@@ -408,21 +402,18 @@ CREATE TABLE public.sell_pack (
 - SYNC_PACK 消息中没有提供
 - **解决方案**：消息应包含 channelProductId
 
-**问题 12：channel_product_url 和 title 缺失**
+**问题 9（已降级为低优先级）：channel_product_url 和 title 缺失**
 - 消息中没有产品 URL 或标题
-- **建议**：从通路 API 补充获取
+- **建议**：从通路 API 补充获取（非关键）
 
-**问题 13：visibility 字段无处存储**
+**问题 12：visibility 字段无处存储**
 - 消息包含 `packInfo.visibility: "VISIBLE"`
 - sell_pack 表没有此字段
-- **解决方案**：
-  - 在 sell_pack 表添加 visibility 字段，或
-  - 存储在 ship_options JSON 中
+- **解决方案**：在 sell_pack 表添加 visibility 字段
 
-**问题 14：quantity 字段缺失**
-- sell_pack.quantity 应该存储通路的库存
-- SYNC_PACK 消息没有提供
-- **解决方案**：应通过 UPDATE_INVENTORY 消息更新
+**问题 13（已移除）：quantity 字段**
+- sell_pack.quantity = 平台库存，product.quantity = 我们的库存，独立管理
+- 通路库存由平台各自维护，不在 OMS 中同步
 
 ---
 
@@ -491,62 +482,22 @@ CREATE TABLE public.order_shipments (
 
 ---
 
-## 7️⃣ UPDATE_INVENTORY 消息验证
+## 7️⃣ UPDATE_INVENTORY 消息验证（库存各自独立管理）
 
-### 消息定义（EVENT_SAMPLES.md:514-523）
-```json
-{
-  "header": {
-    "taskType": "UPDATE_INVENTORY",
-    "merchantId": "M001",
-    "channelId": "PCHOME_001",
-    "requestId": "req-20260213-330000",
-    "timestamp": "2026-02-13T10:30:00Z",
-    "source": "channel_job",
-    "version": 1
-  },
-  "body": {
-    "updates": [
-      {
-        "productId": "SKU-001",
-        "quantity": 50,
-        "type": "ABSOLUTE"
-      }
-    ]
-  }
-}
-```
+### 原则
+- **product.quantity** = 我们的仓库库存（由我们维护）
+- **sell_pack.quantity** = 各平台的库存（由平台各自维护）
+- UPDATE_INVENTORY 消息在OMS中**不涉及库存更新**，仅作为同步元数据的一部分
 
-### product 表库存字段（schema.sql:250-275）
-```sql
-CREATE TABLE public.product (
-    id               VARCHAR(20),   -- ← body.productId
-    quantity         INTEGER,       -- ← body.quantity (type = ABSOLUTE/RELATIVE)
-    safety_quantity  INTEGER,       -- (消息中没有)
-    ...
-);
-```
-
-### sell_pack 表库存字段
-```sql
-CREATE TABLE public.sell_pack (
-    quantity         INTEGER,       -- ← 通路库存
-    ...
-);
-```
-
-### ⚠️ 发现的问题
-
-**问题 17：库存更新的粒度不清晰**
-- UPDATE_INVENTORY 中的 productId 对应哪个表？product 还是 sell_pack？
-- 消息说 "type": "ABSOLUTE" 但没有说明是覆盖还是增量
-- **建议**：消息应明确指定：
-  - 更新 product.quantity（商家仓库）还是 sell_pack.quantity（通路库存）
-  - ABSOLUTE = 绝对值 / RELATIVE = 相对值（增/减）
+### 结论 ✅
+- UPDATE_INVENTORY 消息处理：可记录到 channel_sync_logs，但不更新库存字段
+- 倉庫就是倉庫，平台就是平台，两边库存各自管理
 
 ---
 
 ## 总结：发现的问题清单
+
+> 📌 **库存分离原则**：product.quantity = 我们的库存，sell_pack.quantity = 平台库存，各自独立管理，UPDATE_INVENTORY 不纠结
 
 ### 高优先级 🔴（必须修复）
 
@@ -556,7 +507,7 @@ CREATE TABLE public.sell_pack (
 | 3 | channelItemId 无法存储 | PROCESS_ORDER.items | 在 items JSONB 中保留或记录到 sync_logs |
 | 5 | requestDate 无数据库对应 | PROCESS_RETURN | refund_orders 表添加 requested_at 字段 |
 | 6 | order_id FK 映射不清晰 | PROCESS_RETURN | 消息应包含原订单信息或关联字段 |
-| 8 | attributes 无处存储 | SYNC_PRODUCT | product/sell_pack 表添加 attributes JSON |
+| 8 | attributes 无处存储 | SYNC_PRODUCT | sell_pack 表添加 attributes JSON（通路规格） |
 | 11 | channel_product_id 缺失 | SYNC_PACK | 消息应包含 channelProductId |
 
 ### 中优先级 ⚠️（应该改进）
@@ -564,21 +515,17 @@ CREATE TABLE public.sell_pack (
 | # | 问题 | 位置 | 解决方案 |
 |----|------|------|--------|
 | 2 | shipped_at 在消息中缺失 | PROCESS_ORDER | 正常（出货时由 SHIP_ORDER 更新） |
-| 7 | returnData.items 信息不完整 | PROCESS_RETURN | items 应包含完整的通路信息 |
-| 10 | SYNC_PRODUCT 缺少成本数据 | SYNC_PRODUCT | 从通路 API 补充获取 |
-| 13 | visibility 字段无处存储 | SYNC_PACK | sell_pack 表添加 visibility 字段 |
-| 15 | logistics_company 需要推导 | SHIP_ORDER | 维护 shippingMethod 映射表 |
-| 16 | shipping_status 未设置 | SHIP_ORDER | 消息应包含 shippingStatus |
-| 17 | 库存更新粒度不清晰 | UPDATE_INVENTORY | 消息明确指定 product 还是 sell_pack |
+| 7 | returnData.items 信息不完整 | PROCESS_RETURN | items 应包含完整的通路信息（channelProductId 等） |
+| 12 | visibility 字段无处存储 | SYNC_PACK | sell_pack 表添加 visibility 字段 |
+| 13 | logistics_company 需要推导 | SHIP_ORDER | 维护 shippingMethod → logistics_company 映射表 |
+| 14 | shipping_status 未设置 | SHIP_ORDER | 消息应包含 shippingStatus，或 Handler 推导 |
 
 ### 低优先级 💡（建议）
 
 | # | 问题 | 位置 | 解决方案 |
 |----|------|------|--------|
-| 4 | items JSONB 模式未定义 | orders.items | 在 SCHEMA.md 中补充 JSON Schema |
-| 9 | SYNC_PRODUCT 缺少库存 | SYNC_PRODUCT | 应通过 UPDATE_INVENTORY 分离处理 |
-| 12 | 通路 URL 和标题缺失 | SYNC_PACK | 从通路 API 补充获取 |
-| 14 | 库存来源不明确 | SYNC_PACK | quantity 应通过 UPDATE_INVENTORY 更新 |
+| 4 | items JSONB 模式未定义 | orders.items | 在 SCHEMA.md 中补充 JSON Schema 定义 |
+| 9 | 通路 URL 和标题缺失 | SYNC_PACK | 从通路 API 补充获取 |
 
 ---
 
@@ -588,11 +535,11 @@ CREATE TABLE public.sell_pack (
    - 这些影响消息到数据库的正确映射
    - 需要修改消息模式或数据库 schema
 
-2. **第 2 阶段（重要）**：修复 #7, #13, #15, #16, #17
+2. **第 2 阶段（重要）**：修复 #2, #7, #12, #13, #14
    - 提高数据完整性和一致性
    - 可能需要修改消息模式或 Handler 逻辑
 
-3. **第 3 阶段（优化）**：修复 #4, #9, #12, #14
+3. **第 3 阶段（优化）**：修复 #4, #9
    - 文档完善和设计优化
    - 不影响当前功能，但提高可维护性
 
