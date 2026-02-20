@@ -10,20 +10,26 @@
 
 ### 1.1 目標
 
-從 **0** 到 **MVP**（最小可行產品）：
-- 支持多通路訂單入庫 (Momo, Shopee)
-- 支持訂單出貨和退貨
-- 基礎的 Kafka 事件處理
+從 **0** 到 **MVP**（最小可行產品）支持 **7 個平台**：
+- **Shopline**、**MOMO**、**Shopee**、**Cyberbiz**、**Shopify**、**PChome**、**Yahoo 購物中心**
+- 支持多通路訂單入庫（PROCESS_ORDER、SYNC_PACK、SYNC_PRODUCT）
+- 支持訂單出貨和退貨（SHIP_ORDER、PROCESS_RETURN）
+- 完整的 Kafka 事件驅動架構
 
 ### 1.2 時間表
 
 ```
-Phase 1：基礎設施建設    (1 週)    → Sprint 1
-Phase 2：Kafka 消費者    (2 週)    → Sprint 2-3
-Phase 3：平台適配器      (3 週)    → Sprint 4-6
-Phase 4：集成測試 + 優化  (2 週)    → Sprint 7-8
+Phase 1：基礎設施建設      (1 週)    → Sprint 1
+Phase 2：Kafka 消費者      (2 週)    → Sprint 2-3
+Phase 3：平台適配器 (7個)  (6 週)    → Sprint 4-9
+Phase 4：集成測試 + 優化    (2 週)    → Sprint 10-11
 ────────────────────────────────
-總計：8 週（2 個月）
+總計：11 週（約 2.5 個月）
+
+依複雜度分組：
+- Easy (Week 3-4): Cyberbiz, PChome (較簡單 API)
+- Medium (Week 4-7): MOMO, Shopline, Yahoo (中等複雜)
+- Hard (Week 7-9): Shopee, Shopify (複雜規格、多變)
 ```
 
 ### 1.3 成功指標
@@ -191,67 +197,77 @@ src/test/java/com/simpleec/oms/handler/
 
 ---
 
-## 5. Phase 3：平台適配器（3 週）
+## 5. Phase 3：平台適配器（6 週）
 
 ### 5.1 目標
 
-- ✅ Momo Adapter (Mode A/B)
-- ✅ Shopee Adapter
-- ✅ 基礎的 Cyberbiz Adapter
-- ✅ 完整的適配器測試框架
+- ✅ **7 個平台的完整 Adapter**：Shopline, MOMO, Shopee, Cyberbiz, Shopify, PChome, Yahoo 購物中心
+- ✅ Mode A/B 自動偵測（基於 API 完整度）
+- ✅ 完整的適配器測試框架（Fixture + Mock + VCR）
+- ✅ 每個平台 > 90% 代碼覆蓋率
 
 ### 5.2 詳細計劃
 
-#### Week 3-4：Momo Adapter
+#### Week 3-4：Easy Tier - Cyberbiz & PChome
 
 | # | 任務 | 優先級 | 工作量 | 完成條件 |
 |---|------|--------|--------|---------|
-| 3.1 | MomoApiClient 基類 | P0 | 6h | HTTP 請求封裝 |
-| 3.2 | MomoOrderAdapter | P0 | 10h | Mode A/B 偵測 |
-| 3.3 | Fixture 蒐集 | P0 | 4h | 10+ JSON 樣本 |
-| 3.4 | Unit Tests (Fixture) | P0 | 8h | 100% 覆蓋解析邏輯 |
-| 3.5 | Mock HTTP Tests | P0 | 8h | 限流、超時、404 |
-| 3.6 | VCR 錄製 + 測試 | P0 | 6h | Playback 測試 |
+| 3.1 | CyberbizApiClient | P0 | 6h | REST API 封裝 |
+| 3.2 | CyberbizOrderAdapter | P0 | 8h | 虛擬商品支持 |
+| 3.3 | Cyberbiz Tests | P0 | 8h | Fixture + Mock + VCR |
+| 3.4 | PChomeApiClient | P0 | 6h | 簡化 API 格式 |
+| 3.5 | PChomeOrderAdapter | P0 | 8h | 無規格商品支持 |
+| 3.6 | PChome Tests | P0 | 8h | 完整測試 |
 
-**里程碑 3.1**：Momo Adapter 完整 ✅
+**里程碑 3.1**：Cyberbiz & PChome 完整 ✅
 
-#### Week 4-5：Shopee Adapter
-
-| # | 任務 | 優先級 | 工作量 | 完成條件 |
-|---|------|--------|--------|---------|
-| 3.7 | ShopeeApiClient | P0 | 6h | 複雜規格映射 |
-| 3.8 | ShopeeOrderAdapter | P0 | 12h | tier_variation 解析 |
-| 3.9 | Fixture + Unit Tests | P0 | 10h | 多規格訂單 |
-| 3.10 | Mock HTTP Tests | P0 | 8h |  |
-| 3.11 | VCR 錄製 | P0 | 4h |  |
-
-**里程碑 3.2**：Shopee Adapter 完整 ✅
-
-#### Week 5-6：Cyberbiz Adapter (可選)
+#### Week 4-5：Medium Tier - MOMO, Shopline, Yahoo
 
 | # | 任務 | 優先級 | 工作量 | 完成條件 |
 |---|------|--------|--------|---------|
-| 3.12 | CyberbizApiClient | P1 | 6h | REST API 調用 |
-| 3.13 | CyberbizOrderAdapter | P1 | 10h | 虛擬商品支持 |
-| 3.14 | Tests | P1 | 8h |  |
+| 3.7 | MomoApiClient | P0 | 6h | 多版本 API 支持 |
+| 3.8 | MomoOrderAdapter | P0 | 10h | Mode A/B 偵測 |
+| 3.9 | Momo Tests | P0 | 12h | 完整 fixture + VCR |
+| 3.10 | ShoplineApiClient | P0 | 6h | GraphQL/REST 混合 |
+| 3.11 | ShoplineOrderAdapter | P0 | 10h | 複雜規格映射 |
+| 3.12 | YahooApiClient | P0 | 6h | 購物中心 API |
+| 3.13 | YahooOrderAdapter | P0 | 10h | 展店架構支持 |
+| 3.14 | 測試整合 | P0 | 12h | 3 平台聯合測試 |
+
+**里程碑 3.2**：MOMO, Shopline, Yahoo 完整 ✅
+
+#### Week 6-7：Hard Tier - Shopee, Shopify
+
+| # | 任務 | 優先級 | 工作量 | 完成條件 |
+|---|------|--------|--------|---------|
+| 3.15 | ShopeeApiClient | P0 | 8h | tier_variation 複雜映射 |
+| 3.16 | ShopeeOrderAdapter | P0 | 12h | 多規格、多倉庫支持 |
+| 3.17 | Shopee Tests | P0 | 16h | 包含 edge cases |
+| 3.18 | ShopifyApiClient | P0 | 8h | GraphQL 支持 |
+| 3.19 | ShopifyOrderAdapter | P0 | 12h | Liquid template 理解 |
+| 3.20 | Shopify Tests | P0 | 12h | 完整覆蓋 |
+| 3.21 | 全平台集成測試 | P0 | 12h | 7 平台並行測試 |
+
+**里程碑 3.3**：所有 7 平台完整 ✅
 
 ### 5.3 架構圖
 
 ```
 Kafka: {platform}.fast
         ↓
-   ChannelJob
-        ↓
    ChannelJobFactory
-        ├─ MomoChannelJob
-        │  └─ MomoOrderAdapter
-        │     └─ MomoApiClient
-        ├─ ShopeeChannelJob
-        │  └─ ShopeeOrderAdapter
-        │     └─ ShopeeApiClient
-        └─ CyberbizChannelJob
-           └─ CyberbizOrderAdapter
-              └─ CyberbizApiClient
+        ├─ CyberbizChannelJob ──→ CyberbizOrderAdapter → CyberbizApiClient
+        ├─ PChomeChannelJob ────→ PChomeOrderAdapter → PChomeApiClient
+        ├─ MomoChannelJob ──────→ MomoOrderAdapter → MomoApiClient (Mode A/B)
+        ├─ ShoplineChannelJob ──→ ShoplineOrderAdapter → ShoplineApiClient
+        ├─ YahooChannelJob ─────→ YahooOrderAdapter → YahooApiClient
+        ├─ ShopeeChannelJob ────→ ShopeeOrderAdapter → ShopeeApiClient (tier_variation)
+        └─ ShopifyChannelJob ───→ ShopifyOrderAdapter → ShopifyApiClient (GraphQL)
+
+AdapterFactory 負責：
+  1. 檢測 channelId 對應的平台類型
+  2. 創建相應的 Adapter 實例
+  3. 根據 API 完整度自動選擇 Mode A/B
 ```
 
 ---
@@ -329,14 +345,19 @@ Kafka: {platform}.fast
 ### 8.2 應變計劃
 
 ```
+如果進度落後 1 週：
+  ✅ 優先完成 Easy + Medium 層（Cyberbiz, PChome, MOMO, Shopline, Yahoo）
+  ⏳ 推遲 Hard 層（Shopee, Shopify）到 Phase 2
+  ✅ 發佈 MVP 支持 5 個平台
+
 如果進度落後 2 週：
-  ❌ 延後 Cyberbiz Adapter → Phase 2 (Sprint 9)
-  ✅ 保留核心（Momo, Shopee）
-  ✅ 提前發佈 MVP
+  ✅ 絕對必須完成：Cyberbiz, MOMO, Shopee（3 個核心）
+  ⏳ 其他平台推遲到 Phase 2
 
 如果 API 問題：
-  ✅ 用 VCR tape 繞過
-  ✅ 平行開發 (本地 Mock)
+  ✅ 用 VCR tape 繞過（預錄真實 API 響應）
+  ✅ 平行開發 (本地 Mock WireMock)
+  ✅ 利用 Fixture 完成單元測試
 ```
 
 ---
