@@ -1,7 +1,8 @@
 import axios from 'axios'
 import { Account, PaginatedResponse } from '../types'
 
-const API_BASE = 'http://localhost:8082/api/admin'
+// 使用相對路徑 - Cloudflare 反向代理會轉發到後端
+const API_BASE = '/api/admin'
 
 export const accountAPI = {
   list(page = 1, pageSize = 20, merchantId?: string) {
