@@ -238,3 +238,23 @@ INSERT INTO public.daily_statistics (
 ('ds_001', 'm_test_001', 'momo',   'ch_momo_001',   '2026-02-08', 2, 2350.00, 1, 1, 0, 1),
 ('ds_002', 'm_test_001', 'shopee', 'ch_shopee_001', '2026-02-08', 1, 820.00,  0, 0, 0, 0),
 ('ds_003', 'm_test_001', '_ALL_',  '_ALL_',         '2026-02-08', 3, 3170.00, 1, 1, 0, 1);
+
+-- ---------------------------------------------------------------------------
+-- channel_shipping_mapping
+-- ---------------------------------------------------------------------------
+
+-- MOMO shipping mappings
+INSERT INTO public.channel_shipping_mapping (id, merchant_id, channel_id, platform_shipping_method, logistics_company, logistics_company_code, description, active)
+VALUES
+    ('csp_momo_001', 'm_test_001', 'ch_momo_001', 'HOME_DELIVERY', '黑貓宅急便', 'BLACKCAT', 'Momo home delivery via Black Cat', true),
+    ('csp_momo_002', 'm_test_001', 'ch_momo_001', 'STORE_PICKUP', 'Momo 超商取貨', 'MOMO_STORE', 'Momo convenience store pickup', true),
+    ('csp_momo_003', 'm_test_001', 'ch_momo_001', 'SEVEN_ELEVEN', '7-ELEVEN', '7ELV', 'Momo 7-Eleven pickup', true)
+ON CONFLICT (channel_id, platform_shipping_method) DO NOTHING;
+
+-- Shopee shipping mappings
+INSERT INTO public.channel_shipping_mapping (id, merchant_id, channel_id, platform_shipping_method, logistics_company, logistics_company_code, description, active)
+VALUES
+    ('csp_shopee_001', 'm_test_001', 'ch_shopee_001', 'STANDARD_DELIVERY', '新竹物流', 'XINDE', 'Shopee standard delivery', true),
+    ('csp_shopee_002', 'm_test_001', 'ch_shopee_001', 'EXPRESS_DELIVERY', '黑貓宅急便', 'BLACKCAT', 'Shopee express delivery', true),
+    ('csp_shopee_003', 'm_test_001', 'ch_shopee_001', 'SELF_PICKUP', 'Shopee 自取', 'SHOPEE_SELF', 'Shopee self pickup', true)
+ON CONFLICT (channel_id, platform_shipping_method) DO NOTHING;
