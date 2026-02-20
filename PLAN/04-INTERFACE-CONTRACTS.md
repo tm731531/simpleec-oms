@@ -25,7 +25,50 @@
 
 ---
 
-## Part II：Consumer/Producer 介面
+## Part II：Consumer/Producer 介面設計
+
+### 多生產者 + TaskType 路由
+
+**單一 Topic 內的訊息結構**：
+
+```json
+{
+  "taskType": "FETCH_ORDERS" | "FETCH_ORDER_DETAIL" | "SYNC_PACK" | ...,
+  "producer": "SchedulerConsumer" | "Channel Job Slow" | "UI/Gateway" | ...,
+  "payload": { /* taskType 特定欄位 */ }
+}
+```
+
+**Consumer 職責**：
+1. 消費 Topic 的所有訊息
+2. 根據 **taskType** 路由到不同的處理邏輯
+3. 每個 taskType 可能有不同的 ACID 保證策略（Redis、分鎖、去重等）
+
+**示例：ChannelJobSlowConsumer**
+
+```java
+@KafkaListener(topics = "{platform}.slow")
+public void consume(KafkaMessage msg) {
+  switch(msg.getTaskType()) {
+    case FETCH_ORDERS:
+      handleFetchOrders(msg);  // Mode A/B 決策、去重、發 order.process
+      break;
+
+    case FETCH_ORDER_DETAIL:
+      handleFetchOrderDetail(msg);  // Mode B 詳情取得、去重、發 order.process
+      break;
+
+    case SYNC_PACK:
+      handleSyncPack(msg);  // 打包同步、發 task.backend
+      break;
+
+    default:
+      log.warn("Unknown taskType: {}", msg.getTaskType());
+  }
+}
+```
+
+---
 
 ### KafkaMessageListener 基類
 
@@ -42,7 +85,7 @@ public abstract class KafkaMessageListener<T> {
 
     /**
      * 消費訊息的主邏輯
-     * 子類必須實現此方法
+     * 子類實現此方法，根據 taskType 分派到具體處理器
      *
      * @param message 解析後的訊息物件
      * @throws ProcessingException 處理異常

@@ -1,5 +1,31 @@
 # SimpleEC OMS Kafka 拓撲設計
 
+## 核心設計原則
+
+### 多生產者 + TaskType 路由
+
+**一個 Topic，多個 Producer，多個 TaskType**：
+
+```
+{platform}.slow ← 多個 Producer
+├─ SchedulerConsumer (taskType: FETCH_ORDERS)
+├─ Channel Job Slow (taskType: FETCH_ORDER_DETAIL, Mode B only)
+├─ UI/Gateway (taskType: SYNC_PACK)
+└─ ...
+
+Consumer（Channel Job Slow）根據 taskType 路由：
+├─ FETCH_ORDERS → [Mode A 直接 / Mode B + detail] → order.process
+├─ SYNC_PACK → task.backend
+└─ ...
+```
+
+**優勢**：
+- 避免 Topic 爆炸（16 個而非幾十個）
+- 多個模組可同時往同一 Topic 發不同操作
+- Consumer 層透過 taskType switch 實現 ACID
+
+---
+
 ## 完整 Topic & 流向圖
 
 ### 時間驅動層
@@ -107,17 +133,48 @@ DltHandler
 
 ## Producer/Consumer 責任矩陣
 
-| Entity | 生產 Topic | 消費 Topic | 角色 |
+### 按 Topic 分類（多生產者視角）
+
+#### {platform}.slow Topic
+| Producer | TaskType | 目的 |
+|----------|----------|------|
+| SchedulerConsumer | FETCH_ORDERS | 定時抓訂單列表 |
+| Channel Job Slow | FETCH_ORDER_DETAIL | Mode B 取訂單詳情 |
+| UI/Gateway | SYNC_PACK | 手動打包同步 |
+
+**Consumer**: Channel Job Slow
+- 根據 taskType 決策路由
+- Mode A: FETCH_ORDERS → 直接發 order.process
+- Mode B: FETCH_ORDERS → FETCH_ORDER_DETAIL → 發 order.process
+
+#### task.backend Topic
+| Producer | TaskType | 目的 |
+|----------|----------|------|
+| SchedulerConsumer | HEALTH_CHECK, GENERATE_REPORT | 定時檢查、報表 |
+| Channel Job Fast | SYNC_PRODUCT, UPDATE_INVENTORY | 商品同步後 |
+| OrderUpsertHandler | GENERATE_SHIPMENT | 訂單入庫後 |
+| ReturnUpsertHandler | PROCESS_RETURN | 退貨入庫後 |
+| UI/Gateway | UI_EVENT | 前台事件 |
+
+**Consumer**: BackendTaskHandler
+- 根據 taskType 決策實際操作
+
+---
+
+### 完整責任矩陣
+
+| Entity | 生產 Topic (+ TaskType) | 消費 Topic | 角色 |
 |--------|-----------|-----------|------|
 | **HeartbeatJob** | scheduler | - | 時間源 |
-| **SchedulerConsumer** | {platform}.slow, task.backend | scheduler | 決策中樞 |
-| **Channel Job Fast** | task.backend | {platform}.fast | 商品同步 |
-| **Channel Job Slow** | order.process, return.process | {platform}.slow | 訂單抓取 (Mode A/B) |
-| **OrderUpsertHandler** | task.backend, task.failed | order.process | 訂單入庫 |
-| **ReturnUpsertHandler** | task.backend, task.failed | return.process | 退貨入庫 |
+| **SchedulerConsumer** | {platform}.slow (FETCH_ORDERS, SYNC_PRODUCT), task.backend (HEALTH_CHECK) | scheduler | 決策中樞 |
+| **Channel Job Fast** | task.backend (SYNC_PRODUCT, UPDATE_INVENTORY) | {platform}.fast | 商品同步 |
+| **Channel Job Slow** | order.process, return.process, {platform}.slow (FETCH_ORDER_DETAIL) | {platform}.slow | 訂單抓取 (Mode A/B) |
+| **OrderUpsertHandler** | task.backend (GENERATE_SHIPMENT), task.failed | order.process | 訂單入庫 |
+| **ReturnUpsertHandler** | task.backend (PROCESS_RETURN), task.failed | return.process | 退貨入庫 |
 | **BackendTaskHandler** | - | task.backend | 非同步任務 |
 | **ErrorHandler** | {原topic}, task.dlt | task.failed | 重試管理 |
 | **DltHandler** | - | task.dlt | 死信終結點 |
+| **UI/Gateway** | {platform}.slow (SYNC_PACK), {platform}.fast | - | 同步入口 |
 
 ---
 

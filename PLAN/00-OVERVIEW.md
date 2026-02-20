@@ -36,16 +36,32 @@ SimpleEC OMS（簡易電商訂單管理系統）是一個**多通路訂單聚合
 
 **關鍵**：Channel Job Slow 會根據平台 Mode 決定是否執行 `FETCH_ORDER_DETAIL` 步驟。
 
-### 3️⃣ **Consumer/Producer/Topic 三角設計**
-- **唯一性**：每個 Topic 只有一個明確的 Producer
-- **單一職責**：每個 Consumer 職責單一（生產、消費、或兩者）
-- **邊界清晰**：Topic 是系統的職責邊界；跨 Topic 換角色
+### 3️⃣ **多生產者 + TaskType 路由設計**
+- **多生產者容忍**：一個 Topic 可有多個 Producer（分散式特性），透過 **taskType** 欄位區分操作
+- **粒度設計**：Topic 按業務邊界分（而非按操作分），內部用 taskType 細分
+- **ACID 下沈**：Consumer 層根據 taskType 做不同邏輯，並透過 Redis + 分鎖保證冪等性
 
 範例：
 ```
-HeartbeatJob → scheduler → SchedulerConsumer → {platform}.slow / task.backend
-  [生產]         [邊界]      [消費+轉發]          [邊界]    [後續消費]
+{platform}.slow 包含多個 taskType：
+  ├─ FETCH_ORDERS (SchedulerConsumer 發)
+  ├─ FETCH_ORDER_DETAIL (Channel Job Slow 發，Mode B only)
+  ├─ SYNC_PACK (UI/Gateway 發)
+  └─ ...
+
+Channel Job Slow Consumer：
+  switch(msg.taskType) {
+    case FETCH_ORDERS:
+      // Mode A/B 邏輯 → order.process
+    case SYNC_PACK:
+      // 打包同步 → task.backend
+  }
 ```
+
+**優勢**：
+- 避免 Topic 爆炸（16 個而非幾十個）
+- 多個模組可獨立往同一 Topic 發送不同操作
+- Consumer 聚焦一個業務邊界，內部路由清晰
 
 ### 4️⃣ **兩層 Redis 去重**
 資料流經多個 Consumer 時，用 Redis 防止重複處理：
