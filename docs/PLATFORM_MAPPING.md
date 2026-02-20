@@ -22,6 +22,23 @@
 
 ---
 
+## TaskType 職責澄清
+
+### SYNC_PRODUCT vs SYNC_PACK
+
+| TaskType | 職責 | 更新字段 | 存儲位置 |
+|----------|------|---------|--------|
+| **SYNC_PRODUCT** | 同步商品通用元數據（我們的 SKU） | sku, name, costPrice, suggestPrice | **product** 表 |
+| **SYNC_PACK** | 同步通路特定的上架配置 | channelProductId, channelSpecId, channelSpecName, channelSpecAttrs, sellingPrice, visibility | **sell_pack** 表 |
+
+**重點**：
+- SYNC_PRODUCT = 倉庫視角（我們有什麼）
+- SYNC_PACK = 平台視角（平台怎麼賣它）
+- attributes（如 color, size）應在 SYNC_PACK 中，因為是通路特定的規格
+- SYNC_PRODUCT 不包含 attributes
+
+---
+
 ## 0. 平台處理模式定義
 
 參考 DATA_FLOW_MAPPING.md §0，每個平台根據其**列表 API 的數據完整度**決定處理模式：

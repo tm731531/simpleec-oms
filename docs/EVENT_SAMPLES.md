@@ -449,12 +449,13 @@ order.process Handler 接收後，查詢資料庫判斷是新訂單還是已存�
     "correlationId": "req-20260213-200002"
   },
   "body": {
+    "orderId": "ord_xyz789",                     // ← OMS 訂單 ID（FK 到 orders）
     "channelReturnId": "YH-RET-2026021300001",
     "returnData": {
       "returnStatus": "PENDING_APPROVAL",
       "reason": "SIZE_MISMATCH",
       "requestedAmount": 5000,
-      "requestDate": "2026-02-13T11:00:00Z",
+      "requestedAt": "2026-02-13T11:00:00Z",    // ← 退貨申請時間
       "items": [
         {
           "productId": "SKU002",
@@ -474,6 +475,9 @@ order.process Handler 接收後，查詢資料庫判斷是新訂單還是已存�
 
 **TaskType: SYNC_PRODUCT** - 商品同步（由 {platform}.slow 派發，獨立 Handler 處理）
 
+> **說明**：SYNC_PRODUCT 同步的是通用的商品元數據（SKU, 名稱, 成本）。
+> 通路特定的規格屬性應由 SYNC_PACK 消息提供。
+
 ```json
 {
   "header": {
@@ -489,11 +493,8 @@ order.process Handler 接收後，查詢資料庫判斷是新訂單還是已存�
   "body": {
     "sku": "SH-SKU-001",
     "name": "iPhone 15 Pro Max",
-    "price": 44900,
-    "attributes": {
-      "color": "Space Black",
-      "capacity": "256GB"
-    }
+    "costPrice": 35000,
+    "suggestPrice": 44900
   }
 }
 ```
@@ -545,7 +546,7 @@ order.process Handler 接收後，查詢資料庫判斷是新訂單還是已存�
 }
 ```
 
-**TaskType: SYNC_PACK** - 套包同步（UI 驅動，{platform}.slow 執行雙層檢查 + 條件派發）
+**TaskType: SYNC_PACK** - 上架映射同步（UI 驅動，{platform}.slow 執行雙層檢查 + 條件派發）
 
 ```json
 {
@@ -560,15 +561,16 @@ order.process Handler 接收後，查詢資料庫判斷是新訂單還是已存�
     "version": 1
   },
   "body": {
-    "platformId": "pchome",
-    "specId": "SPEC-001",
-    "packName": "iPhone 15 Pro Max - Space Black 256GB",
-    "sku": "PCHOME-SKU-001",
-    "attributes": {
+    "channelProductId": "PC-2026021300001",    // ← 通路商品 ID（Unique Key 的一部分）
+    "channelSpecId": "SPEC-001",                // ← 通路規格 ID
+    "channelProductName": "iPhone 15 Pro Max - Space Black 256GB",
+    "channelSpecName": "太空黑 / 256GB",
+    "sku": "PCHOME-SKU-001",                   // ← 通路 SKU
+    "channelSpecAttrs": {
       "color": "Space Black",
       "capacity": "256GB"
     },
-    "price": 44900,
+    "sellingPrice": 44900,
     "packInfo": {
       "packStatus": "ACTIVE",
       "visibility": "VISIBLE"

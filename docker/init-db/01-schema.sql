@@ -242,9 +242,11 @@ CREATE TABLE public.sell_pack (
     channel_spec_name    VARCHAR(256),
     channel_product_url  VARCHAR(1024),
     title                VARCHAR(512),
+    channel_spec_attrs   JSONB,                  -- 通路特定的規格屬性（如 {color: 紅色, size: M}）
     selling_price        DECIMAL(12,2),
     quantity             INTEGER       NOT NULL DEFAULT 0,
     status               VARCHAR(20)   NOT NULL DEFAULT 'draft',
+    visibility           VARCHAR(20),            -- 通路上的可見性（VISIBLE, HIDDEN）
     last_sync_at         TIMESTAMPTZ,
     created_at           TIMESTAMPTZ   NOT NULL DEFAULT now(),
     updated_at           TIMESTAMPTZ   NOT NULL DEFAULT now(),
@@ -345,6 +347,7 @@ CREATE TABLE public.refund_orders (
     refund_status     VARCHAR(20)   NOT NULL DEFAULT 'pending',
     refund_amount     DECIMAL(12,2) NOT NULL DEFAULT 0,
     reason            TEXT,
+    requested_at      TIMESTAMPTZ,               -- 退貨申請時間（來自通路）
     items             JSONB         DEFAULT '[]',
     created_at        TIMESTAMPTZ   NOT NULL DEFAULT now(),
     updated_at        TIMESTAMPTZ   NOT NULL DEFAULT now(),
