@@ -245,15 +245,25 @@ ADD COLUMN visibility VARCHAR(20);     -- 通路可見性（VISIBLE, HIDDEN）
 
 ## 文件修改清單
 
-### 已修改
+### 已修改（高優先級修復）
 - ✅ docker/init-db/01-schema.sql（3 個欄位添加）
+  - refund_orders.requested_at（TIMESTAMPTZ）
+  - sell_pack.channel_spec_attrs（JSONB）
+  - sell_pack.visibility（VARCHAR）
 - ✅ docs/EVENT_SAMPLES.md（3 個 Kafka 消息更新）
-- ✅ docs/PLATFORM_MAPPING.md（職責澄清）
-- ✅ docs/FIX_PLAN_HIGH_PRIORITY.md（修復計劃文檔）
+  - PROCESS_RETURN: 添加 orderId，重命名 requestDate → requestedAt
+  - SYNC_PRODUCT: 移除 attributes，改用 costPrice/suggestPrice
+  - SYNC_PACK: 添加 channelProductId，新增 channelSpecAttrs
+- ✅ docs/PLATFORM_MAPPING.md（職責澄清 + 架構更新）
+  - Product vs SellPack 職責邊界明確化
+  - SellPack 支持孤立上架（productId nullable）
+  - SKU 作為可選的匹配橋樑
+- ✅ docs/FIX_PLAN_HIGH_PRIORITY.md（執行計劃）
+- ✅ docs/FIX_PLAN_MEDIUM_LOW_PRIORITY.md（7 個剩餘問題詳細分析）
 
-### 待處理
-- ⏳ KAFKA_SCHEMA_VALIDATION.md（待更新驗證狀態）
-- ⏳ DOCUMENTATION_ALIGNMENT.md（待標記已解決）
+### 待處理（低優先級）
+- ⏳ KAFKA_SCHEMA_VALIDATION.md（待更新驗證狀態，可選）
+- ⏳ DOCUMENTATION_ALIGNMENT.md（待標記已解決，可選）
 
 ---
 
@@ -262,17 +272,41 @@ ADD COLUMN visibility VARCHAR(20);     -- 通路可見性（VISIBLE, HIDDEN）
 ### ✅ 高優先級完成度：100% (6/6)
 - 所有關鍵字段映射問題已解決
 - Schema 和消息定義現在一致
-- 可以開始實現階段
+- 所有修改已提交到 git
 
-### ⏳ 中優先級待辦：5 個
-- 大多是優化性，非阻塞性
+### ⏳ 中優先級分析完成：5 個
+- 詳細分析文檔已生成（FIX_PLAN_MEDIUM_LOW_PRIORITY.md）
+- Issue 2 驗證為正確設計 ✅
+- Issue 7,14 建議修改消息樣本（容易）
+- Issue 13 建議創建新映射表（中等難度）
+- **狀態**：待用戶決定是否實施
 
-### 💡 低優先級待辦：2 個
-- 文檔完善和 API 補充
+### 💡 低優先級分析完成：2 個
+- Issue 4: JSONB 結構文檔補充（純文檔）
+- Issue 9: API 字段說明（純文檔）
+- **狀態**：可選，不影響系統功能
 
 ---
 
 **修復完成日期**：2026-02-20
 **驗證人**：Claude Code
-**下一步**：實現層開發或中優先級問題修復
+**當前狀態**：高優先級修復完成 + 中低優先級計劃文檔完成
+
+## 後續行動建議
+
+### 選項 A：進入實現階段（推薦）
+- ✅ 基礎架構已驗證和修正
+- ✅ Kafka 消息 Schema 已對齊 Database
+- ✓ 開始 Handler/Adapter 代碼開發
+- 可將 Cyberbiz API 集成作為第一個適配器測試
+
+### 選項 B：先修復中優先級問題
+- 實施 Issue 7, 14（消息增強）— 30 分鐘
+- 實施 Issue 13（物流映射表）— 2 小時
+- 再進入實現階段
+
+### 選項 C：補充低優先級文檔
+- 添加 JSONB 結構定義和 SQL 查詢示例
+- 補充 API 字段說明
+- 無代碼改動，純文檔增強
 
