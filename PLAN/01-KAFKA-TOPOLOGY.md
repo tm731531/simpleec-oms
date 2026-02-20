@@ -106,7 +106,7 @@ DltHandler
 
 ---
 
-## 16 個 Kafka Topic 設定
+## 17 個 Kafka Topic 設定
 
 ### 通路 Topic（10 個）
 
@@ -118,7 +118,7 @@ DltHandler
 | pchome.fast / pchome.slow | 3 | 7d / 30d | PChome 快/慢同步 |
 | cyberbiz.fast / cyberbiz.slow | 3 | 7d / 30d | Cyberbiz 快/慢同步 |
 
-### 業務 Topic（6 個）
+### 業務 Topic（7 個）
 
 | Topic | 分區 | Retention | 說明 |
 |-------|------|-----------|------|
@@ -126,6 +126,7 @@ DltHandler
 | order.process | 5 | 30d | 訂單待處理隊列（Compacted） |
 | return.process | 5 | 30d | 退貨待處理隊列（Compacted） |
 | task.backend | 3 | 7d | 後端異步任務 |
+| task.frontend | 3 | 7d | 前端非同步任務（轉發至 task.backend） |
 | task.failed | 3 | 30d | 失敗重試隊列 |
 | task.dlt | 3 | 90d | 死信隊列（Compacted） |
 

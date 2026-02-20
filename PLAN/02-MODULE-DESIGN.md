@@ -47,7 +47,7 @@ com.simpleec.common.
   │   ├── NanoIdUtil (ID 生成)
   │   └── JsonUtil (序列化/反序列化)
   └── constants/
-      ├── TopicConstants (16 個 topic 名稱)
+      ├── TopicConstants (17 個 topic 名稱：10 channel + 7 business)
       ├── RedisKeyConstants (Layer1/Layer2 鍵前綴)
       └── ErrorConstants (錯誤代碼)
 ```
@@ -59,24 +59,36 @@ com.simpleec.common.
 ```
 com.simpleec.core.
   ├── entity/
-  │   ├── Order (訂單主表)
-  │   ├── OrderItem (訂單行項目)
-  │   ├── Return (退貨單)
-  │   ├── ReturnItem (退貨行項目)
-  │   ├── Product (商品)
-  │   ├── SKU (商品 SKU)
-  │   ├── Platform (通路設定)
-  │   ├── PlatformMapping (欄位映射規則)
-  │   ├── Shipment (出貨紀錄)
-  │   ├── DailyStatistics (日統計，分區)
-  │   └── ErrorLog (錯誤日誌)
+  │   ├── PlatformAccount (SimpleEC 平台管理員)
+  │   ├── GlobalConfig (全域系統設定)
+  │   ├── Merchant (商家/租戶)
+  │   ├── Account (商家操作帳號)
+  │   ├── MerchantOptions (商家自訂選項)
+  │   ├── ProductGroup (商品群組)
+  │   ├── Product (商品 = SKU 級別，倉庫單位)
+  │   ├── ProductBarcode (產品條碼)
+  │   ├── SellPack (通路上架映射：product × channel)
+  │   ├── Platform (電商平台設定)
+  │   ├── ChannelApiVersion (平台 API 版本管理)
+  │   ├── Channel (通路/館：樞紐)
+  │   ├── Order (訂單，items JSONB)
+  │   ├── OrderStatusLog (訂單狀態變更記錄)
+  │   ├── OrderShipment (出貨物流追蹤)
+  │   ├── RefundOrder (退款單，items JSONB，獨立表)
+  │   ├── ChannelSyncLog (同步/健康檢查記錄)
+  │   ├── FailedTaskLog (Kafka 失敗任務 LOG)
+  │   └── DailyStatistics (日統計，按月分區)
   ├── mapper/
-  │   ├── OrderMapper (MyBatis-Plus)
-  │   ├── OrderItemMapper
-  │   ├── ReturnMapper
+  │   ├── MerchantMapper (MyBatis-Plus)
   │   ├── ProductMapper
+  │   ├── SellPackMapper
+  │   ├── OrderMapper
+  │   ├── OrderStatusLogMapper
+  │   ├── OrderShipmentMapper
+  │   ├── RefundOrderMapper
+  │   ├── ChannelMapper
   │   ├── PlatformMapper
-  │   └── ShipmentMapper
+  │   └── DailyStatisticsMapper
   ├── service/
   │   ├── OrderService (CRUD + 業務邏輯)
   │   ├── ProductService
@@ -95,22 +107,25 @@ com.simpleec.core.
 
 **資料庫表設計**：
 ```sql
--- 13 張表（三維商品視角：客戶買了什麼 / 平台上是什麼 / 倉庫有什麼）
--- 訂單表（1）: Orders (items JSONB, return_items JSONB)
--- 商品表（4）: Products (聚合主檔), PlatformProducts (平台映射),
---             Packs (倉庫單位), ProductPackMappings (SKU 對應)
--- 通路表（3）: Platforms, PlatformMappings, PlatformCredentials
--- 規則表（2）: SyncRules, JobConfigs
--- 稽核表（2）: AuditLogs, DltMessages
--- 統計表（1）: DailyStatistics (分區)
+-- 19 張表，多租戶隔離、Kafka 驅動
+-- 平台管理（2）: platform_account, global_config
+-- 商家體系（3）: merchant, account, merchant_options
+-- 商品管理（4）: product_group, product, product_barcode, sell_pack
+-- 通路管理（3）: platform, channel_api_versions, channel
+-- 訂單表（3）: orders (items JSONB), order_status_logs, order_shipments
+-- 退款表（1）: refund_orders (items JSONB，獨立表非嵌入)
+-- 同步監控（2）: channel_sync_logs, failed_task_logs
+-- 統計表（1）: daily_statistics (按月分區)
 
--- 設計原則：
+-- 關鍵設計原則：
 -- • PK: NanoID (VARCHAR(20)) — 自動生成、有序、分散式安全
--- • items/return_items: JSONB（訂單項目、退貨作為子項，而非獨立表）
--- • 三維視角: products(統一視圖) + platform_products(平台映射) + packs(倉庫單位)
--- • 無需: categories (用 platform_mappings), warehouse_queues (用 orders.status), skus (用 product_pack_mappings)
+-- • 多租戶隔離: 所有業務表都有 merchant_id FK
+-- • sell_pack: 產品在特定通路的上架映射（product × channel），不是物理打包
+-- • refund_orders: 獨立表（非 return_items in orders），items 為 JSONB
+-- • orders.items: 訂單項目用 JSONB，每個訂單一筆記錄
 -- • PII: AES-256-GCM 加密（客戶名、電話、地址、電郵）
 -- • 一個訂單 = 一筆 INSERT/UPDATE（保證 ACID）
+-- • token 1~5: channel 表支援多個認證 token，適配複雜認證機制
 ```
 
 ---

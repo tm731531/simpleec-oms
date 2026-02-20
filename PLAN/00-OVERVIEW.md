@@ -85,7 +85,7 @@ Result：
 
 ---
 
-## 16 個 Kafka Topic 概覽
+## 17 個 Kafka Topic 概覽
 
 ### 通路 Topic（10 個）
 ```
@@ -94,12 +94,13 @@ Result：
 ```
 **平台**：momo, shopee, yahoo, pchome, cyberbiz
 
-### 業務 Topic（6 個）
+### 業務 Topic（7 個）
 ```
 scheduler         ← HeartbeatJob 發時間脈衝（進入點）
 order.process     ← 訂單待處理隊列（核心業務）
 return.process    ← 退貨待處理隊列
-task.backend      ← 後端非同步任務（報表、同步觸發）
+task.backend      ← 後端非同步任務（報表、商品同步、出貨）
+task.frontend     ← 前端非同步任務（UI 驅動，轉發到 task.backend）
 task.failed       ← 失敗重試隊列
 task.dlt          ← 死信隊列（最終棄置）
 ```
@@ -121,58 +122,86 @@ task.dlt          ← 死信隊列（最終棄置）
 
 ---
 
-## 13 張資料庫表總覽
+## 19 張資料庫表總覽
 
-### 訂單表（1 張）
-- `orders` — 聚合訂單（items JSONB, return_items JSONB）
-  - PK: order_id (NanoID)
-  - 重要欄位: platform, channel_order_id, customer (JSON/AES), items (JSONB), return_items (JSONB), status, amount
+### 平台管理（2 張）
+- `platform_account` — SimpleEC 平台管理員帳號（獨立）
+- `global_config` — 全域系統設定（獨立）
 
-### 商品表（4 張）
-- `products` — **聚合商品主檔**（跨平台統一視圖，「客戶買了什麼」）
+### 商家體系（3 張）
+- `merchant` — 商家（租戶）
+- `account` — 商家操作帳號（多人）
+- `merchant_options` — 商家自訂選項
+
+### 商品管理（4 張）
+- `product_group` — 商品群組（前端管理用，共享描述/圖片/品牌）
+  - FK: merchant_id
+
+- `product` — **商品 = SKU 級別**（倉庫的一個位置，「我們有什麼」）
   - PK: product_id (NanoID)
-  - 欄位: name, base_price, description, attributes (JSONB)
+  - 重要欄位: merchant_id, sku (unique per merchant), name, quantity (庫存), cost_price, suggest_price
+  - FK: product_group_id
 
-- `platform_products` — **各平台商品映射**（「平台上是什麼」）
-  - PK: (platform, platform_product_id)
+- `product_barcode` — 產品條碼（多國產線）
   - FK: product_id
-  - 欄位: platform_name, platform_price, platform_sku, platform_attrs (JSONB)
 
-- `packs` — **出貨單位**（「倉庫有什麼」，實體 SKU）
-  - PK: pack_id (NanoID)
-  - 欄位: sku, weight, dimensions, quantity_per_box
+- `sell_pack` — **通路上架映射**（product × channel，「平台上怎麼賣」）
+  - PK: sell_pack_id (NanoID)
+  - 重要欄位: merchant_id, product_id, channel_id, sku, channel_product_id, channel_spec_id, channel_product_name, channel_spec_name, channel_product_url, selling_price, quantity
+  - FK: product_id, channel_id
+  - ⚠️ 這是「上架映射」，不是物理打包單位
 
-- `product_pack_mappings` — **product ↔ pack 對應**（規格品映射，替代原 skus 表）
-  - PK: (product_id, pack_id)
-  - 欄位: specification, cost, stock_reserved
-
-### 通路表（3 張）
-- `platforms` — 通路平台設定（API 端點、認證、規則）
+### 通路管理（3 張）
+- `platform` — 電商平台（momo/shopee/yahoo/pchome 等）
+  - PK: platform_id (NanoID)
+  - 重要欄位: platform_name, credential1/2 (AES 加密), queue_topic, ship_options (JSON)
   - ⚠️ Mode A/B 判定在代碼層面（ChannelAdapter），不在資料庫配置
 
-- `platform_mappings` — 通路欄位映射規則（欄位轉換 SOP）
+- `channel_api_versions` — 平台 API 版本管理
+  - FK: platform_id
 
-- `platform_credentials` — 通路 API 金鑰（AES-256-GCM 加密）
+- `channel` — 通路/館（樞紐：FK merchant + FK platform）
+  - PK: channel_id (NanoID)
+  - 重要欄位: merchant_id, platform_id, channel_sn, token 1-5 (多個認證), enable_sync
 
-### 規則表（2 張）
-- `sync_rules` — 同步規則（何時拉單、商品）
-- `job_configs` — Job 排程設定（Cron 表達式）
+### 訂單表（3 張）
+- `orders` — **聚合訂單**（items JSONB）
+  - PK: order_id (NanoID)
+  - 重要欄位: merchant_id, channel_id, channel_order_id, order_status, buyer_* (PII, AES 加密), items (JSONB), total_amount, shipping_fee, discount_amount
+  - Unique: (channel_id, channel_order_id)
 
-### 稽核 & 死信表（2 張）
-- `dlt_messages` — DLT 死信內容存儲（人工檢視）
-- `audit_logs` — 稽核日誌（操作追蹤）
+- `order_status_logs` — 訂單狀態變更記錄（審計追蹤）
+  - FK: order_id
+
+- `order_shipments` — 出貨物流追蹤
+  - FK: order_id
+
+### 退款表（1 張）
+- `refund_orders` — **退款單**（items JSONB，獨立表，非嵌入 orders）
+  - PK: refund_order_id (NanoID)
+  - 重要欄位: order_id, refund_status, refund_amount, items (JSONB)
+  - FK: order_id
+
+### 同步與監控（2 張）
+- `channel_sync_logs` — 通路同步/健康檢查記錄
+  - FK: merchant_id, channel_id
+
+- `failed_task_logs` — Kafka 失敗任務 LOG（可重試的訊息緩衝）
+  - 重要欄位: task_type, task_action, retry_count, payload (JSONB)
 
 ### 統計表（1 張）
-- `daily_statistics` — 日統計（分區表）
+- `daily_statistics` — 日統計（按 stat_date 分區）
+  - PK: (id, stat_date)
 
 **表設計特點**：
 - **PK**: NanoID（VARCHAR(20)），自動生成、有序、分散式安全
-- **items / return_items JSON**: 訂單中的項目用 JSONB 儲存（一個訂單 = 一筆記錄，退貨作為子項）
-- **三維商品**：products（統一視圖）+ platform_products（平台映射）+ packs（倉庫單位）
-- **PII 加密**: 客戶名、電話、地址、電郵用 AES-256-GCM 加密存儲
-- **狀態驅動**: 待出貨判定用 orders.status，無需 warehouse_queues 表
-- **分區**: daily_statistics 按日期分區；dlt_messages 適時清理（90 天）
-- **JSON 結構**: 各 JSON 欄位有 JSON Schema 定義，API 返回時解密
+- **多租戶隔離**: 所有業務表都有 merchant_id FK，確保數據隔離
+- **items JSONB**: orders.items 和 refund_orders.items 分別存儲訂單項和退款項
+- **sell_pack 的角色**: 不是物理打包單位，而是產品在特定通路的「上架映射」，包含通路特定的 SKU/規格/價格
+- **PII 加密**: 客戶名、電話、地址、電郵用 AES-256-GCM 加密存儲在 credential 欄位
+- **狀態驅動**: orders.order_status 管理訂單生命週期；refund_orders.refund_status 管理退款狀態
+- **分區**: daily_statistics 按月份分區（2026-01 ~ 2026-12+）
+- **Token 多重性**: channel 表支援 token1~5，適配不同平台的複雜認證機制
 
 ---
 
