@@ -154,18 +154,54 @@ com.simpleec.channel.
       └── ChannelAuthException
 ```
 
-**Mode A/B 邏輯**：
+**Mode A/B 判定（在 Adapter 層面）**：
 ```java
-// ChannelAdapter.fetchOrders()
-if (platform.getMode() == Mode.A) {
-  // 直接返回完整訂單
-  return callApi("orders", filters);
+// ShopifyAdapter implements ChannelAdapter
+public class ShopifyAdapter implements ChannelAdapter {
+  @Override
+  public List<OrderDTO> fetchOrders(FetchOrdersFilter filters) {
+    // Shopify: Mode A（列表 API 已包含完整資訊）
+    return callApi("orders.json", filters)
+      .map(this::parseCompleteOrder)
+      .toList();
+  }
+
+  // fetchOrderDetail() 在 Mode A 實現中可以不用或拋異常
+}
+
+// ShopeeAdapter implements ChannelAdapter
+public class ShopeeAdapter implements ChannelAdapter {
+  @Override
+  public List<OrderDTO> fetchOrders(FetchOrdersFilter filters) {
+    // Shopee: Mode B（列表 API 只有概要）
+    return callApi("order/search", filters)
+      .map(this::parseOrderSummary)  // 只有基本欄位
+      .toList();
+  }
+
+  @Override
+  public OrderDTO fetchOrderDetail(String orderId) {
+    // Mode B 特有：需要額外呼叫 detail API
+    return callApi("order/get", orderId)
+      .map(this::parseCompleteOrder)
+      .orElse(null);
+  }
+}
+
+// Channel Job Slow Consumer：
+// 在運行時根據實際 API 返回內容決定是否需要 fetchOrderDetail
+if (orderData.getItems().isEmpty() || orderData.getCustomer() == null) {
+  // API 返回的資訊不完整，需要 detail fetch (Mode B 特性)
+  detail = adapter.fetchOrderDetail(orderId);
 } else {
-  // 只返回訂單列表（需後續 detail fetch）
-  return callApi("orders", filters);
-  // Channel Job Slow 會根據此結果決定是否呼叫 fetchOrderDetail
+  // 資訊完整，直接發 order.process (Mode A 特性)
 }
 ```
+
+**重點**：
+- ✅ Mode A/B 由通路開發者在 Adapter 代碼中實現
+- ✅ 不在資料庫 platforms 表中配置
+- ✅ 平台 API 改變時，只需更新 Adapter 代碼
 
 ### simpleec-api
 **職責**：REST API 端點
@@ -259,28 +295,48 @@ com.simpleec.channel.job.
       └─ ChannelJobSlowTask
 ```
 
-**Mode A/B 邏輯**：
+**Mode A/B 判定邏輯（運行時檢測）**：
 ```java
 // ChannelJobSlowConsumer
 @KafkaListener(topics = "{platform}.slow")
 public void consume(KafkaMessage msg) {
-  Platform platform = platformService.getByCode(msg.getPlatform());
-  
-  if (platform.getMode() == Mode.A) {
-    // Mode A: 直接 FETCH_ORDERS
-    orders = channelAdapter.fetchOrders(msg.getFilters());
-    sendToOrderProcess(orders);
-  } else {
-    // Mode B: 分兩步
-    orders = channelAdapter.fetchOrders(msg.getFilters());
-    for (Order order : orders) {
-      detail = channelAdapter.fetchOrderDetail(order.getId());
-      orders[i] = merge(order, detail);
+  ChannelAdapter adapter = adapterFactory.getAdapter(msg.getPlatform());
+
+  // 呼叫 fetchOrders，返回可能完整也可能不完整
+  List<OrderDTO> orders = adapter.fetchOrders(msg.getFilters());
+
+  // 運行時判定是否需要 detail fetch（根據返回資訊完整性）
+  List<OrderDTO> completeOrders = new ArrayList<>();
+
+  for (OrderDTO order : orders) {
+    if (isOrderDataComplete(order)) {
+      // Mode A 特性：API 已返回完整資訊
+      completeOrders.add(order);
+    } else {
+      // Mode B 特性：需要額外 detail API
+      OrderDTO detail = adapter.fetchOrderDetail(order.getId());
+      if (detail != null) {
+        completeOrders.add(mergeWithDetail(order, detail));
+      }
     }
-    sendToOrderProcess(orders);
   }
+
+  // 全部 send 到 order.process
+  sendToOrderProcess(completeOrders);
+}
+
+// 判定函式（檢查必要欄位）
+private boolean isOrderDataComplete(OrderDTO order) {
+  return order.getItems() != null && !order.getItems().isEmpty()
+    && order.getCustomer() != null
+    && order.getShippingAddress() != null;
 }
 ```
+
+**優點**：
+- ✅ 不依賴資料庫配置，自適應平台 API 變化
+- ✅ 如果 Shopee API 升級變成 Mode A，自動適用
+- ✅ 通路開發者只需確保 Adapter 返回正確格式，Consumer 自動判定
 
 ### simpleec-order-job
 **職責**：訂單入庫（OrderUpsertHandler）

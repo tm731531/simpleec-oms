@@ -130,7 +130,9 @@ task.dlt          ← 死信隊列（最終棄置）
 ### 商業表（8 張）
 - `products` — 聚合商品主檔
 - `skus` — 商品 SKU（platform_sku 映射）
-- `platforms` — 通路平台設定（mode: A/B）
+- `platforms` — 通路平台設定（API 端點、認證、規則）
+  - ⚠️ **注意**：Mode A/B 判定在代碼層面（ChannelAdapter），不在資料庫配置
+  - 原因：只有通路開發者知道 API 特性，且平台 API 可能變化
 - `platform_mappings` — 通路欄位映射規則
 - `categories` — 商品分類
 - `shipments` — 出貨紀錄（tracking 追蹤）
@@ -226,11 +228,13 @@ task.dlt          ← 死信隊列（最終棄置）
 
 ### Q：Mode A vs Mode B 怎麼判別？
 **A**：
-1. 檢查平台 API 文檔
-2. 實施時試呼叫「訂單列表 API」
-3. 如果返回完整欄位（金額、配送地址、客戶資訊）→ Mode A
-4. 如果只有 ID、基本資訊 → Mode B
-5. 寫入 `platforms` 表的 `mode` 欄位
+1. 檢查平台 API 文檔（或試呼叫）
+2. 如果「訂單列表 API」返回完整欄位（金額、配送地址、客戶資訊）→ Mode A
+3. 如果只有 ID、基本資訊 → Mode B
+4. **在 Adapter 代碼中實現**（不在資料庫配置）
+   - ShopifyAdapter.fetchOrders() 返回完整資訊
+   - ShopeeAdapter.fetchOrders() 返回概要，並實現 fetchOrderDetail()
+5. **ChannelJobSlowConsumer 運行時檢測**：根據返回資訊完整性決定是否呼叫 fetchOrderDetail()
 
 ### Q：Redis 兩層去重怎麼用？
 **A**：
