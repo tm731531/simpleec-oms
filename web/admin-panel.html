@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>a00000 商家管理系統</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            background: #f5f7fa;
+            color: #333;
+        }
+
+        .container {
+            display: flex;
+            height: 100vh;
+        }
+
+        .sidebar {
+            width: 250px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            overflow-y: auto;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+        }
+
+        .logo {
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 30px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid rgba(255,255,255,0.2);
+        }
+
+        .nav-item {
+            padding: 12px 15px;
+            margin: 8px 0;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .nav-item:hover { background: rgba(255,255,255,0.2); }
+        .nav-item.active { background: rgba(255,255,255,0.3); border-left: 4px solid white; }
+
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            background: white;
+            padding: 20px;
+            border-bottom: 1px solid #e0e0e0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .header h1 { font-size: 24px; color: #333; }
+
+        .content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .section { display: none; }
+        .section.active { display: block; }
+
+        .data-table {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            background: #f9f9f9;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        td {
+            padding: 12px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        tr:hover { background: #f9f9f9; }
+
+        .btn {
+            padding: 8px 16px;
+            margin: 0 4px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover { background: #5568d3; }
+
+        .btn-danger {
+            background: #ff4757;
+            color: white;
+        }
+
+        .btn-danger:hover { background: #ff3838; }
+
+        .btn-info {
+            background: #1890ff;
+            color: white;
+        }
+
+        .btn-info:hover { background: #0050b3; }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+
+        .form-group input, .form-group select, .form-group textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: inherit;
+            font-size: 14px;
+        }
+
+        .form-group textarea { resize: vertical; height: 80px; }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal.active { display: flex; }
+
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            width: 500px;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+        }
+
+        .modal-header {
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
+
+        .modal-close {
+            float: right;
+            font-size: 24px;
+            cursor: pointer;
+            color: #999;
+        }
+
+        .modal-close:hover { color: #333; }
+
+        .modal-footer {
+            margin-top: 20px;
+            text-align: right;
+        }
+
+        .alert {
+            padding: 12px 16px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+
+        .stat-card .value {
+            font-size: 32px;
+            font-weight: bold;
+            color: #667eea;
+            margin: 10px 0;
+        }
+
+        .stat-card .label {
+            color: #999;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 側邊欄 -->
+        <div class="sidebar">
+            <div class="logo">📊 a00000 商家</div>
+            <div class="nav-item active" onclick="showSection('dashboard')">儀表板</div>
+            <div class="nav-item" onclick="showSection('merchant')">商家信息</div>
+            <div class="nav-item" onclick="showSection('accounts')">帳號管理</div>
+            <div class="nav-item" onclick="showSection('products')">產品管理</div>
+            <div class="nav-item" onclick="showSection('orders')">訂單管理</div>
+        </div>
+
+        <!-- 主內容區 -->
+        <div class="main-content">
+            <div class="header">
+                <h1 id="page-title">儀表板</h1>
+            </div>
+
+            <div class="content">
+                <!-- 儀表板 -->
+                <div id="dashboard" class="section active">
+                    <div id="alert-container"></div>
+                    <div class="stats" id="stats-container">
+                        <div class="stat-card">
+                            <div class="label">產品總數</div>
+                            <div class="value" id="product-count">0</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="label">訂單總數</div>
+                            <div class="value" id="order-count">0</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="label">帳號數</div>
+                            <div class="value" id="account-count">0</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 商家信息 -->
+                <div id="merchant" class="section">
+                    <div id="merchant-info"></div>
+                </div>
+
+                <!-- 帳號管理 -->
+                <div id="accounts" class="section">
+                    <button class="btn btn-primary" onclick="openAddAccountModal()">➕ 新增帳號</button>
+                    <div id="accounts-table" class="data-table"></div>
+                </div>
+
+                <!-- 產品管理 -->
+                <div id="products" class="section">
+                    <button class="btn btn-primary" onclick="openAddProductModal()">➕ 新增產品</button>
+                    <div id="products-table" class="data-table"></div>
+                </div>
+
+                <!-- 訂單管理 -->
+                <div id="orders" class="section">
+                    <div id="orders-table" class="data-table"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 新增帳號彈窗 -->
+    <div id="account-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span class="modal-close" onclick="closeModal('account-modal')">&times;</span>
+                新增帳號
+            </div>
+            <form onsubmit="saveAccount(event)">
+                <div class="form-group">
+                    <label>帳號ID</label>
+                    <input type="text" id="account-id" required>
+                </div>
+                <div class="form-group">
+                    <label>帳號名稱</label>
+                    <input type="text" id="account-name" required>
+                </div>
+                <div class="form-group">
+                    <label>郵箱</label>
+                    <input type="email" id="account-email" required>
+                </div>
+                <div class="form-group">
+                    <label>密碼</label>
+                    <input type="password" id="account-password" required>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn" onclick="closeModal('account-modal')">取消</button>
+                    <button type="submit" class="btn btn-primary">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 新增產品彈窗 -->
+    <div id="product-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span class="modal-close" onclick="closeModal('product-modal')">&times;</span>
+                新增產品
+            </div>
+            <form onsubmit="saveProduct(event)">
+                <div class="form-group">
+                    <label>產品ID</label>
+                    <input type="text" id="product-id" required>
+                </div>
+                <div class="form-group">
+                    <label>SKU</label>
+                    <input type="text" id="product-sku" required>
+                </div>
+                <div class="form-group">
+                    <label>產品名稱</label>
+                    <input type="text" id="product-name" required>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>成本價</label>
+                        <input type="number" id="product-cost" step="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label>售價</label>
+                        <input type="number" id="product-price" step="0.01" required>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>庫存</label>
+                    <input type="number" id="product-quantity" value="0">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn" onclick="closeModal('product-modal')">取消</button>
+                    <button type="submit" class="btn btn-primary">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://192.168.0.48:8092/api';
+
+        // 页面切换
+        function showSection(section) {
+            document.querySelectorAll('.section').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+            document.getElementById(section).classList.add('active');
+            event.target.classList.add('active');
+
+            const titles = {
+                dashboard: '儀表板',
+                merchant: '商家信息',
+                accounts: '帳號管理',
+                products: '產品管理',
+                orders: '訂單管理'
+            };
+            document.getElementById('page-title').textContent = titles[section];
+
+            if (section === 'dashboard') loadStats();
+            if (section === 'merchant') loadMerchant();
+            if (section === 'accounts') loadAccounts();
+            if (section === 'products') loadProducts();
+            if (section === 'orders') loadOrders();
+        }
+
+        // 加載統計
+        async function loadStats() {
+            try {
+                const res = await fetch(`${API_BASE}/stats`);
+                const data = await res.json();
+                document.getElementById('product-count').textContent = data.product_count || 0;
+                document.getElementById('order-count').textContent = data.order_count || 0;
+                document.getElementById('account-count').textContent = data.account_count || 0;
+            } catch (e) {
+                showAlert('加載統計失敗: ' + e.message, 'error');
+            }
+        }
+
+        // 加載商家信息
+        async function loadMerchant() {
+            try {
+                const res = await fetch(`${API_BASE}/merchant`);
+                const data = await res.json();
+
+                const html = `
+                    <div class="data-table">
+                        <table>
+                            <tr><td><strong>商家ID</strong></td><td>${data.id}</td></tr>
+                            <tr><td><strong>商家名稱</strong></td><td>${data.merchant_name}</td></tr>
+                            <tr><td><strong>郵箱</strong></td><td>${data.merchant_email}</td></tr>
+                            <tr><td><strong>電話</strong></td><td>${data.merchant_phone_number}</td></tr>
+                            <tr><td><strong>統編</strong></td><td>${data.tax_id_number}</td></tr>
+                            <tr><td><strong>城市</strong></td><td>${data.address_city}</td></tr>
+                            <tr><td><strong>地區</strong></td><td>${data.address_region}</td></tr>
+                            <tr><td><strong>狀態</strong></td><td>${data.status}</td></tr>
+                        </table>
+                    </div>
+                `;
+                document.getElementById('merchant-info').innerHTML = html;
+            } catch (e) {
+                showAlert('加載商家信息失敗: ' + e.message, 'error');
+            }
+        }
+
+        // 加載帳號
+        async function loadAccounts() {
+            try {
+                const res = await fetch(`${API_BASE}/accounts`);
+                const data = await res.json();
+
+                const rows = data.map(acc => `
+                    <tr>
+                        <td>${acc.id}</td>
+                        <td>${acc.account_name}</td>
+                        <td>${acc.account_email}</td>
+                        <td>${acc.access_level}</td>
+                        <td>${acc.status}</td>
+                        <td>
+                            <button class="btn btn-info" onclick="editAccount('${acc.id}')">編輯</button>
+                            <button class="btn btn-danger" onclick="deleteAccount('${acc.id}')">刪除</button>
+                        </td>
+                    </tr>
+                `).join('');
+
+                document.getElementById('accounts-table').innerHTML = `
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>帳號ID</th>
+                                <th>名稱</th>
+                                <th>郵箱</th>
+                                <th>級別</th>
+                                <th>狀態</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows || '<tr><td colspan="6" style="text-align:center;color:#999;">暫無數據</td></tr>'}</tbody>
+                    </table>
+                `;
+            } catch (e) {
+                showAlert('加載帳號失敗: ' + e.message, 'error');
+            }
+        }
+
+        // 加載產品
+        async function loadProducts() {
+            try {
+                const res = await fetch(`${API_BASE}/products`);
+                const data = await res.json();
+
+                const rows = data.map(prod => `
+                    <tr>
+                        <td>${prod.id}</td>
+                        <td>${prod.sku}</td>
+                        <td>${prod.name}</td>
+                        <td>¥${prod.cost_price}</td>
+                        <td>¥${prod.suggest_price}</td>
+                        <td>${prod.quantity}</td>
+                        <td>${prod.status}</td>
+                        <td>
+                            <button class="btn btn-info" onclick="editProduct('${prod.id}')">編輯</button>
+                            <button class="btn btn-danger" onclick="deleteProduct('${prod.id}')">刪除</button>
+                        </td>
+                    </tr>
+                `).join('');
+
+                document.getElementById('products-table').innerHTML = `
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>SKU</th>
+                                <th>名稱</th>
+                                <th>成本</th>
+                                <th>售價</th>
+                                <th>庫存</th>
+                                <th>狀態</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows || '<tr><td colspan="8" style="text-align:center;color:#999;">暫無數據</td></tr>'}</tbody>
+                    </table>
+                `;
+            } catch (e) {
+                showAlert('加載產品失敗: ' + e.message, 'error');
+            }
+        }
+
+        // 加載訂單
+        async function loadOrders() {
+            try {
+                const res = await fetch(`${API_BASE}/orders`);
+                const data = await res.json();
+
+                const rows = data.map(ord => `
+                    <tr>
+                        <td>${ord.id}</td>
+                        <td>${ord.channel_id}</td>
+                        <td>${ord.order_status}</td>
+                        <td>${ord.buyer_name}</td>
+                        <td>¥${ord.total_amount}</td>
+                        <td>${ord.created_at.substring(0, 10)}</td>
+                        <td>
+                            <button class="btn btn-info" onclick="updateOrderStatus('${ord.id}')">更新狀態</button>
+                        </td>
+                    </tr>
+                `).join('');
+
+                document.getElementById('orders-table').innerHTML = `
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>訂單ID</th>
+                                <th>通道</th>
+                                <th>狀態</th>
+                                <th>買家</th>
+                                <th>金額</th>
+                                <th>日期</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows || '<tr><td colspan="7" style="text-align:center;color:#999;">暫無數據</td></tr>'}</tbody>
+                    </table>
+                `;
+            } catch (e) {
+                showAlert('加載訂單失敗: ' + e.message, 'error');
+            }
+        }
+
+        // 保存帳號
+        async function saveAccount(e) {
+            e.preventDefault();
+            const account = {
+                id: document.getElementById('account-id').value,
+                account_name: document.getElementById('account-name').value,
+                account_email: document.getElementById('account-email').value,
+                account_password: document.getElementById('account-password').value
+            };
+
+            try {
+                const res = await fetch(`${API_BASE}/accounts`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(account)
+                });
+                const result = await res.json();
+
+                if (result.success) {
+                    showAlert('帳號已新增', 'success');
+                    closeModal('account-modal');
+                    loadAccounts();
+                    e.target.reset();
+                } else {
+                    showAlert(result.error || '保存失敗', 'error');
+                }
+            } catch (e) {
+                showAlert('錯誤: ' + e.message, 'error');
+            }
+        }
+
+        // 保存產品
+        async function saveProduct(e) {
+            e.preventDefault();
+            const product = {
+                id: document.getElementById('product-id').value,
+                sku: document.getElementById('product-sku').value,
+                name: document.getElementById('product-name').value,
+                cost_price: parseFloat(document.getElementById('product-cost').value),
+                suggest_price: parseFloat(document.getElementById('product-price').value),
+                quantity: parseInt(document.getElementById('product-quantity').value)
+            };
+
+            try {
+                const res = await fetch(`${API_BASE}/products`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(product)
+                });
+                const result = await res.json();
+
+                if (result.success) {
+                    showAlert('產品已新增', 'success');
+                    closeModal('product-modal');
+                    loadProducts();
+                    e.target.reset();
+                } else {
+                    showAlert(result.error || '保存失敗', 'error');
+                }
+            } catch (e) {
+                showAlert('錯誤: ' + e.message, 'error');
+            }
+        }
+
+        // 刪除帳號
+        async function deleteAccount(id) {
+            if (!confirm('確認刪除帳號?')) return;
+            try {
+                const res = await fetch(`${API_BASE}/accounts/${id}`, { method: 'DELETE' });
+                const result = await res.json();
+                if (result.success) {
+                    showAlert('帳號已刪除', 'success');
+                    loadAccounts();
+                } else {
+                    showAlert(result.error || '刪除失敗', 'error');
+                }
+            } catch (e) {
+                showAlert('錯誤: ' + e.message, 'error');
+            }
+        }
+
+        // 刪除產品
+        async function deleteProduct(id) {
+            if (!confirm('確認刪除產品?')) return;
+            try {
+                const res = await fetch(`${API_BASE}/products/${id}`, { method: 'DELETE' });
+                const result = await res.json();
+                if (result.success) {
+                    showAlert('產品已刪除', 'success');
+                    loadProducts();
+                } else {
+                    showAlert(result.error || '刪除失敗', 'error');
+                }
+            } catch (e) {
+                showAlert('錯誤: ' + e.message, 'error');
+            }
+        }
+
+        // 模態框
+        function openAddAccountModal() { document.getElementById('account-modal').classList.add('active'); }
+        function openAddProductModal() { document.getElementById('product-modal').classList.add('active'); }
+        function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+
+        // 提示
+        function showAlert(msg, type) {
+            const container = document.getElementById('alert-container');
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${type}`;
+            alert.textContent = msg;
+            container.appendChild(alert);
+            setTimeout(() => alert.remove(), 3000);
+        }
+
+        // 初始化
+        window.addEventListener('load', () => {
+            loadStats();
+        });
+    </script>
+</body>
+</html>

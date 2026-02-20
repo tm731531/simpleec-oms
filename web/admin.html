@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OMS 後台管理系統</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            background: #f5f7fa;
+            color: #333;
+        }
+
+        .app-container {
+            display: flex;
+            height: 100vh;
+        }
+
+        .sidebar {
+            width: 250px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            overflow-y: auto;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+        }
+
+        .logo {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.2);
+        }
+
+        .nav-item {
+            padding: 12px 15px;
+            margin: 8px 0;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .nav-item:hover {
+            background: rgba(255,255,255,0.2);
+        }
+
+        .nav-item.active {
+            background: rgba(255,255,255,0.3);
+            border-left: 4px solid white;
+            padding-left: 11px;
+        }
+
+        .main-content {
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .header {
+            background: white;
+            padding: 20px;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            color: #333;
+        }
+
+        .user-info {
+            text-align: right;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .stat-card .value {
+            font-size: 32px;
+            font-weight: bold;
+            color: #667eea;
+            margin: 10px 0;
+        }
+
+        .stat-card .label {
+            color: #999;
+            font-size: 14px;
+        }
+
+        .table-container {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .table-header {
+            padding: 20px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .table-header h2 {
+            font-size: 20px;
+            color: #333;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            background: #f9f9f9;
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+            border-bottom: 1px solid #e0e0e0;
+            color: #666;
+        }
+
+        td {
+            padding: 15px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        tr:hover {
+            background: #f9f9f9;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .status-pending { background: #fff3cd; color: #856404; }
+        .status-confirmed { background: #cfe2ff; color: #084298; }
+        .status-shipped { background: #cff4fc; color: #055160; }
+        .status-completed { background: #d1e7dd; color: #0f5132; }
+        .status-cancelled { background: #f8d7da; color: #842029; }
+
+        .platform-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            color: white;
+            margin-right: 3px;
+        }
+
+        .platform-momo { background: #667eea; }
+        .platform-shopee { background: #ff6b6b; }
+        .platform-yahoo { background: #ffa500; }
+        .platform-pchome { background: #00d4ff; }
+        .platform-cyberbiz { background: #32c759; }
+
+        .action-btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            background: #667eea;
+            color: white;
+            transition: all 0.3s;
+            margin-right: 5px;
+        }
+
+        .action-btn:hover {
+            background: #5568d3;
+        }
+
+        .action-btn.secondary {
+            background: #e0e0e0;
+            color: #333;
+        }
+
+        .action-btn.secondary:hover {
+            background: #d0d0d0;
+        }
+
+        .pagination {
+            padding: 20px;
+            text-align: center;
+        }
+
+        .pagination button {
+            padding: 8px 12px;
+            margin: 0 5px;
+            border: 1px solid #e0e0e0;
+            background: white;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .pagination button:hover {
+            background: #f0f0f0;
+        }
+
+        .pagination button.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+
+        .filter-bar {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .filter-item {
+            flex: 1;
+            min-width: 150px;
+        }
+
+        .filter-item label {
+            display: block;
+            font-size: 12px;
+            color: #999;
+            margin-bottom: 5px;
+        }
+
+        .filter-item input, .filter-item select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+
+        .error {
+            background: #f8d7da;
+            color: #842029;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- 侧边栏 -->
+        <div class="sidebar">
+            <div class="logo">📦 OMS 管理</div>
+            <div class="nav-item active" onclick="showTab('dashboard')">📊 儀表板</div>
+            <div class="nav-item" onclick="showTab('orders')">📋 訂單管理</div>
+            <div class="nav-item" onclick="showTab('returns')">↩️ 退貨管理</div>
+            <div class="nav-item" onclick="showTab('products')">🛍️ 產品管理</div>
+            <div class="nav-item" onclick="showTab('channels')">🌐 通路設置</div>
+            <div class="nav-item" onclick="showTab('analytics')">📈 數據分析</div>
+            <div class="nav-item" onclick="showTab('settings')">⚙️ 系統設置</div>
+        </div>
+
+        <!-- 主内容区 -->
+        <div class="main-content">
+            <div class="header">
+                <h1 id="page-title">儀表板</h1>
+                <div class="user-info">
+                    <p>👤 管理員</p>
+                    <p style="font-size: 12px; color: #999;" id="current-date"></p>
+                </div>
+            </div>
+
+            <!-- 儀表板 -->
+            <div id="dashboard" class="content">
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="label">今日訂單</div>
+                        <div class="value" id="stat-today">-</div>
+                        <div class="label" style="margin-top: 10px;">環比 ↑ 15%</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="label">待處理</div>
+                        <div class="value" id="stat-pending">-</div>
+                        <div class="label" style="margin-top: 10px;">需要確認</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="label">已發貨</div>
+                        <div class="value" id="stat-shipped">-</div>
+                        <div class="label" style="margin-top: 10px;">本週累計</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="label">銷售額</div>
+                        <div class="value" id="stat-sales">-</div>
+                        <div class="label" style="margin-top: 10px;">本週總額</div>
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <div class="table-header">
+                        <h2>📋 最近訂單</h2>
+                    </div>
+                    <div id="error-msg"></div>
+                    <div id="loading" class="loading" style="display:none;">加載中...</div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>訂單號</th>
+                                <th>通路</th>
+                                <th>金額</th>
+                                <th>狀態</th>
+                                <th>建立時間</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="orders-table">
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="pagination">
+                    <button>上一頁</button>
+                    <button class="active">1</button>
+                    <button>2</button>
+                    <button>3</button>
+                    <button>下一頁</button>
+                </div>
+            </div>
+
+            <!-- 訂單管理 -->
+            <div id="orders" class="content" style="display: none;">
+                <div class="filter-bar">
+                    <div class="filter-item">
+                        <label>訂單號</label>
+                        <input type="text" placeholder="搜尋訂單號">
+                    </div>
+                    <div class="filter-item">
+                        <label>狀態</label>
+                        <select>
+                            <option>全部</option>
+                            <option>待確認</option>
+                            <option>已確認</option>
+                            <option>配送中</option>
+                            <option>已完成</option>
+                        </select>
+                    </div>
+                    <div class="filter-item">
+                        <label>通路</label>
+                        <select>
+                            <option>全部</option>
+                            <option>MOMO</option>
+                            <option>Shopee</option>
+                            <option>Yahoo</option>
+                            <option>PChome</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <div class="table-header">
+                        <h2>📋 所有訂單</h2>
+                    </div>
+                    <table id="all-orders-table">
+                        <thead>
+                            <tr>
+                                <th>訂單號</th>
+                                <th>客戶</th>
+                                <th>通路</th>
+                                <th>金額</th>
+                                <th>狀態</th>
+                                <th>建立時間</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="all-orders-body">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 其他頁面 -->
+            <div id="returns" class="content" style="display: none;">
+                <h2>↩️ 退貨管理</h2>
+                <p>退貨和售後處理</p>
+            </div>
+
+            <div id="products" class="content" style="display: none;">
+                <h2>🛍️ 產品管理</h2>
+                <p>產品列表和庫存管理</p>
+            </div>
+
+            <div id="channels" class="content" style="display: none;">
+                <h2>🌐 通路設置</h2>
+                <p>多通路配置（MOMO, Shopee, Yahoo, PChome, Cyberbiz）</p>
+            </div>
+
+            <div id="analytics" class="content" style="display: none;">
+                <h2>📈 數據分析</h2>
+                <p>銷售數據分析和報表</p>
+            </div>
+
+            <div id="settings" class="content" style="display: none;">
+                <h2>⚙️ 系統設置</h2>
+                <p>系統配置和用戶管理</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://192.168.0.48:8091/api';
+
+        function showTab(tabName) {
+            // Hide all content
+            const contents = document.querySelectorAll('.content');
+            contents.forEach(content => content.style.display = 'none');
+
+            // Show selected content
+            document.getElementById(tabName).style.display = 'block';
+
+            // Update nav items
+            const navItems = document.querySelectorAll('.nav-item');
+            navItems.forEach(item => item.classList.remove('active'));
+            event.target.classList.add('active');
+
+            // Update title
+            const titles = {
+                dashboard: '儀表板',
+                orders: '訂單管理',
+                returns: '退貨管理',
+                products: '產品管理',
+                channels: '通路設置',
+                analytics: '數據分析',
+                settings: '系統設置'
+            };
+            document.getElementById('page-title').textContent = titles[tabName];
+
+            // Load data for specific tabs
+            if (tabName === 'orders') {
+                loadAllOrders();
+            }
+        }
+
+        async function loadDashboardData() {
+            const loading = document.getElementById('loading');
+            const errorMsg = document.getElementById('error-msg');
+
+            loading.style.display = 'block';
+
+            try {
+                const response = await fetch(`${API_BASE}/orders`);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                const orders = data.data || data.orders || [];
+
+                loading.style.display = 'none';
+
+                if (orders.length === 0) {
+                    loadMockDashboard();
+                    return;
+                }
+
+                // 計算統計
+                const today = new Date().toISOString().split('T')[0];
+                const todayOrders = orders.filter(o => o.createdAt?.startsWith(today)).length;
+                const pending = orders.filter(o => o.status === 'pending').length;
+                const shipped = orders.filter(o => o.status === 'shipped').length;
+                const totalAmount = orders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+
+                document.getElementById('stat-today').textContent = todayOrders;
+                document.getElementById('stat-pending').textContent = pending;
+                document.getElementById('stat-shipped').textContent = shipped;
+                document.getElementById('stat-sales').textContent = '$' + totalAmount.toFixed(2);
+
+                // 填充最近訂單表
+                const ordersTable = document.getElementById('orders-table');
+                ordersTable.innerHTML = orders.slice(0, 5).map(order => `
+                    <tr>
+                        <td><strong>${order.channelOrderId || order.id}</strong></td>
+                        <td><span class="platform-badge platform-${order.platform?.toLowerCase() || 'momo'}">${order.platform || 'N/A'}</span></td>
+                        <td>$${(order.totalAmount || 0).toFixed(2)}</td>
+                        <td><span class="status-badge status-${order.status?.toLowerCase() || 'pending'}">${formatStatus(order.status)}</span></td>
+                        <td>${formatDate(order.createdAt)}</td>
+                        <td>
+                            <button class="action-btn">查看</button>
+                            <button class="action-btn secondary">更多</button>
+                        </td>
+                    </tr>
+                `).join('');
+
+            } catch (error) {
+                console.error('Error loading dashboard:', error);
+                loading.style.display = 'none';
+                errorMsg.innerHTML = `<div class="error">⚠️ 無法連接到 API</div>`;
+                loadMockDashboard();
+            }
+        }
+
+        async function loadAllOrders() {
+            const body = document.getElementById('all-orders-body');
+            body.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:20px;">加載中...</td></tr>';
+
+            try {
+                const response = await fetch(`${API_BASE}/orders?limit=100`);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                const orders = data.data || data.orders || [];
+
+                if (orders.length === 0) {
+                    body.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:20px;">沒有訂單</td></tr>';
+                    return;
+                }
+
+                body.innerHTML = orders.map(order => `
+                    <tr>
+                        <td><strong>${order.channelOrderId || order.id}</strong></td>
+                        <td>${order.customerName || 'N/A'}</td>
+                        <td><span class="platform-badge platform-${order.platform?.toLowerCase()}">${order.platform || 'N/A'}</span></td>
+                        <td>$${(order.totalAmount || 0).toFixed(2)}</td>
+                        <td><span class="status-badge status-${order.status?.toLowerCase()}">${formatStatus(order.status)}</span></td>
+                        <td>${formatDate(order.createdAt)}</td>
+                        <td>
+                            <button class="action-btn">編輯</button>
+                            <button class="action-btn secondary">刪除</button>
+                        </td>
+                    </tr>
+                `).join('');
+
+            } catch (error) {
+                console.error('Error loading orders:', error);
+                body.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:20px; color:#999;">API 連接失敗</td></tr>';
+            }
+        }
+
+        function loadMockDashboard() {
+            document.getElementById('stat-today').textContent = '12';
+            document.getElementById('stat-pending').textContent = '8';
+            document.getElementById('stat-shipped').textContent = '24';
+            document.getElementById('stat-sales').textContent = '$2,450';
+
+            const mockOrders = [
+                { channelOrderId: '#ORD-20260220-001', platform: 'MOMO', totalAmount: 450, status: 'completed', createdAt: '2026-02-20 10:30' },
+                { channelOrderId: '#ORD-20260220-002', platform: 'Shopee', totalAmount: 320, status: 'shipped', createdAt: '2026-02-20 09:15' },
+                { channelOrderId: '#ORD-20260220-003', platform: 'Yahoo', totalAmount: 580, status: 'confirmed', createdAt: '2026-02-20 08:45' },
+                { channelOrderId: '#ORD-20260219-045', platform: 'PChome', totalAmount: 280, status: 'pending', createdAt: '2026-02-19 15:20' }
+            ];
+
+            const ordersTable = document.getElementById('orders-table');
+            ordersTable.innerHTML = mockOrders.map(order => `
+                <tr>
+                    <td><strong>${order.channelOrderId}</strong></td>
+                    <td><span class="platform-badge platform-${order.platform?.toLowerCase()}">${order.platform}</span></td>
+                    <td>$${order.totalAmount.toFixed(2)}</td>
+                    <td><span class="status-badge status-${order.status}">${formatStatus(order.status)}</span></td>
+                    <td>${order.createdAt}</td>
+                    <td>
+                        <button class="action-btn">查看</button>
+                        <button class="action-btn secondary">更多</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function formatStatus(status) {
+            const map = {
+                'pending': '待確認',
+                'confirmed': '已確認',
+                'shipped': '配送中',
+                'completed': '已完成',
+                'cancelled': '已取消'
+            };
+            return map[status?.toLowerCase()] || status;
+        }
+
+        function formatDate(dateStr) {
+            if (!dateStr) return 'N/A';
+            const date = new Date(dateStr);
+            return date.toLocaleString('zh-TW');
+        }
+
+        // Initialize
+        window.addEventListener('load', () => {
+            document.getElementById('current-date').textContent = new Date().toLocaleDateString('zh-TW');
+            loadDashboardData();
+        });
+    </script>
+</body>
+</html>
