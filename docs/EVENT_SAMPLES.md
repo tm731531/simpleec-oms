@@ -391,6 +391,7 @@ order.process Handler 接收後，查詢資料庫判斷是新訂單還是已存�
       "buyerEmail": "wang@example.com",
       "shippingAddress": "台北市中山區南京東路三段100號",
       "shippingMethod": "HOME_DELIVERY",
+      "shippingStatus": "PENDING",
       "paymentMethod": "CREDIT_CARD",
       "totalAmount": 43900.00,
       "shippingFee": 0.00,
@@ -458,7 +459,8 @@ order.process Handler 接收後，查詢資料庫判斷是新訂單還是已存�
       "requestedAt": "2026-02-13T11:00:00Z",    // ← 退貨申請時間
       "items": [
         {
-          "productId": "SKU002",
+          "productId": "pd_xyz789",
+          "channelProductId": "YAHOO-SKU-002",
           "quantity": 1,
           "unitPrice": 5000
         }
