@@ -1,0 +1,30 @@
+spring:
+  application:
+    name: simpleec-scheduler-job
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+  datasource:
+    url: jdbc:postgresql://localhost:5432/simpleec
+    username: simpleec
+    password: simpleec123
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    consumer:
+      bootstrap-servers: localhost:9092
+      group-id: scheduler-consumer-group
+      auto-offset-reset: earliest
+
+server:
+  port: 8083
+
+logging:
+  level:
+    com.simpleec: DEBUG
+    org.springframework.kafka: INFO

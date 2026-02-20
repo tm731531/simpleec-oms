@@ -1,0 +1,18 @@
+rootProject.name = 'simpleec-oms'
+
+// Layer 1: Foundation
+include 'simpleec-common'
+include 'simpleec-core'
+
+// Layer 2: Interface & Adaptation
+include 'simpleec-channel'
+include 'simpleec-api'
+include 'simpleec-gateway'
+
+// Layer 3: Job Services
+include 'simpleec-channel-job'
+include 'simpleec-order-job'
+include 'simpleec-scheduler-job'
+include 'simpleec-backend-job'
+include 'simpleec-frontend-job'
+include 'simpleec-retry-job'

@@ -1,0 +1,12 @@
+dependencies {
+    // No Spring-specific dependencies for common module
+    // Keep it lightweight
+}
+
+tasks.named('bootJar') {
+    enabled = false
+}
+
+tasks.named('jar') {
+    enabled = true
+}

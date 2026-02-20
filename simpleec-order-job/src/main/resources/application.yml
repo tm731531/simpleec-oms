@@ -1,0 +1,25 @@
+spring:
+  application:
+    name: simpleec-order-job
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  datasource:
+    url: jdbc:postgresql://localhost:5432/simpleec
+    username: simpleec
+    password: simpleec123
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: order-job-group
+      auto-offset-reset: earliest
+  redis:
+    host: localhost
+    port: 6379
+
+server:
+  port: 8085
+
+logging:
+  level:
+    com.simpleec: DEBUG

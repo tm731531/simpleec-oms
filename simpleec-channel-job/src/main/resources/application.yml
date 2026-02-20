@@ -1,0 +1,22 @@
+spring:
+  application:
+    name: simpleec-channel-job
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  datasource:
+    url: jdbc:postgresql://localhost:5432/simpleec
+    username: simpleec
+    password: simpleec123
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: channel-job-group
+      auto-offset-reset: earliest
+
+server:
+  port: 8084
+
+logging:
+  level:
+    com.simpleec: DEBUG

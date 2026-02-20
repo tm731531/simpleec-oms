@@ -1,0 +1,254 @@
+package com.simpleec.orderjob.consumer;
+
+import com.simpleec.core.entity.Order;
+import com.simpleec.core.service.OrderService;
+import com.simpleec.common.enums.OrderStatusEnum;
+import com.simpleec.common.util.RedisKeyUtil;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.kafka.support.Acknowledgment;
+import org.springframework.kafka.support.KafkaHeaders;
+import org.springframework.messaging.handler.annotation.Header;
+import org.springframework.messaging.handler.annotation.Payload;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.util.Optional;
+
+/**
+ * OrderUpsert 消費者 — 訂單入庫的核心業務邏輯
+ *
+ * 消費 order.process topic 中的 ORDER_UPSERT 消息
+ * 執行兩層去重：
+ *   1. Redis（快速）
+ *   2. 數據庫（並發安全）
+ */
+@Slf4j
+@Component
+@RequiredArgsConstructor
+public class OrderUpsertConsumer {
+
+    private final OrderService orderService;
+    private final StringRedisTemplate redisTemplate;
+    private final ObjectMapper objectMapper;
+
+    /**
+     * 消費 order.process topic
+     */
+    @KafkaListener(topics = "order.process", groupId = "order-job-group", concurrency = "8")
+    @Transactional
+    public void consumeOrderUpsert(@Payload String message,
+                                   @Header(KafkaHeaders.RECEIVED_PARTITION_ID) int partition,
+                                   Acknowledgment acknowledgment) {
+        try {
+            JsonNode json = objectMapper.readTree(message);
+            JsonNode header = json.get("header");
+            JsonNode body = json.get("body");
+
+            String taskType = header.get("taskType").asText();
+
+            if (!taskType.equals("ORDER_UPSERT")) {
+                log.warn("Unexpected taskType: {} in OrderUpsertConsumer", taskType);
+                acknowledgment.acknowledge();
+                return;
+            }
+
+            // 解析訊息
+            String merchantId = header.get("merchantId").asText();
+            String channelId = header.get("channelId").asText();
+            String channelOrderId = body.get("channelOrderId").asText();
+            String orderHash = body.get("orderHash").asText();
+            JsonNode orderDataJson = body.get("orderData");
+
+            log.info("Processing ORDER_UPSERT: {} from {} (hash: {})",
+                channelOrderId, channelId, orderHash.substring(0, 8) + "...");
+
+            // 執行訂單入庫邏輯
+            handleOrderUpsert(merchantId, channelId, channelOrderId, orderHash, orderDataJson);
+
+            // 手動提交 offset（確保訂單已入庫）
+            acknowledgment.acknowledge();
+
+            log.info("Successfully processed ORDER_UPSERT: {}", channelOrderId);
+
+        } catch (Exception e) {
+            log.error("Error processing ORDER_UPSERT", e);
+            // TODO: 發送到 task.failed 重試隊列
+        }
+    }
+
+    /**
+     * 處理訂單 UPSERT（INSERT 或 UPDATE）
+     *
+     * 步驟：
+     * 1. Redis 去重檢查（快速判定是否已處理）
+     * 2. 數據庫查詢（檢查是否存在）
+     * 3. INSERT 或 UPDATE
+     * 4. 更新 Redis hash 快取
+     */
+    private void handleOrderUpsert(String merchantId, String channelId, String channelOrderId,
+                                    String orderHash, JsonNode orderDataJson) throws Exception {
+
+        // 第 0 步：構建 Redis Key
+        String redisKey = RedisKeyUtil.orderHashKey(merchantId, channelId, channelOrderId);
+
+        // 第 1 步：再次檢查 Redis（避免並發重複）
+        String existingHashInRedis = redisTemplate.opsForValue().get(redisKey);
+        if (orderHash.equals(existingHashInRedis)) {
+            log.info("Order already processed (Redis hash match): {}", channelOrderId);
+            return;
+        }
+
+        // 第 2 步：檢查資料庫中是否已存在
+        Optional<Order> existingOrder = orderService.findByChannelOrderId(channelId, channelOrderId);
+
+        Order order;
+        if (existingOrder.isPresent()) {
+            // UPDATE 現有訂單
+            order = existingOrder.get();
+
+            // 計算 DB 中現有訂單的 hash（內存，不是從 DB 欄位讀）
+            String dbOrderHash = calculateOrderHash(order, orderDataJson);
+
+            if (!orderHash.equals(dbOrderHash)) {
+                // Hash 不同 → 有實質變化 → 執行 UPDATE
+                order = updateOrderFromData(order, orderDataJson);
+                log.info("Updated order: {} from channel {} (hash changed)",
+                    order.getOrderId(), channelId);
+            } else {
+                // Hash 相同 → 沒有變化 → 跳過
+                log.debug("Order content unchanged: {}", channelOrderId);
+                // 但仍要更新 Redis（刷新 TTL）
+                redisTemplate.opsForValue().set(redisKey, orderHash, Duration.ofDays(7));
+                return;
+            }
+        } else {
+            // INSERT 新訂單
+            order = createOrderFromData(merchantId, channelId, channelOrderId, orderDataJson);
+            log.info("Created new order: {} from channel {}", order.getOrderId(), channelId);
+        }
+
+        // 第 3 步：儲存訂單到資料庫
+        Order savedOrder = orderService.updateOrder(order);
+
+        // 第 4 步：更新 Redis hash 快取
+        redisTemplate.opsForValue().set(redisKey, orderHash, Duration.ofDays(7));
+
+        // 第 5 步：觸發後續流程（可選）
+        triggerFollowUpTasks(savedOrder);
+
+        log.info("Completed ORDER_UPSERT for: {}", savedOrder.getOrderId());
+    }
+
+    /**
+     * 從 API 數據創建 Order 實體
+     */
+    private Order createOrderFromData(String merchantId, String channelId, String channelOrderId,
+                                      JsonNode orderDataJson) throws Exception {
+
+        Order order = new Order();
+        order.setMerchantId(merchantId);
+        order.setChannelId(channelId);
+        order.setChannelOrderId(channelOrderId);
+
+        // 填充訂單數據
+        populateOrderFromData(order, orderDataJson);
+
+        return order;
+    }
+
+    /**
+     * 更新現有 Order 實體
+     */
+    private Order updateOrderFromData(Order order, JsonNode orderDataJson) throws Exception {
+        populateOrderFromData(order, orderDataJson);
+        return order;
+    }
+
+    /**
+     * 從 API 數據填充 Order 實體
+     */
+    private void populateOrderFromData(Order order, JsonNode orderDataJson) throws Exception {
+        if (orderDataJson.has("status")) {
+            String status = orderDataJson.get("status").asText();
+            order.setOrderStatus(OrderStatusEnum.fromCode(status));
+        }
+
+        if (orderDataJson.has("totalAmount")) {
+            order.setTotalAmount(
+                new java.math.BigDecimal(orderDataJson.get("totalAmount").asText())
+            );
+        }
+
+        if (orderDataJson.has("items")) {
+            order.setItems(objectMapper.writeValueAsString(orderDataJson.get("items")));
+        }
+
+        if (orderDataJson.has("buyerInfo")) {
+            order.setBuyerInfo(objectMapper.writeValueAsString(orderDataJson.get("buyerInfo")));
+        }
+
+        if (orderDataJson.has("shippingInfo")) {
+            order.setShippingInfo(objectMapper.writeValueAsString(orderDataJson.get("shippingInfo")));
+        }
+
+        if (orderDataJson.has("createdAt")) {
+            order.setChannelCreatedAt(
+                LocalDateTime.parse(orderDataJson.get("createdAt").asText())
+            );
+        }
+
+        // 設置為非回補訂單
+        order.setIsRollback(false);
+    }
+
+    /**
+     * 計算訂單 Hash（比對用）
+     */
+    private String calculateOrderHash(Order order, JsonNode orderDataJson) {
+        try {
+            // 只包含會變動的業務欄位
+            var sortedData = new java.util.TreeMap<String, Object>();
+
+            if (order.getOrderStatus() != null) {
+                sortedData.put("status", order.getOrderStatus().getCode());
+            }
+            if (order.getTotalAmount() != null) {
+                sortedData.put("totalAmount", order.getTotalAmount());
+            }
+            if (order.getItems() != null) {
+                sortedData.put("items", order.getItems());
+            }
+            if (order.getBuyerInfo() != null) {
+                sortedData.put("buyerInfo", order.getBuyerInfo());
+            }
+            if (order.getShippingInfo() != null) {
+                sortedData.put("shippingInfo", order.getShippingInfo());
+            }
+
+            String json = objectMapper.writeValueAsString(sortedData);
+            return org.apache.commons.codec.digest.DigestUtils.sha256Hex(json);
+        } catch (Exception e) {
+            log.error("Error calculating order hash", e);
+            return "";
+        }
+    }
+
+    /**
+     * 觸發後續流程（如果需要）
+     */
+    private void triggerFollowUpTasks(Order order) {
+        // 可能的後續流程：
+        // - 同步商品到 SYNC_PRODUCT
+        // - 同步上架配置到 SYNC_PACK
+        // - 發送到後端報表系統
+        // TODO: 根據業務需求實現
+        log.debug("Triggering follow-up tasks for order: {}", order.getOrderId());
+    }
+}
