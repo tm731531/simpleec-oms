@@ -17,7 +17,7 @@ import java.time.LocalDateTime;
  * 代表我們的商品，與各平台無關
  */
 @Entity
-@Table(name = "products", indexes = {
+@Table(name = "product", indexes = {
     @Index(name = "idx_merchant_sku", columnList = "merchant_id,sku", unique = true),
     @Index(name = "idx_product_status", columnList = "status")
 })

@@ -16,7 +16,7 @@ import java.time.LocalDateTime;
  * 退貨實體
  */
 @Entity
-@Table(name = "returns", indexes = {
+@Table(name = "refund_orders", indexes = {
     @Index(name = "idx_order_id", columnList = "order_id"),
     @Index(name = "idx_channel_return_id", columnList = "channel_id,channel_return_id"),
     @Index(name = "idx_return_status", columnList = "return_status")

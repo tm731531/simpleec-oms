@@ -232,7 +232,7 @@ public class ModeBOrderDetailHandler {
 
         // 發送到 order.process topic
         String messageStr = objectMapper.writeValueAsString(message);
-        kafkaTemplate.send(TopicConstants.TOPIC_ORDER_PROCESS, channelOrderId, messageStr);
+        kafkaTemplate.send(TopicConstants.ORDER_PROCESS, channelOrderId, messageStr);
 
         log.info("Sent ORDER_UPSERT to order.process for {}", channelOrderId);
     }
