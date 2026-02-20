@@ -261,8 +261,10 @@ CREATE INDEX idx_sellpack_merchant ON public.sell_pack (merchant_id);
 CREATE INDEX idx_sellpack_channel ON public.sell_pack (channel_id);
 CREATE INDEX idx_sellpack_product ON public.sell_pack (product_id);
 CREATE INDEX idx_sellpack_sku ON public.sell_pack (sku);
+-- Unique Key: 同一個 channel + 同一個 spec (規格) + 同一個 sku (通路 SKU/賣編)
+-- 允許同一個 product 在同一個 channel 上重複上架（不同規格/SKU 組合）
 CREATE UNIQUE INDEX idx_sellpack_upsert_key
-    ON public.sell_pack (channel_id, channel_product_id, COALESCE(channel_spec_id, ''));
+    ON public.sell_pack (channel_id, channel_spec_id, sku);
 
 -- ---------------------------------------------------------------------------
 -- 13. orders — Orders with JSONB items (FK → channel)

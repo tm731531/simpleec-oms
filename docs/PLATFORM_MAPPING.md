@@ -181,10 +181,14 @@
 
 **重點說明**：
 - SellPack **不是套包**，是「Product 在 Channel 上的配置」
-- 1 個 Product × 1 個 Channel = 1 個 SellPack
+- 1 個 Product 在 1 個 Channel 可以有**多個 SellPack**（不同規格/SKU 組合）
+  - 例：iPhone 在 Shopee 有 3 個上架：紅色/128G、紅色/256G、黑色/128G
+  - 每個上架是獨立的 SellPack 記錄（不同 channelSpecId 和 sku）
+- **Unique Key**：(channelId, channelSpecId, sku) = 唯一
+  - 允許同一 product 重複上架（不同規格組合）
 - Product.sku = 我們的內部 SKU，SellPack.sku = 平台上的 SKU（可能不同）
 - SellPack.quantity = 平台顯示的庫存，與 Product.quantity 獨立
-- 平台決定「我的 channel 要上架哪些 product」
+- 平台決定「我的 channel 要上架哪些 product + 規格組合」
 
 ### 1.4 RefundOrder Schema（退貨單）
 
