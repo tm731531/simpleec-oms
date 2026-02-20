@@ -49,6 +49,9 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { merchantAPI } from '../api/merchant'
+import { accountAPI } from '../api/account'
+import { platformAPI } from '../api/platform'
 
 const stats = ref({
   merchantCount: 0,
@@ -57,8 +60,33 @@ const stats = ref({
   orderCount: 0
 })
 
+const loading = ref(false)
+
+async function loadStats() {
+  loading.value = true
+  try {
+    // 並行加載所有統計數據
+    const [merchantRes, accountRes, platformRes] = await Promise.all([
+      merchantAPI.list(1, 1),
+      accountAPI.list(1, 1),
+      platformAPI.list(1, 1)
+    ])
+
+    stats.value = {
+      merchantCount: merchantRes.data.data.total,
+      accountCount: accountRes.data.data.total,
+      platformCount: platformRes.data.data.total,
+      orderCount: 0 // 暫時為 0，待後端補充訂單 API
+    }
+  } catch (err) {
+    console.error('加載統計數據失敗:', err)
+  } finally {
+    loading.value = false
+  }
+}
+
 onMounted(() => {
-  // 稍後從 API 加載統計數據
+  loadStats()
 })
 </script>
 
