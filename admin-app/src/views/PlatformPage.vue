@@ -7,20 +7,32 @@
       </el-button>
     </div>
     <el-card>
-      <el-alert
-        title="通路管理功能開發中"
-        type="info"
-        :closable="false"
-        description="此功能會串接後端 Platform API"
-      />
-      <p style="margin-top: 20px; color: #606266;">功能特性將包括：通路 CRUD、API 金鑰管理、同步日誌</p>
+      <PlatformTable :refresh="refreshCount" @edit="handleEditPlatform" />
     </el-card>
+    <PlatformForm :platform="selectedPlatform" @saved="handleSaved" @close="selectedPlatform = null" />
   </div>
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
+import { Platform } from '../types'
+import PlatformTable from '../components/PlatformTable.vue'
+import PlatformForm from '../components/PlatformForm.vue'
+
+const selectedPlatform = ref<Platform | null>(null)
+const refreshCount = ref(0)
+
 function handleNewPlatform() {
-  console.log('New platform')
+  selectedPlatform.value = null
+}
+
+function handleEditPlatform(platform: Platform) {
+  selectedPlatform.value = platform
+}
+
+function handleSaved() {
+  refreshCount.value++
+  selectedPlatform.value = null
 }
 </script>
 

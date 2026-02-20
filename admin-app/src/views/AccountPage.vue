@@ -7,20 +7,47 @@
       </el-button>
     </div>
     <el-card>
-      <el-alert
-        title="帳戶管理功能開發中"
-        type="info"
-        :closable="false"
-        description="此功能會串接後端 Account API"
-      />
-      <p style="margin-top: 20px; color: #606266;">功能特性將包括：帳戶 CRUD、密碼重設、權限設定</p>
+      <AccountTable :refresh="refreshCount" @edit="handleEditAccount" @resetPassword="handleResetPassword" />
     </el-card>
+    <AccountForm
+      :account="selectedAccount"
+      :resetPasswordAccount="resetPasswordAccount"
+      @saved="handleSaved"
+      @close="handleFormClose"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
+import { Account } from '../types'
+import AccountTable from '../components/AccountTable.vue'
+import AccountForm from '../components/AccountForm.vue'
+
+const selectedAccount = ref<Account | null>(null)
+const resetPasswordAccount = ref<Account | null>(null)
+const refreshCount = ref(0)
+
 function handleNewAccount() {
-  console.log('New account')
+  selectedAccount.value = null
+}
+
+function handleEditAccount(account: Account) {
+  selectedAccount.value = account
+}
+
+function handleResetPassword(account: Account) {
+  resetPasswordAccount.value = account
+}
+
+function handleSaved() {
+  refreshCount.value++
+  selectedAccount.value = null
+}
+
+function handleFormClose() {
+  selectedAccount.value = null
+  resetPasswordAccount.value = null
 }
 </script>
 
