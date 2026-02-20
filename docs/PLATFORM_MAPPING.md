@@ -155,9 +155,9 @@
 {
   "sellPackId": "string",                 // OMS 上架記錄 ID（unique key）
   "merchantId": "string",                 // 商家 ID
-  "productId": "string",                  // FK → Product.productId（我們的 SKU）
+  "productId": "string",                  // FK → Product.productId（可能為 null = 孤立上架）
   "channelId": "string",                  // FK → Channel.id（通路實例）
-  "sku": "string",                        // 通路上的 SKU（可能與 product.sku 不同）
+  "sku": "string",                        // 通路上的 SKU（用於 match product.sku，但可能找不到）
   "channelProductId": "string",           // 通路方給的商品 ID（e.g., Shopee item_id）
   "channelSpecId": "string",              // 通路上的規格 ID（e.g., Shopee variation_id）
   "channelProductName": "string",         // 通路上展示的商品名稱
