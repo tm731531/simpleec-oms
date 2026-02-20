@@ -162,6 +162,31 @@ CREATE TABLE public.channel (
 );
 
 -- ---------------------------------------------------------------------------
+-- 8b. channel_shipping_mapping — Shipping method mapping per channel
+-- ---------------------------------------------------------------------------
+CREATE TABLE public.channel_shipping_mapping (
+    id                          VARCHAR(20)   NOT NULL,
+    merchant_id                 VARCHAR(20)   NOT NULL,
+    channel_id                  VARCHAR(20)   NOT NULL,
+    platform_shipping_method    VARCHAR(100)  NOT NULL,
+    logistics_company           VARCHAR(100)  NOT NULL,
+    logistics_company_code      VARCHAR(50),
+    description                 VARCHAR(256),
+    active                      BOOLEAN       NOT NULL DEFAULT true,
+    created_at                  TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    updated_at                  TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    PRIMARY KEY (id),
+    CONSTRAINT fk_shipping_map_merchant FOREIGN KEY (merchant_id)
+        REFERENCES public.merchant (id) ON UPDATE CASCADE ON DELETE NO ACTION,
+    CONSTRAINT fk_shipping_map_channel FOREIGN KEY (channel_id)
+        REFERENCES public.channel (id) ON UPDATE CASCADE ON DELETE NO ACTION,
+    CONSTRAINT uk_shipping_map UNIQUE (channel_id, platform_shipping_method)
+);
+
+CREATE INDEX idx_shipping_map_channel ON public.channel_shipping_mapping (channel_id);
+CREATE INDEX idx_shipping_map_merchant ON public.channel_shipping_mapping (merchant_id);
+
+-- ---------------------------------------------------------------------------
 -- 9. product_group — Product group for frontend management (FK → merchant)
 -- ---------------------------------------------------------------------------
 CREATE TABLE public.product_group (
@@ -476,3 +501,24 @@ CREATE TABLE public.failed_task_logs (
 
 CREATE INDEX idx_failed_task_created ON public.failed_task_logs (created_at);
 CREATE INDEX idx_failed_task_action ON public.failed_task_logs (task_action);
+
+-- =============================================================================
+-- Sample Data for channel_shipping_mapping (update merchant_id and channel_id as needed)
+-- =============================================================================
+-- NOTE: Replace 'M001', 'ch_momo', 'ch_shopee', etc. with actual IDs from your setup
+
+-- MOMO mappings
+INSERT INTO public.channel_shipping_mapping (id, merchant_id, channel_id, platform_shipping_method, logistics_company, logistics_company_code, description, active)
+VALUES
+    ('csp_momo_001', 'M001', 'ch_momo', 'HOME_DELIVERY', '黑貓宅急便', 'BLACKCAT', 'Momo home delivery via Black Cat', true),
+    ('csp_momo_002', 'M001', 'ch_momo', 'STORE_PICKUP', 'Momo 超商取貨', 'MOMO_STORE', 'Momo convenience store pickup', true),
+    ('csp_momo_003', 'M001', 'ch_momo', 'SEVEN_ELEVEN', '7-ELEVEN', '7ELV', 'Momo 7-Eleven pickup', true)
+ON CONFLICT (channel_id, platform_shipping_method) DO NOTHING;
+
+-- Shopee mappings
+INSERT INTO public.channel_shipping_mapping (id, merchant_id, channel_id, platform_shipping_method, logistics_company, logistics_company_code, description, active)
+VALUES
+    ('csp_shopee_001', 'M001', 'ch_shopee', 'STANDARD_DELIVERY', '新竹物流', 'XINDE', 'Shopee standard delivery', true),
+    ('csp_shopee_002', 'M001', 'ch_shopee', 'EXPRESS_DELIVERY', '黑貓宅急便', 'BLACKCAT', 'Shopee express delivery', true),
+    ('csp_shopee_003', 'M001', 'ch_shopee', 'SELF_PICKUP', 'Shopee 自取', 'SHOPEE_SELF', 'Shopee self pickup', true)
+ON CONFLICT (channel_id, platform_shipping_method) DO NOTHING;

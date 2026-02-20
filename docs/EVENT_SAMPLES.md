@@ -426,6 +426,12 @@ order.process Handler 接收後，查詢資料庫判斷是新訂單還是已存�
 4. 已存在 + Hash 不同 → UPDATE
 5. 已存在 + Hash 相同 → 跳過（冪等性）
 
+**物流映射**：
+- shippingMethod（如 "HOME_DELIVERY"）需要在 channel_shipping_mapping 表中查詢對應的 logistics_company
+- 查詢邏輯：`SELECT logistics_company FROM channel_shipping_mapping WHERE channel_id=? AND platform_shipping_method=?`
+- 若無映射記錄，可使用預設值或 NULL，不中斷訂單建立流程
+- shippingStatus 初始值為 "PENDING"，由 SHIP_ORDER 消息更新為 "SHIPPED"
+
 注：orderId 由 Handler 在新增時生成，更新時由 orderData 帶入。
 
 ---
