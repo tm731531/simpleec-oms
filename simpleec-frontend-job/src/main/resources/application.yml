@@ -1,15 +1,15 @@
 spring:
   application:
     name: simpleec-frontend-job
-  jpa:
-    hibernate:
-      ddl-auto: validate
-  datasource:
-    url: jdbc:postgresql://localhost:5432/simpleec
-    username: simpleec
-    password: simpleec123
   kafka:
     bootstrap-servers: localhost:9092
+    consumer:
+      group-id: frontend-job-group
+      max-poll-records: 100
+      auto-offset-reset: earliest
+  mvc:
+    async:
+      request-timeout: 300000
 
 server:
   port: 8089
@@ -17,3 +17,4 @@ server:
 logging:
   level:
     com.simpleec: DEBUG
+    org.springframework.kafka: INFO

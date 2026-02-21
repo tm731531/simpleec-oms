@@ -2,19 +2,24 @@ package com.simpleec.frontendjob;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration;
 import org.springframework.kafka.annotation.EnableKafka;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
- * Frontend Job 應用程序入點
+ * 前端任務應用 - 實時事件推送系統
  *
- * 提供 REST API 給前端 UI，接收用戶操作並轉換為 Kafka 消息
- * - 手動出貨確認
- * - 產品/庫存同步觸發
- * - 退貨批准/拒絕
- * - 報表下載請求
+ * 透過 SSE (Server-Sent Events) 將後端事件推送到已連接的前端客戶端
+ * 監聽 task.frontend topic，廣播到對應 merchant 的客戶端
  */
-@SpringBootApplication(scanBasePackages = "com.simpleec")
+@SpringBootApplication(
+    scanBasePackages = {"com.simpleec.common", "com.simpleec.frontendjob"},
+    exclude = {
+        RedisRepositoriesAutoConfiguration.class
+    }
+)
 @EnableKafka
+@EnableScheduling
 public class FrontendJobApplication {
     public static void main(String[] args) {
         SpringApplication.run(FrontendJobApplication.class, args);
