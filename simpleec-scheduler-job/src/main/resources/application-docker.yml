@@ -1,6 +1,12 @@
 spring:
   datasource:
     url: jdbc:postgresql://postgres:5432/simpleec
+  jpa:
+    hibernate:
+      ddl-auto: none  # 只查詢，不驗證或修改 schema
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
   kafka:
     bootstrap-servers: kafka:9092
     producer:

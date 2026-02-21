@@ -1,18 +1,24 @@
 configurations {
     all {
         exclude group: 'com.baomidou', module: 'mybatis-plus-spring-boot3-starter'
-        exclude group: 'org.springframework.boot', module: 'spring-boot-starter-data-jpa'
+        // JPA is now needed for ChannelRepository channel status validation
+        // exclude group: 'org.springframework.boot', module: 'spring-boot-starter-data-jpa'
     }
 }
 
 dependencies {
     implementation project(':simpleec-common')
+    implementation project(':simpleec-core')
 
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.kafka:spring-kafka'
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
     implementation 'io.lettuce:lettuce-core'
     implementation 'com.fasterxml.jackson.core:jackson-databind'
+
+    // Database support for ChannelRepository (channel status validation before task dispatch)
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.postgresql:postgresql:42.7.1'
 }
 
 tasks.named('bootJar') {

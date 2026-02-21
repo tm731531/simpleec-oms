@@ -4,6 +4,7 @@ COPY gradle gradle
 COPY gradlew .
 COPY build.gradle settings.gradle ./
 COPY simpleec-common simpleec-common
+COPY simpleec-core simpleec-core
 COPY simpleec-scheduler-job simpleec-scheduler-job
 RUN chmod +x gradlew && ./gradlew :simpleec-scheduler-job:bootJar -x test --no-daemon
 

@@ -91,8 +91,8 @@ configure(subprojects.findAll { ['simpleec-channel', 'simpleec-api', 'simpleec-g
 }
 
 // Layer 3 jobs that need simpleec-core (order, channel, retry, backend)
-// Scheduler job should NOT depend on core (lightweight, heartbeat-only)
-configure(subprojects.findAll { ['simpleec-channel-job', 'simpleec-order-job', 'simpleec-backend-job', 'simpleec-frontend-job', 'simpleec-retry-job'].contains(it.name) }) {
+// Scheduler job now needs minimal core for channel status validation before task dispatch
+configure(subprojects.findAll { ['simpleec-channel-job', 'simpleec-order-job', 'simpleec-backend-job', 'simpleec-frontend-job', 'simpleec-retry-job', 'simpleec-scheduler-job'].contains(it.name) }) {
     dependencies {
         implementation project(':simpleec-core')
         // Some may need channel if they use ChannelAdapter
