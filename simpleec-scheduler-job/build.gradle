@@ -1,6 +1,5 @@
 dependencies {
     implementation project(':simpleec-common')
-    implementation project(':simpleec-core')
 
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.kafka:spring-kafka'
