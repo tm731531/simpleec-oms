@@ -12,4 +12,9 @@ WORKDIR /app
 ADD https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v2.10.0/opentelemetry-javaagent.jar /app/otel-agent.jar
 COPY --from=builder /build/simpleec-scheduler-job/build/libs/simpleec-scheduler-job-1.0.0.jar app.jar
 ENV SPRING_PROFILES_ACTIVE=docker
+ENV SPRING_REDIS_HOST=redis
+ENV SPRING_REDIS_PORT=6379
+ENV SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+ENV SPRING_KAFKA_CONSUMER_BOOTSTRAP_SERVERS=kafka:9092
+ENV SPRING_KAFKA_PRODUCER_BOOTSTRAP_SERVERS=kafka:9092
 ENTRYPOINT ["java", "-javaagent:/app/otel-agent.jar", "-jar", "app.jar"]
