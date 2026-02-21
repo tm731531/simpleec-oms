@@ -48,7 +48,11 @@ public class AuthController {
         if (!"enable".equals(account.getStatus())) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", "帳號已停用"));
         }
-        if (!passwordEncoder.matches(password, account.getAccountPassword())) {
+        // Support both BCrypt-hashed and plain-text passwords (for backward compatibility)
+        boolean passwordMatches = passwordEncoder.matches(password, account.getAccountPassword())
+            || password.equals(account.getAccountPassword());
+
+        if (!passwordMatches) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "帳號或密碼錯誤"));
         }
 
