@@ -70,7 +70,7 @@ class ReturnUpsertHandlerTest {
      * 測試 1: Redis 快速路徑 — hash 匹配，跳過處理
      */
     @Test
-    void testHandleReturnUpsert_RedisHitSkipsProcessing() throws Exception {
+    void testHandleReturnUpsert_RedisCacheHit_SkipsProcessing() throws Exception {
         // 準備
         String redisKey = RedisKeyUtil.returnHashKey(merchantId, channelId, channelReturnId);
         when(redisValueOperations.get(redisKey)).thenReturn(returnHash);
@@ -97,7 +97,7 @@ class ReturnUpsertHandlerTest {
      * 測試 2: 資料庫 INSERT — 新退貨不存在於 DB
      */
     @Test
-    void testHandleReturnUpsert_InsertNewReturn() throws Exception {
+    void testHandleReturnUpsert_DatabaseInsert_CreatesNewReturn() throws Exception {
         // 準備
         String redisKey = RedisKeyUtil.returnHashKey(merchantId, channelId, channelReturnId);
         String orderId = "ORD_001";
@@ -150,7 +150,7 @@ class ReturnUpsertHandlerTest {
      * 測試 3: 資料庫 UPDATE — 退貨存在且內容有變化
      */
     @Test
-    void testHandleReturnUpsert_UpdateExistingReturn() throws Exception {
+    void testHandleReturnUpsert_DatabaseUpdate_UpdatesExistingReturn() throws Exception {
         // 準備
         String redisKey = RedisKeyUtil.returnHashKey(merchantId, channelId, channelReturnId);
         String orderId = "ORD_001";

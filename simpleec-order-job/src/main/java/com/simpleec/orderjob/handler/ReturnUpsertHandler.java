@@ -170,9 +170,6 @@ public class ReturnUpsertHandler {
             if (returnOrder.getItems() != null) {
                 sortedData.put("items", returnOrder.getItems());
             }
-            if (returnOrder.getRequestedAt() != null) {
-                sortedData.put("requestedAt", returnOrder.getRequestedAt());
-            }
 
             String json = objectMapper.writeValueAsString(sortedData);
             return org.apache.commons.codec.digest.DigestUtils.sha256Hex(json);
