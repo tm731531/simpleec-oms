@@ -31,4 +31,6 @@ server:
 logging:
   level:
     com.simpleec: DEBUG
-    org.springframework.kafka: INFO
+    com.simpleec.schedulerjob: DEBUG
+    org.springframework.kafka: DEBUG
+    org.springframework.kafka.listener: DEBUG

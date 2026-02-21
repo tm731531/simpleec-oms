@@ -61,8 +61,8 @@ public class HeartbeatJob {
             message.set("header", header);
             message.set("body", body);
 
-            // 發送到 scheduler.heartbeat topic
-            kafkaTemplate.send(TopicConstants.SCHEDULER_HEARTBEAT, header.get("messageId").asText(), message);
+            // 發送到 scheduler topic（給 SchedulerConsumer 消費以派發排程任務）
+            kafkaTemplate.send(TopicConstants.SCHEDULER, header.get("messageId").asText(), message);
 
             // 寫入 Redis 用於監控（設置 2 秒過期時間，允許檢測到心跳停止）
             String jobId = "scheduler-job-" + System.getenv("HOSTNAME");
