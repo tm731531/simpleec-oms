@@ -243,6 +243,45 @@ public ModeEnum getMode() {
 
 ---
 
+### Return (Refund) Order Processing — ReturnUpsertConsumer
+
+**Kafka Topic:** `return.process`
+
+**Message Type:** `RETURN_UPSERT`
+
+**Flow:**
+1. Platform adapters detect returns/refunds via API polling
+2. Send RETURN_UPSERT message to return.process topic with:
+   - `channelRefundId`: Platform-specific refund ID
+   - `returnHash`: SHA256 hash of return data for deduplication
+   - `returnData`: Return details (status, reason, items, amount)
+3. ReturnUpsertConsumer processes message with two-layer deduplication
+4. Redis quick-path: Hash match = already processed
+5. Database safe-path: Create new or update existing return
+6. Return data stored in `refund_orders` table
+
+**Files:**
+- Consumer: `simpleec-order-job/src/main/java/com/simpleec/orderjob/consumer/ReturnUpsertConsumer.java`
+- Handler: `simpleec-order-job/src/main/java/com/simpleec/orderjob/handler/ReturnUpsertHandler.java`
+- Service: `simpleec-core/src/main/java/com/simpleec/core/service/ReturnOrderService.java`
+- Entity: `simpleec-core/src/main/java/com/simpleec/core/entity/ReturnOrder.java`
+
+**Status Mapping:**
+Platform return statuses are mapped to OMS statuses:
+- `PENDING` → pending (default)
+- `APPROVED` → approved
+- `REJECTED` → rejected
+- `COMPLETED` → completed
+- `REFUNDED` → refunded
+
+**Redis Deduplication:**
+- Key: `return:hash:{merchantId}:{channelId}:{channelRefundId}`
+- Value: SHA256 hash of mutable return fields
+- TTL: 7 days
+- See [RETURN_UPSERT_FLOW.md](RETURN_UPSERT_FLOW.md) for complete deduplication strategy
+
+---
+
 ## 🚀 快速查找（按角色）
 
 ### 👨‍💻 **我是 Channel Job 開發者**
