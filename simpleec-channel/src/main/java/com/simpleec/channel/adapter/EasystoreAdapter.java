@@ -25,7 +25,7 @@ public class EasystoreAdapter implements ChannelAdapter {
 
     @Override
     public ModeEnum getMode() {
-        return ModeEnum.MODE_A;
+        return ModeEnum.A;
     }
 
     /**

@@ -76,7 +76,7 @@ public class SyncProductHandler {
                     try {
                         syncProductToPlatform(product, platform, merchantId);
                     } catch (Exception e) {
-                        log.error("Failed to sync product {} to {}", product.getProductId(), platform, e);
+                        log.error("Failed to sync product {} to {}", product.getId(), platform, e);
                         // 繼續處理其他產品和平台
                     }
                 }
@@ -135,7 +135,7 @@ public class SyncProductHandler {
      */
     private void syncProductToPlatform(Product product, String platform, String merchantId) {
         log.debug("Syncing product {} to platform {} for merchant {}",
-            product.getProductId(), platform, merchantId);
+            product.getId(), platform, merchantId);
 
         // 模擬同步：實際應調用各平台 API
         switch (platform.toLowerCase()) {

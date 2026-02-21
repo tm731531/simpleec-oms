@@ -44,7 +44,7 @@ public class OrderUpsertConsumer {
     @KafkaListener(topics = "order.process", groupId = "order-job-group", concurrency = "8")
     @Transactional
     public void consumeOrderUpsert(@Payload String message,
-                                   @Header(KafkaHeaders.RECEIVED_PARTITION_ID) int partition,
+                                   @Header(name = "kafka_receivedPartitionId") int partition,
                                    Acknowledgment acknowledgment) {
         try {
             JsonNode json = objectMapper.readTree(message);
@@ -120,7 +120,7 @@ public class OrderUpsertConsumer {
                 // Hash 不同 → 有實質變化 → 執行 UPDATE
                 order = updateOrderFromData(order, orderDataJson);
                 log.info("Updated order: {} from channel {} (hash changed)",
-                    order.getOrderId(), channelId);
+                    order.getId(), channelId);
             } else {
                 // Hash 相同 → 沒有變化 → 跳過
                 log.debug("Order content unchanged: {}", channelOrderId);
@@ -131,7 +131,7 @@ public class OrderUpsertConsumer {
         } else {
             // INSERT 新訂單
             order = createOrderFromData(merchantId, channelId, channelOrderId, orderDataJson);
-            log.info("Created new order: {} from channel {}", order.getOrderId(), channelId);
+            log.info("Created new order: {} from channel {}", order.getId(), channelId);
         }
 
         // 第 3 步：儲存訂單到資料庫
@@ -143,7 +143,7 @@ public class OrderUpsertConsumer {
         // 第 5 步：觸發後續流程（可選）
         triggerFollowUpTasks(savedOrder);
 
-        log.info("Completed ORDER_UPSERT for: {}", savedOrder.getOrderId());
+        log.info("Completed ORDER_UPSERT for: {}", savedOrder.getId());
     }
 
     /**
@@ -249,6 +249,6 @@ public class OrderUpsertConsumer {
         // - 同步上架配置到 SYNC_PACK
         // - 發送到後端報表系統
         // TODO: 根據業務需求實現
-        log.debug("Triggering follow-up tasks for order: {}", order.getOrderId());
+        log.debug("Triggering follow-up tasks for order: {}", order.getId());
     }
 }

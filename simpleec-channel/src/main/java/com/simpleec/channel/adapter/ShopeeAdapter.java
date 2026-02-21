@@ -4,7 +4,7 @@ import com.simpleec.common.enums.ModeEnum;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
-import java.*;
+import java.time.LocalDateTime;
 import java.util.*;
 
 /**
@@ -27,7 +27,7 @@ public class ShopeeAdapter implements ChannelAdapter {
 
     @Override
     public ModeEnum getMode() {
-        return ModeEnum.MODE_B;
+        return ModeEnum.B;
     }
 
     /**
