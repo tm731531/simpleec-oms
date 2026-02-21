@@ -7,6 +7,7 @@ export default defineConfig({
     port: 8081,
     host: '0.0.0.0',
     cors: true,
+    allowedHosts: ['oms-admin.tomting.com', 'localhost', '127.0.0.1', '192.168.0.48'],
     headers: {
       'Access-Control-Allow-Origin': '*'
     },
@@ -21,11 +22,6 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    assetsDir: 'assets',
-    library: {
-      entry: 'src/main.ts',
-      name: 'AdminApp',
-      formats: ['umd']
-    }
+    assetsDir: 'assets'
   }
 })

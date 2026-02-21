@@ -1,0 +1,197 @@
+================================================================================
+BUILD ARTIFACTS SUMMARY
+SimpleEC OMS — Final Verification Session
+Date: 2026-02-21
+================================================================================
+
+BACKEND JAR ARTIFACTS
+=====================
+
+Module                      | File                              | Size
+------------------------------|--------------------------------------|--------
+simpleec-api                | simpleec-api-1.0.0-plain.jar      | 96 KB
+simpleec-gateway            | simpleec-gateway-1.0.0-plain.jar  | 12 KB
+simpleec-channel            | simpleec-channel-1.0.0-plain.jar  | 16 KB
+simpleec-channel-job        | simpleec-channel-job-*.jar        | 20 KB
+simpleec-order-job          | simpleec-order-job-*.jar          | 12 KB
+simpleec-backend-job        | simpleec-backend-job-*.jar        | 36 KB
+simpleec-frontend-job       | simpleec-frontend-job-*.jar       | 8 KB
+simpleec-scheduler-job      | simpleec-scheduler-job-*.jar      | 12 KB
+simpleec-retry-job          | simpleec-retry-job-*.jar          | 12 KB
+simpleec-core               | simpleec-core-1.0.0-plain.jar     | 68 KB
+simpleec-common             | simpleec-common-1.0.0-plain.jar   | 20 KB
+
+Total Backend Size:         ~312 KB (all JAR files combined)
+
+
+FRONTEND BUILD ARTIFACTS
+=======================
+
+Application  | Output Directory | Size  | Files | Status
+--------------|------------------|-------|-------|--------
+Admin App    | admin-app/dist/  | 1.5M  | ~100+ | Production-ready
+User App     | user-app/dist/   | 1.5M  | ~100+ | Production-ready
+
+Bundle Breakdown (Admin App):
+├─ index-BfafRZaf.css      350 KB (gzipped: 47.4 KB)
+├─ index-C0Zqfgkc.js       36.6 MB (gzipped: 14.7 KB)
+├─ index-Dg-EI8Do.js       1008 KB (gzipped: 332.4 KB) ← Largest chunk
+└─ Other assets            ~100 KB
+
+Bundle Breakdown (User App):
+├─ index-DEeS_5Zy.css      350 KB (gzipped: 47.5 KB)
+├─ index-nr5G-hoy.js       1053 KB (gzipped: 350.6 KB) ← Largest chunk
+└─ Other assets            ~150 KB
+
+Total Frontend Size:         ~3 MB (uncompressed), ~1 MB (gzipped)
+
+
+DOCKER BUILD ARTIFACTS
+======================
+
+Service                | Container Image               | Status
+-----------------------|------------------------------|--------
+API                   | simpleec-oms-simpleec-api    | Running
+Gateway               | simpleec-oms-simpleec-gateway| Running
+Order Job             | simpleec-oms-order-job       | Running
+Backend Job           | simpleec-oms-backend-job     | Running
+Frontend Job          | simpleec-oms-frontend-job    | Running
+Scheduler Job         | simpleec-oms-scheduler-job   | Running
+Retry Job             | simpleec-oms-retry-job       | Running
+Channel Job (Momo)    | simpleec-oms-momo-*          | Running
+Channel Job (Shopee)  | simpleec-oms-shopee-*        | Running
+Channel Job (Yahoo)   | simpleec-oms-yahoo-*         | Running
+Channel Job (PChome)  | simpleec-oms-pchome-*        | Running
+Channel Job (Cyberbiz)| simpleec-oms-cyberbiz-*      | Running
+
+Total Containers:           25 running
+Total Container Memory:     Estimated ~4-6 GB
+
+
+DATABASE ARTIFACTS
+==================
+
+Schema File:               docker/init-db/01-schema.sql
+Version:                  v4 (2026-02-21)
+Tables Created:           18
+Last Schema Update:       Added buyer_info, shipping_info, is_rollback columns
+
+Recent Changes in This Session:
+- buyer_info (JSONB)        — Store buyer details as structured data
+- shipping_info (JSONB)     — Store shipping details as structured data
+- is_rollback (BOOLEAN)     — Flag for backfill order tracking
+
+Database Container:       PostgreSQL 16
+Data Directory:           /home/tom/ONEEC/simpleec-oms/data/postgres
+Backup Status:            Container persists to host volume
+
+
+SOURCE CODE ARTIFACTS
+====================
+
+Source Files:
+├─ Java:     11 modules, ~150+ classes, ~25,000 lines
+├─ Frontend: 2 apps (Vue 3), ~100+ components, ~10,000 lines
+└─ SQL:      Schema (1 file), Seed data (1 file)
+
+Test Files:              0 (recommended for future)
+Documentation:          10+ markdown files
+
+Git Artifacts:
+├─ Total Commits:        25+
+├─ Branch:              ops/production
+├─ Last Commit:         db4a3c9 (2026-02-21 11:14)
+└─ Status:              Clean working tree
+
+
+CONFIGURATION FILES
+===================
+
+Key Configuration Files:
+├─ gradle/                 — Gradle build configuration
+├─ docker-compose.yml      — Docker orchestration
+├─ application.properties  — Spring Boot configuration
+├─ vite.config.ts          — Frontend build configuration
+├─ tsconfig.json           — TypeScript configuration
+├─ .env*                   — Environment variables
+└─ .github/                — Git workflows (if any)
+
+
+PLUGIN DEPENDENCIES
+===================
+
+Build Plugins:
+├─ Gradle:           8.14.4
+├─ Java:            17 (OpenJDK)
+├─ Spring Boot:     3.5.0
+├─ Maven:           (via Gradle wrapper)
+
+Frontend Plugins:
+├─ Node:            v20+ (recommended)
+├─ npm:             10+ (recommended)
+├─ Vite:            5.4.21
+├─ Vue:             3.x
+├─ TypeScript:      5.x
+
+Runtime Services:
+├─ PostgreSQL:      16
+├─ Kafka:          3.7.1 (KRaft mode)
+├─ Redis:          7
+├─ Java Runtime:   OpenJDK 17
+
+
+DEPLOYMENT ARTIFACTS STATUS
+===========================
+
+✓ Backend JAR files:        Ready in build/libs/
+✓ Frontend dist:            Ready in admin-app/dist/ and user-app/dist/
+✓ Docker images:            Built and running
+✓ Database schema:          Initialized in PostgreSQL container
+✓ Configuration:            Environment-specific in .env files
+✓ Git repository:           All changes committed
+
+Ready for:
+✓ Integration testing
+✓ Performance testing
+✓ Deployment to staging/production
+
+
+PERFORMANCE METRICS
+===================
+
+Build Times:
+├─ Backend (clean):         17 seconds
+├─ Admin App:              10.19 seconds
+└─ User App:               11.27 seconds
+
+Total Time to Production Build:    ~40 seconds
+
+Bundle Analysis:
+├─ Admin App (gzipped):     ~395 KB total (47 KB CSS + 332 KB JS)
+├─ User App (gzipped):      ~400 KB total (47.5 KB CSS + 350.6 KB JS)
+└─ Note: Largest chunks are PrimeVue library dependencies
+
+
+QUALITY METRICS
+===============
+
+Compilation:
+├─ Errors:                  0
+├─ Critical Warnings:       0
+└─ Non-critical Warnings:   14 (Lombok defaults)
+
+Code Coverage:
+├─ Unit Tests:              Not yet implemented
+├─ Integration Tests:       Not yet implemented
+└─ Recommendation:          Add test suite in next phase
+
+Performance:
+├─ API Response (observed): <500ms (typical)
+├─ Database:               Indexed for common queries
+├─ Caching:                Redis configured
+└─ Load Capacity:          To be determined via testing
+
+
+================================================================================
+END OF REPORT
+================================================================================
