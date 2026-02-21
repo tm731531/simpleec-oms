@@ -7,6 +7,7 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
 }
 
-bootJar {
+tasks.named('bootJar') {
+    enabled = true
     mainClass = 'com.simpleec.orderjob.OrderJobApplication'
 }
