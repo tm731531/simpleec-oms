@@ -11,4 +11,5 @@ FROM eclipse-temurin:17-jre-alpine
 WORKDIR /app
 ADD https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v2.10.0/opentelemetry-javaagent.jar /app/otel-agent.jar
 COPY --from=builder /build/simpleec-scheduler-job/build/libs/simpleec-scheduler-job-1.0.0.jar app.jar
+ENV SPRING_PROFILES_ACTIVE=docker
 ENTRYPOINT ["java", "-javaagent:/app/otel-agent.jar", "-jar", "app.jar"]
