@@ -17,7 +17,6 @@ ENTRYPOINT ["java", \
   "-javaagent:/app/otel-agent.jar", \
   "-Dspring.redis.host=redis", \
   "-Dspring.redis.port=6379", \
+  "-Dspring.datasource.url=jdbc:postgresql://postgres:5432/simpleec", \
   "-Dspring.kafka.bootstrap-servers=kafka:9092", \
-  "-Dspring.kafka.producer.bootstrap-servers=kafka:9092", \
-  "-Dspring.kafka.consumer.bootstrap-servers=kafka:9092", \
   "-jar", "app.jar"]

@@ -11,10 +11,8 @@ import com.simpleec.common.constants.TopicConstants;
 import com.simpleec.common.enums.TaskTypeEnum;
 import com.simpleec.common.util.DateUtil;
 import com.simpleec.common.util.NanoIdUtil;
-import org.springframework.data.redis.core.StringRedisTemplate;
 
 import java.time.Instant;
-import java.time.Duration;
 
 /**
  * HeartbeatJob - 系統心臟
@@ -29,7 +27,6 @@ public class HeartbeatJob {
 
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final ObjectMapper objectMapper;
-    private final StringRedisTemplate redisTemplate;
 
     /**
      * 每秒執行一次
@@ -62,12 +59,16 @@ public class HeartbeatJob {
             message.set("body", body);
 
             // 發送到 scheduler topic（給 SchedulerConsumer 消費以派發排程任務）
-            kafkaTemplate.send(TopicConstants.SCHEDULER, header.get("messageId").asText(), message);
-
-            // 寫入 Redis 用於監控（設置 2 秒過期時間，允許檢測到心跳停止）
-            String jobId = "scheduler-job-" + System.getenv("HOSTNAME");
-            String heartbeatKey = "heartbeat:" + jobId;
-            redisTemplate.opsForValue().set(heartbeatKey, DateUtil.now(), Duration.ofSeconds(2));
+            log.info("Sending heartbeat message to topic: {}", TopicConstants.SCHEDULER);
+            try {
+                var future = kafkaTemplate.send(TopicConstants.SCHEDULER, header.get("messageId").asText(), message);
+                var result = future.get(5, java.util.concurrent.TimeUnit.SECONDS);
+                log.info("Heartbeat sent successfully to partition {}, offset {}",
+                    result.getRecordMetadata().partition(),
+                    result.getRecordMetadata().offset());
+            } catch (Exception e) {
+                log.error("Failed to send heartbeat to Kafka", e);
+            }
 
             // 每 10 秒記錄一次日誌，避免日誌過多
             if (instant.getEpochSecond() % 10 == 0) {
