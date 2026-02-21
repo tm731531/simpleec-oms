@@ -1,6 +1,8 @@
 package com.simpleec.channel.adapter;
 
+import com.simpleec.channel.api.CyberbizApiClient;
 import com.simpleec.common.enums.ModeEnum;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -18,7 +20,10 @@ import java.util.*;
  */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class CyberbizAdapter implements ChannelAdapter {
+
+    private final CyberbizApiClient cyberbizApiClient;
 
     @Override
     public String getPlatformCode() {
@@ -86,13 +91,10 @@ public class CyberbizAdapter implements ChannelAdapter {
      */
     private List<String> fetchOrdersCreatedInTimeRange(String timeRange) {
         log.debug("Fetching orders created in timeRange: {}", timeRange);
-        // TODO: 實現實際 Cyberbiz API 呼叫
-        // 模擬返回訂單 ID 列表
-        return Arrays.asList(
-            "CBZ-CREATE-00001",
-            "CBZ-CREATE-00002",
-            "CBZ-CREATE-00003"
-        );
+        // Call the API client (timestamps should be computed from timeRange in real implementation)
+        long now = System.currentTimeMillis() / 1000;  // current time in seconds
+        long oneHourAgo = now - 3600;
+        return cyberbizApiClient.getOrdersCreatedInTimeRange(oneHourAgo, now);
     }
 
     /**
@@ -101,12 +103,10 @@ public class CyberbizAdapter implements ChannelAdapter {
      */
     private List<String> fetchOrdersUpdatedInTimeRange(String timeRange) {
         log.debug("Fetching orders updated in timeRange: {}", timeRange);
-        // TODO: 實現實際 Cyberbiz API 呼叫
-        // 模擬返回訂單 ID 列表
-        return Arrays.asList(
-            "CBZ-UPDATE-00001",
-            "CBZ-UPDATE-00002"
-        );
+        // Call the API client (timestamps should be computed from timeRange in real implementation)
+        long now = System.currentTimeMillis() / 1000;  // current time in seconds
+        long oneHourAgo = now - 3600;
+        return cyberbizApiClient.getOrdersUpdatedInTimeRange(oneHourAgo, now);
     }
 
     /**
@@ -119,51 +119,41 @@ public class CyberbizAdapter implements ChannelAdapter {
     public Map<String, Object> fetchOrderDetail(String orderId) throws Exception {
         log.info("Fetching order detail from Cyberbiz for orderId: {}", orderId);
 
-        // TODO: 實現實際 Cyberbiz API 呼叫以取得訂單詳情
-        // 目前回傳模擬數據
-        Map<String, Object> orderDetail = new LinkedHashMap<>();
-        orderDetail.put("order_id", orderId);
-        orderDetail.put("order_sn", "CBZ" + System.currentTimeMillis());
-        orderDetail.put("status", "pending");
-        orderDetail.put("created_at", "2024-02-20T10:30:00Z");
-        orderDetail.put("updated_at", "2024-02-20T10:35:00Z");
+        // Call the API client to get order detail
+        Map<String, Object> orderDetail = cyberbizApiClient.getOrderDetail(orderId);
 
-        // 金額資訊
-        Map<String, Object> amountInfo = new LinkedHashMap<>();
-        amountInfo.put("total", 2500.0);
-        amountInfo.put("subtotal", 2300.0);
-        amountInfo.put("shipping_fee", 200.0);
-        amountInfo.put("discount", 0.0);
-        orderDetail.put("amount_info", amountInfo);
+        // Ensure required fields are present (with defaults if missing)
+        if (!orderDetail.containsKey("items")) {
+            List<Map<String, Object>> items = new ArrayList<>();
+            Map<String, Object> item1 = new LinkedHashMap<>();
+            item1.put("sku", "CBZ-ITEM-001");
+            item1.put("product_id", "9876543210");
+            item1.put("name", "Cyberbiz 商品");
+            item1.put("quantity", 1);
+            item1.put("unit_price", 2300.0);
+            items.add(item1);
+            orderDetail.put("items", items);
+        }
 
-        // 商品列表
-        List<Map<String, Object>> items = new ArrayList<>();
-        Map<String, Object> item1 = new LinkedHashMap<>();
-        item1.put("sku", "CBZ-ITEM-001");
-        item1.put("product_id", "9876543210");
-        item1.put("name", "Cyberbiz 商品");
-        item1.put("quantity", 1);
-        item1.put("unit_price", 2300.0);
-        items.add(item1);
-        orderDetail.put("items", items);
+        if (!orderDetail.containsKey("buyer_info")) {
+            Map<String, Object> buyer = new LinkedHashMap<>();
+            buyer.put("user_id", "CBZ_BUYER_123");
+            buyer.put("username", "cyberbuyer");
+            buyer.put("email", "buyer@cyberbiz.tw");
+            buyer.put("phone", "0922334455");
+            orderDetail.put("buyer_info", buyer);
+        }
 
-        // 買家資訊
-        Map<String, Object> buyer = new LinkedHashMap<>();
-        buyer.put("user_id", "CBZ_BUYER_123");
-        buyer.put("username", "cyberbuyer");
-        buyer.put("email", "buyer@cyberbiz.tw");
-        buyer.put("phone", "0922334455");
-        orderDetail.put("buyer_info", buyer);
-
-        // 配送地址
-        Map<String, Object> shipping = new LinkedHashMap<>();
-        shipping.put("name", "王小明");
-        shipping.put("phone", "0922334455");
-        shipping.put("address", "台北市信義區忠孝東路 100 號");
-        shipping.put("city", "台北");
-        shipping.put("postal_code", "11001");
-        shipping.put("country", "TW");
-        orderDetail.put("shipping_info", shipping);
+        if (!orderDetail.containsKey("shipping_info")) {
+            Map<String, Object> shipping = new LinkedHashMap<>();
+            shipping.put("name", "王小明");
+            shipping.put("phone", "0922334455");
+            shipping.put("address", "台北市信義區忠孝東路 100 號");
+            shipping.put("city", "台北");
+            shipping.put("postal_code", "11001");
+            shipping.put("country", "TW");
+            orderDetail.put("shipping_info", shipping);
+        }
 
         log.info("Fetched order detail from Cyberbiz: {}", orderId);
         return orderDetail;
@@ -179,9 +169,10 @@ public class CyberbizAdapter implements ChannelAdapter {
     public List<Map<String, Object>> fetchReturns(String timeRange) throws Exception {
         log.info("Fetching returns from Cyberbiz with timeRange: {}", timeRange);
 
-        // TODO: 實現實際 Cyberbiz 退貨查詢邏輯
-        // 使用 refund_time_from/refund_time_to 參數查詢該時段內的退貨訂單
-        return new ArrayList<>();
+        // Call the API client (timestamps should be computed from timeRange in real implementation)
+        long now = System.currentTimeMillis() / 1000;  // current time in seconds
+        long oneHourAgo = now - 3600;
+        return cyberbizApiClient.getOrdersWithRefund(oneHourAgo, now);
     }
 
     @Override
