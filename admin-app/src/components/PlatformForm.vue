@@ -4,8 +4,20 @@
       <el-form-item v-if="!isEdit" label="通路ID">
         <el-input v-model="formData.id" placeholder="輸入通路ID" />
       </el-form-item>
-      <el-form-item label="商家ID">
-        <el-input v-model="formData.merchant_id" placeholder="輸入商家ID" />
+      <el-form-item label="商家" prop="merchant_id">
+        <el-select
+          v-model="formData.merchant_id"
+          placeholder="請選擇商家"
+          :disabled="!!formData.id"
+          clearable
+        >
+          <el-option
+            v-for="merchant in merchantList"
+            :key="merchant.id"
+            :label="merchant.merchant_name"
+            :value="merchant.id"
+          />
+        </el-select>
       </el-form-item>
       <el-form-item label="通路名稱">
         <el-input v-model="formData.platform_name" placeholder="輸入通路名稱" />
@@ -36,10 +48,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Platform } from '../types'
+import { Platform, Merchant, Account } from '../types'
 import { platformAPI } from '../api/platform'
+import { accountAPI } from '../api/account'
 
 const props = defineProps<{
   platform?: Platform | null
@@ -53,6 +66,7 @@ const emit = defineEmits<{
 const visible = ref(false)
 const isEdit = ref(false)
 const loading = ref(false)
+const merchantList = ref<Merchant[]>([])
 
 const formData = ref<Partial<Platform>>({
   id: '',
@@ -87,6 +101,26 @@ function resetForm() {
   isEdit.value = false
 }
 
+async function loadMerchants() {
+  try {
+    const response = await accountAPI.list(1, 100)
+    const accounts = response.data.data?.items || []
+    // Get unique merchants from all accounts
+    const uniqueMerchants = new Map<string, Merchant>()
+    accounts.forEach((account: Account) => {
+      if (account.merchant_id && !uniqueMerchants.has(account.merchant_id)) {
+        uniqueMerchants.set(account.merchant_id, {
+          id: account.merchant_id,
+          merchant_name: account.merchant_id,
+        } as Merchant)
+      }
+    })
+    merchantList.value = Array.from(uniqueMerchants.values())
+  } catch (error) {
+    console.error('Failed to load merchants:', error)
+  }
+}
+
 async function handleSubmit() {
   loading.value = true
   try {
@@ -113,4 +147,8 @@ function handleClose() {
   visible.value = false
   emit('close')
 }
+
+onMounted(() => {
+  loadMerchants()
+})
 </script>

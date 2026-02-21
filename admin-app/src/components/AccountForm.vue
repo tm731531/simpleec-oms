@@ -11,8 +11,20 @@
         <el-form-item v-if="!isEdit" label="帳戶ID">
           <el-input v-model="formData.id" placeholder="輸入帳戶ID" />
         </el-form-item>
-        <el-form-item label="商家ID">
-          <el-input v-model="formData.merchant_id" placeholder="輸入商家ID" />
+        <el-form-item label="商家" prop="merchant_id">
+          <el-select
+            v-model="formData.merchant_id"
+            placeholder="請選擇商家"
+            :disabled="!!formData.id"
+            clearable
+          >
+            <el-option
+              v-for="merchant in merchantList"
+              :key="merchant.id"
+              :label="merchant.merchant_name"
+              :value="merchant.id"
+            />
+          </el-select>
         </el-form-item>
         <el-form-item label="帳戶名稱">
           <el-input v-model="formData.account_name" placeholder="輸入帳戶名稱" />
@@ -78,9 +90,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Account } from '../types'
+import { Account, Merchant } from '../types'
 import { accountAPI } from '../api/account'
 
 const props = defineProps<{
@@ -98,6 +110,7 @@ const resetPasswordDialogVisible = ref(false)
 const isEdit = ref(false)
 const loading = ref(false)
 const resetLoading = ref(false)
+const merchantList = ref<Merchant[]>([])
 
 const formData = ref<Partial<Account>>({
   id: '',
@@ -147,6 +160,26 @@ function resetForm() {
     status: 'active'
   }
   isEdit.value = false
+}
+
+async function loadMerchants() {
+  try {
+    const response = await accountAPI.list(1, 100)
+    const merchants = response.data.data?.items || []
+    // Get unique merchants from all accounts
+    const uniqueMerchants = new Map<string, Merchant>()
+    merchants.forEach((account: Account) => {
+      if (account.merchant_id && !uniqueMerchants.has(account.merchant_id)) {
+        uniqueMerchants.set(account.merchant_id, {
+          id: account.merchant_id,
+          merchant_name: account.merchant_id,
+        } as Merchant)
+      }
+    })
+    merchantList.value = Array.from(uniqueMerchants.values())
+  } catch (error) {
+    console.error('Failed to load merchants:', error)
+  }
 }
 
 async function handleSubmit() {
@@ -214,4 +247,8 @@ function handleCloseReset() {
   }
   emit('close')
 }
+
+onMounted(() => {
+  loadMerchants()
+})
 </script>
