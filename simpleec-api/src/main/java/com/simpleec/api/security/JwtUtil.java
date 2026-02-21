@@ -9,7 +9,7 @@ import javax.crypto.SecretKey;
 import java.util.Date;
 
 /**
- * JWT 工具類 - 生成和驗證 JWT 令牌
+ * JWT 工具類
  */
 @Slf4j
 @Component
@@ -24,7 +24,7 @@ public class JwtUtil {
     }
 
     /**
-     * 生成 JWT 令牌
+     * 生成 JWT Token
      */
     public String generateToken(String accountId, String merchantId, String email,
                                  String name, String role) {
@@ -41,18 +41,15 @@ public class JwtUtil {
     }
 
     /**
-     * 解析 JWT 令牌
+     * 解析 Token
      */
     public Claims parseToken(String token) {
-        return Jwts.parser()
-            .verifyWith(secretKey)
-            .build()
-            .parseSignedClaims(token)
-            .getPayload();
+        return Jwts.parser().verifyWith(secretKey).build()
+            .parseSignedClaims(token).getPayload();
     }
 
     /**
-     * 驗證令牌是否有效
+     * 驗證 Token 是否有效
      */
     public boolean isValid(String token) {
         try {

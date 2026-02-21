@@ -16,8 +16,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import java.util.List;
 
 /**
- * Spring Security 配置類
- * 設定 JWT 認證、CORS 和授權規則
+ * Spring Security 配置
  */
 @Configuration
 @EnableWebSecurity

@@ -14,7 +14,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 
 /**
- * JWT 認證過濾器 - 從 Bearer 令牌中提取用戶信息
+ * JWT 認證過濾器
  */
 @Slf4j
 @Component
