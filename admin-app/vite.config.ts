@@ -9,6 +9,13 @@ export default defineConfig({
     cors: true,
     headers: {
       'Access-Control-Allow-Origin': '*'
+    },
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8083',
+        changeOrigin: true,
+        rewrite: (path) => path
+      }
     }
   },
   build: {
