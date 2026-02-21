@@ -12,9 +12,10 @@ export default defineConfig({
     },
     proxy: {
       '/api': {
-        target: 'http://localhost:8083',
+        target: 'http://192.168.0.48:8083',
         changeOrigin: true,
-        rewrite: (path) => path
+        rewrite: (path) => path,
+        secure: false
       }
     }
   },
