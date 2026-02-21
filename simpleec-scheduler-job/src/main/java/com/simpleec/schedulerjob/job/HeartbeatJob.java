@@ -11,8 +11,10 @@ import com.simpleec.common.constants.TopicConstants;
 import com.simpleec.common.enums.TaskTypeEnum;
 import com.simpleec.common.util.DateUtil;
 import com.simpleec.common.util.NanoIdUtil;
+import org.springframework.data.redis.core.StringRedisTemplate;
 
 import java.time.Instant;
+import java.time.Duration;
 
 /**
  * HeartbeatJob - 系統心臟
@@ -27,6 +29,7 @@ public class HeartbeatJob {
 
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final ObjectMapper objectMapper;
+    private final StringRedisTemplate redisTemplate;
 
     /**
      * 每秒執行一次
@@ -58,8 +61,13 @@ public class HeartbeatJob {
             message.set("header", header);
             message.set("body", body);
 
-            // 發送到 scheduler topic
-            kafkaTemplate.send(TopicConstants.SCHEDULER, header.get("messageId").asText(), message);
+            // 發送到 scheduler.heartbeat topic
+            kafkaTemplate.send(TopicConstants.SCHEDULER_HEARTBEAT, header.get("messageId").asText(), message);
+
+            // 寫入 Redis 用於監控（設置 2 秒過期時間，允許檢測到心跳停止）
+            String jobId = "scheduler-job-" + System.getenv("HOSTNAME");
+            String heartbeatKey = "heartbeat:" + jobId;
+            redisTemplate.opsForValue().set(heartbeatKey, DateUtil.now(), Duration.ofSeconds(2));
 
             // 每 10 秒記錄一次日誌，避免日誌過多
             if (instant.getEpochSecond() % 10 == 0) {

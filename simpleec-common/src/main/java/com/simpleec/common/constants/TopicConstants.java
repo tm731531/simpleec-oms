@@ -7,11 +7,13 @@ public class TopicConstants {
 
     // ========== 核心 Topics ==========
     public static final String SCHEDULER = "scheduler";
+    public static final String SCHEDULER_HEARTBEAT = "scheduler.heartbeat";
     public static final String ORDER_PROCESS = "order.process";
     public static final String RETURN_PROCESS = "return.process";
     public static final String TASK_BACKEND = "task.backend";
     public static final String TASK_FAILED = "task.failed";
     public static final String TASK_DLT = "task.dlt";
+    public static final String TASK_FRONTEND = "task.frontend";
 
     // ========== 動態生成 (Platform Topics) ==========
     public static String platformSlowTopic(String platformCode) {
