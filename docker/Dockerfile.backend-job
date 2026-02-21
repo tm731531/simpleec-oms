@@ -11,5 +11,12 @@ RUN chmod +x gradlew && ./gradlew :simpleec-backend-job:bootJar -x test --no-dae
 FROM eclipse-temurin:17-jre-alpine
 WORKDIR /app
 ADD https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v2.10.0/opentelemetry-javaagent.jar /app/otel-agent.jar
-COPY --from=builder /build/simpleec-backend-job/build/libs/simpleec-backend-job.jar app.jar
-ENTRYPOINT ["java", "-javaagent:/app/otel-agent.jar", "-jar", "app.jar"]
+COPY --from=builder /build/simpleec-backend-job/build/libs/simpleec-backend-job-1.0.0.jar app.jar
+ENV SPRING_PROFILES_ACTIVE=docker
+ENTRYPOINT ["java", \
+  "-javaagent:/app/otel-agent.jar", \
+  "-Dspring.datasource.url=jdbc:postgresql://postgres:5432/simpleec", \
+  "-Dspring.kafka.bootstrap-servers=kafka:9092", \
+  "-Dspring.kafka.producer.bootstrap-servers=kafka:9092", \
+  "-Dspring.kafka.consumer.bootstrap-servers=kafka:9092", \
+  "-jar", "app.jar"]

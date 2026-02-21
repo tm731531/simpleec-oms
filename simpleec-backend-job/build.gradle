@@ -6,6 +6,7 @@ dependencies {
     implementation 'org.springframework.kafka:spring-kafka'
 }
 
-bootJar {
-    mainClass = 'com.simpleec.backendjob.BackendJobApplication'
+tasks.named('bootJar') {
+    enabled = true
+    mainClass = 'com.simpleec.backendJob.BackendJobApplication'
 }
