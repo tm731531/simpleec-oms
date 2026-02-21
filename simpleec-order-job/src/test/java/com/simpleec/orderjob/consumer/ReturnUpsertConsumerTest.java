@@ -9,6 +9,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.Acknowledgment;
 
 import static org.mockito.Mockito.*;
@@ -18,6 +19,9 @@ class ReturnUpsertConsumerTest {
 
     @Mock
     private ReturnUpsertHandler returnUpsertHandler;
+
+    @Mock
+    private KafkaTemplate<String, String> kafkaTemplate;
 
     @Mock
     private Acknowledgment acknowledgment;
@@ -30,7 +34,7 @@ class ReturnUpsertConsumerTest {
     @BeforeEach
     void setUp() {
         objectMapper = new ObjectMapper();
-        consumer = new ReturnUpsertConsumer(returnUpsertHandler, objectMapper);
+        consumer = new ReturnUpsertConsumer(returnUpsertHandler, objectMapper, kafkaTemplate);
     }
 
     @Test
@@ -68,6 +72,53 @@ class ReturnUpsertConsumerTest {
         consumer.consumeReturnUpsert(messageStr, 0, acknowledgment);
 
         // Then: Handler should NOT be called
+        verify(returnUpsertHandler, never()).handleReturnUpsert(any(), any(), any(), any(), any());
+        verify(acknowledgment, times(1)).acknowledge();
+    }
+
+    @Test
+    void testConsumeReturnUpsert_MissingHeaderOrBody_HandlesGracefully() throws Exception {
+        // Given: Message missing body
+        ObjectNode message = objectMapper.createObjectNode();
+        ObjectNode header = objectMapper.createObjectNode();
+        header.put("taskType", "RETURN_UPSERT");
+        message.set("header", header);
+        // Missing body intentionally
+
+        String messageStr = objectMapper.writeValueAsString(message);
+
+        // When: Consumer processes message
+        consumer.consumeReturnUpsert(messageStr, 0, acknowledgment);
+
+        // Then: Handler should NOT be called, message acknowledged
+        verify(returnUpsertHandler, never()).handleReturnUpsert(any(), any(), any(), any(), any());
+        verify(acknowledgment, times(1)).acknowledge();
+    }
+
+    @Test
+    void testConsumeReturnUpsert_MissingRequiredField_HandlesGracefully() throws Exception {
+        // Given: Message with missing required fields (no channelRefundId)
+        ObjectNode message = objectMapper.createObjectNode();
+        ObjectNode header = objectMapper.createObjectNode();
+        header.put("taskType", "RETURN_UPSERT");
+        header.put("merchantId", "MERCHANT_001");
+        header.put("channelId", "shopee");
+        message.set("header", header);
+
+        ObjectNode body = objectMapper.createObjectNode();
+        body.put("returnHash", "abc123def456");
+        // Missing channelRefundId intentionally
+        ObjectNode returnData = objectMapper.createObjectNode();
+        returnData.put("status", "PENDING");
+        body.set("returnData", returnData);
+        message.set("body", body);
+
+        String messageStr = objectMapper.writeValueAsString(message);
+
+        // When: Consumer processes message
+        consumer.consumeReturnUpsert(messageStr, 0, acknowledgment);
+
+        // Then: Handler should NOT be called, message acknowledged
         verify(returnUpsertHandler, never()).handleReturnUpsert(any(), any(), any(), any(), any());
         verify(acknowledgment, times(1)).acknowledge();
     }

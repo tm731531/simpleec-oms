@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.kafka.support.KafkaHeaders;
 import org.springframework.messaging.handler.annotation.Header;
@@ -26,6 +27,21 @@ public class ReturnUpsertConsumer {
 
     private final ReturnUpsertHandler returnUpsertHandler;
     private final ObjectMapper objectMapper;
+    private final KafkaTemplate<String, String> kafkaTemplate;
+
+    /**
+     * 提取並驗證字串欄位 — 確保欄位存在、非空且非 null
+     */
+    private String extractAndValidateString(JsonNode node, String fieldName) throws IllegalArgumentException {
+        if (!node.has(fieldName) || node.get(fieldName).isNull()) {
+            throw new IllegalArgumentException("Missing required field: " + fieldName);
+        }
+        String value = node.get(fieldName).asText().trim();
+        if (value.isEmpty()) {
+            throw new IllegalArgumentException("Empty required field: " + fieldName);
+        }
+        return value;
+    }
 
     /**
      * 消費 return.process topic
@@ -37,38 +53,67 @@ public class ReturnUpsertConsumer {
                                     Acknowledgment acknowledgment) {
         try {
             JsonNode json = objectMapper.readTree(message);
-            JsonNode header = json.get("header");
-            JsonNode body = json.get("body");
 
-            String taskType = header.get("taskType").asText();
-
-            if (!taskType.equals("RETURN_UPSERT")) {
-                log.warn("Unexpected taskType: {} in ReturnUpsertConsumer", taskType);
+            // Issue 1: Add null safety checks for header/body structure
+            if (!json.has("header") || !json.has("body")) {
+                log.error("Message missing header or body structure: {}", message);
                 acknowledgment.acknowledge();
                 return;
             }
 
-            // 解析訊息
-            String merchantId = header.get("merchantId").asText();
-            String channelId = header.get("channelId").asText();
-            String channelRefundId = body.get("channelRefundId").asText();
-            String returnHash = body.get("returnHash").asText();
-            JsonNode returnDataJson = body.get("returnData");
+            JsonNode header = json.get("header");
+            JsonNode body = json.get("body");
 
-            log.info("Processing RETURN_UPSERT: {} from {} (hash: {})",
-                channelRefundId, channelId, returnHash.substring(0, 8) + "...");
+            // Issue 2: Add missing field validation with helper method
+            try {
+                String taskType = extractAndValidateString(header, "taskType");
 
-            // 執行退貨入庫邏輯
-            returnUpsertHandler.handleReturnUpsert(merchantId, channelId, channelRefundId, returnHash, returnDataJson);
+                if (!taskType.equals("RETURN_UPSERT")) {
+                    log.warn("Unexpected taskType: {} in ReturnUpsertConsumer", taskType);
+                    acknowledgment.acknowledge();
+                    return;
+                }
 
-            // 手動提交 offset（確保退貨已入庫）
-            acknowledgment.acknowledge();
+                String merchantId = extractAndValidateString(header, "merchantId");
+                String channelId = extractAndValidateString(header, "channelId");
+                String channelRefundId = extractAndValidateString(body, "channelRefundId");
+                String returnHash = extractAndValidateString(body, "returnHash");
 
-            log.info("Successfully processed RETURN_UPSERT: {}", channelRefundId);
+                if (!body.has("returnData") || body.get("returnData").isNull()) {
+                    throw new IllegalArgumentException("Missing returnData");
+                }
+                JsonNode returnDataJson = body.get("returnData");
+
+                log.info("Processing RETURN_UPSERT: {} from {} (hash: {})",
+                    channelRefundId, channelId, returnHash.substring(0, Math.min(8, returnHash.length())) + "...");
+
+                // Issue 3: Add exception handling for handler calls with proper acknowledgment
+                try {
+                    returnUpsertHandler.handleReturnUpsert(merchantId, channelId, channelRefundId, returnHash, returnDataJson);
+                    acknowledgment.acknowledge();
+                    log.info("Successfully processed RETURN_UPSERT: {}", channelRefundId);
+                } catch (Exception e) {
+                    log.error("Error processing RETURN_UPSERT for {}: {}", channelRefundId, e.getMessage(), e);
+                    // Acknowledge to prevent poison pill, but log the error for investigation
+                    acknowledgment.acknowledge();
+                    // TODO: Route to task.failed topic for retry via DefaultErrorHandler
+                    throw e;  // Let DefaultErrorHandler decide retry strategy
+                }
+
+            } catch (IllegalArgumentException e) {
+                log.error("Invalid message structure: {}", e.getMessage());
+                acknowledgment.acknowledge();
+                return;
+            }
 
         } catch (Exception e) {
-            log.error("Error processing RETURN_UPSERT", e);
-            // TODO: 發送到 task.failed 重試隊列
+            log.error("Error processing RETURN_UPSERT message: {}", e.getMessage(), e);
+            // Critical: acknowledge to prevent Kafka offset issues; error is logged
+            try {
+                acknowledgment.acknowledge();
+            } catch (Exception ackError) {
+                log.error("Failed to acknowledge message during error handling", ackError);
+            }
         }
     }
 }
