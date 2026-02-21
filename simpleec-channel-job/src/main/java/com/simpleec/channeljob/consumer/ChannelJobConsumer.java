@@ -14,11 +14,11 @@ import org.springframework.stereotype.Component;
 /**
  * Channel Job Consumer
  *
- * 消費 {platform}.slow、{platform}.detail 和 {platform}.fast topic 中的任務
+ * 消費 {platform}.slow 和 {platform}.fast topic 中的任務
  * 根據 taskType 和 Mode 路由到不同的處理器：
  * - Mode A: FETCH_ORDERS → ModeAOrderListHandler
  * - Mode B: FETCH_ORDERS → ModeBOrderListHandler
- * - Mode B: FETCH_ORDER_DETAIL → ModeBOrderDetailHandler
+ * - Mode B: FETCH_ORDER_DETAIL → ModeBOrderDetailHandler（同一個 topic，不同 tasktype）
  */
 @Slf4j
 @Component
@@ -61,27 +61,11 @@ public class ChannelJobConsumer {
     }
 
     /**
-     * 消費 Shopee detail channel（Mode B）
-     */
-    @KafkaListener(topics = "shopee.detail", groupId = "channel-job-group")
-    public void consumeShopeeDetailChannel(String message) {
-        consumeDetailChannel(message, "shopee");
-    }
-
-    /**
      * 消費 Cyberbiz slow channel
      */
     @KafkaListener(topics = "cyberbiz.slow", groupId = "channel-job-group")
     public void consumeCyberbizSlowChannel(String message) {
         consumeChannelMessage(message, "cyberbiz");
-    }
-
-    /**
-     * 消費 Cyberbiz detail channel（Mode B）
-     */
-    @KafkaListener(topics = "cyberbiz.detail", groupId = "channel-job-group")
-    public void consumeCyberbizDetailChannel(String message) {
-        consumeDetailChannel(message, "cyberbiz");
     }
 
     /**
@@ -102,6 +86,9 @@ public class ChannelJobConsumer {
             // 根據 taskType 路由
             if ("FETCH_ORDERS".equals(taskType)) {
                 handleFetchOrders(platformCode, channelId, merchantId, body);
+            } else if ("FETCH_ORDER_DETAIL".equals(taskType)) {
+                String channelOrderId = body.get("channelOrderId").asText();
+                handleFetchOrderDetail(platformCode, channelId, merchantId, channelOrderId);
             } else if ("SYNC_PACK".equals(taskType)) {
                 log.info("SYNC_PACK not implemented yet");
             } else if ("SHIP_ORDER".equals(taskType) || "UPDATE_INVENTORY".equals(taskType) || "UPDATE_PRICE".equals(taskType)) {
@@ -112,34 +99,6 @@ public class ChannelJobConsumer {
 
         } catch (Exception e) {
             log.error("Error processing channel message", e);
-        }
-    }
-
-    /**
-     * Detail channel 消息消費邏輯（Mode B）
-     * 消費 {platform}.detail topics 中的 FETCH_ORDER_DETAIL 消息
-     */
-    private void consumeDetailChannel(String message, String platformCode) {
-        try {
-            JsonNode json = objectMapper.readTree(message);
-            JsonNode header = json.get("header");
-            JsonNode body = json.get("body");
-
-            String taskType = header.get("taskType").asText();
-            String channelId = header.get("channelId").asText();
-            String merchantId = header.get("merchantId").asText();
-            String channelOrderId = body.get("channelOrderId").asText();
-
-            log.info("Processing {} for order {} from {}", taskType, channelOrderId, platformCode);
-
-            if ("FETCH_ORDER_DETAIL".equals(taskType)) {
-                handleFetchOrderDetail(platformCode, channelId, merchantId, channelOrderId);
-            } else {
-                log.warn("Unexpected taskType in detail channel: {}", taskType);
-            }
-
-        } catch (Exception e) {
-            log.error("Error processing detail channel message", e);
         }
     }
 
@@ -175,7 +134,7 @@ public class ChannelJobConsumer {
     }
 
     /**
-     * 處理 FETCH_ORDER_DETAIL（detail topic）
+     * 處理 FETCH_ORDER_DETAIL（slow topic）
      * 從 Adapter 拉取訂單詳情，然後發送 ORDER_UPSERT 消息
      */
     private void handleFetchOrderDetail(String platformCode, String channelId, String merchantId,

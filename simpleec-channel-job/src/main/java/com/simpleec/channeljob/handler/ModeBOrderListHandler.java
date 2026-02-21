@@ -21,13 +21,13 @@ import java.util.List;
  * 流程：
  * 1. 消費 {platform}.slow topic 的 FETCH_ORDERS 消息
  * 2. 調用 Adapter.fetchOrderList() 獲取訂單 ID 列表（無詳情）
- * 3. 為每個訂單 ID 發送 FETCH_ORDER_DETAIL 消息到對應的 {platform}.detail topic
- * 4. 詳情處理由 ModeBOrderDetailHandler 負責
+ * 3. 為每個訂單 ID 發送 FETCH_ORDER_DETAIL 消息到同一個 {platform}.slow topic
+ * 4. 詳情處理由 ModeBOrderDetailHandler 負責（ChannelJobConsumer 根據 tasktype 路由）
  *
  * 速率控制：
  * - 每個訂單 ID 獨立一條消息（便於並發詳情查詢）
  * - Consumer 可配置 concurrency=8 提高吞吐
- * - 下一步詳情查詢會分散到多個 detail consumer 實例
+ * - 詳情查詢會分散到多個 consumer 實例
  */
 @Slf4j
 @Component
@@ -79,7 +79,7 @@ public class ModeBOrderListHandler {
     }
 
     /**
-     * 發送 FETCH_ORDER_DETAIL 消息到 {platform}.detail topic
+     * 發送 FETCH_ORDER_DETAIL 消息到 {platform}.slow topic（同一個 channel topic）
      *
      * 消息格式：
      * {
@@ -116,11 +116,11 @@ public class ModeBOrderListHandler {
         body.put("channelOrderId", channelOrderId);
         message.set("body", body);
 
-        // 發送到 {platform}.detail topic
-        String detailTopic = TopicConstants.getPlatformDetailTopic(channelId);
+        // 發送到 {platform}.slow topic（同一個 channel topic，只是 tasktype 不同）
+        String slowTopic = TopicConstants.platformSlowTopic(channelId);
         String messageStr = objectMapper.writeValueAsString(message);
 
-        kafkaTemplate.send(detailTopic, channelOrderId, messageStr);
-        log.debug("Sent FETCH_ORDER_DETAIL for {} to topic {}", channelOrderId, detailTopic);
+        kafkaTemplate.send(slowTopic, channelOrderId, messageStr);
+        log.debug("Sent FETCH_ORDER_DETAIL for {} to topic {}", channelOrderId, slowTopic);
     }
 }
