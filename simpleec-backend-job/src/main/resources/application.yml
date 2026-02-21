@@ -3,7 +3,10 @@ spring:
     name: simpleec-backend-job
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: none
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
   datasource:
     url: jdbc:postgresql://localhost:5432/simpleec
     username: simpleec
@@ -11,12 +14,15 @@ spring:
   kafka:
     bootstrap-servers: localhost:9092
     consumer:
-      group-id: backend-job-group
+      bootstrap-servers: localhost:9092
+      group-id: backend-consumer-group
       auto-offset-reset: earliest
 
 server:
-  port: 8086
+  port: 8084
 
 logging:
   level:
     com.simpleec: DEBUG
+    com.simpleec.backendJob: DEBUG
+    org.springframework.kafka: DEBUG
