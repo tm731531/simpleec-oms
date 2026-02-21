@@ -25,7 +25,6 @@ schema_config:
         period: 24h
 
 limits_config:
-  retention_enabled: true
   retention_period: 168h
   max_query_series: 5000
 
@@ -35,8 +34,4 @@ compactor:
   retention_enabled: true
   retention_delete_delay: 2h
   retention_delete_worker_count: 150
-
-table_manager:
-  poll_interval: 10m
-  retention_deletes_enabled: true
-  retention_period: 168h
+  delete_request_store: filesystem
