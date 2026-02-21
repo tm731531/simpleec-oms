@@ -196,6 +196,53 @@
 
 ---
 
+### 🛍️ **通路整合檔案（按平台）**
+
+#### **Cyberbiz Adapter (Mode B)**
+
+**模式**：雙重 API 呼叫，分離的訂單列表 + 詳情
+
+**特性**：
+- FETCH_ORDERS：兩次 API 呼叫（created_at + updated_at 時間窗口）
+- FETCH_ORDER_DETAIL：單筆訂單詳情呼叫
+- FETCH_RETURNS：退貨時間戳過濾
+
+**關鍵檔案**：
+- `simpleec-channel/src/main/java/com/simpleec/channel/adapter/CyberbizAdapter.java` — Mode B 訂單拉取適配器
+- `simpleec-channel/src/main/java/com/simpleec/channel/api/CyberbizApiClient.java` — Cyberbiz API 客戶端
+
+**完整流程**：
+1. **Scheduler 啟動**：每 5 分鐘發送 Heartbeat（時間戳）到 `scheduler` topic
+2. **Channel Job 消費 (slow)**：`SchedulerConsumer` 訂閱 scheduler，發送 FETCH_ORDERS 到 `cyberbiz.slow` (10 秒間隔 per merchant)
+3. **List 階段**：`ChannelJobConsumer` 消費 `cyberbiz.slow`，呼叫 `CyberbizAdapter.fetchOrderList()` 進行：
+   - 第一次 API：透過 `create_time_from/to` 查詢該時段內建立的訂單
+   - 第二次 API：透過 `update_time_from/to` 查詢該時段內更新的訂單
+   - 去重合併後取得訂單 ID 列表
+4. **Detail 階段**：`ModeBOrderListHandler` 為每筆訂單發送 FETCH_ORDER_DETAIL 到 `cyberbiz.detail`
+5. **詳情消費**：`ChannelJobConsumer` 消費 `cyberbiz.detail`，呼叫 `CyberbizAdapter.fetchOrderDetail()` 獲取完整訂單資訊
+6. **轉換與發送**：`ModeBOrderDetailHandler` 轉換為 OMS 統一結構，發送 ORDER_UPSERT 到 `order.process`
+
+**Kafka 主題配置**：
+- `cyberbiz.slow`：慢速任務（訂單列表拉取），Consumer Group `channel-job-group`，並發度 4
+- `cyberbiz.detail`：詳情任務（單筆訂單詳情），Consumer Group `channel-job-group`，並發度 8
+- `cyberbiz.fast`：快速任務（出貨、庫存更新、批准退貨），Consumer Group `channel-job-group`，並發度 8
+
+**模式定義 (Mode B)**：
+```java
+@Override
+public ModeEnum getMode() {
+    return ModeEnum.B;  // 分離的訂單列表 + 詳情
+}
+```
+
+**特別注意**：
+- Mode B 平台必須實現 `fetchOrderList()` 和 `fetchOrderDetail()` 分別方法
+- Mode A 平台在此適配器拋出 `UnsupportedOperationException`，因為 Cyberbiz 必須分兩步
+- API 傳回的訂單 ID 去重由 Channel Job 負責，不在 Queue 層面進行
+- 所有訂單建立、更新、退貨時間均使用 Unix 時間戳（秒級精度）
+
+---
+
 ## 🚀 快速查找（按角色）
 
 ### 👨‍💻 **我是 Channel Job 開發者**
