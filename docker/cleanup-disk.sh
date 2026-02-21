@@ -22,7 +22,13 @@ log_message() {
 
 # Get disk usage of Docker volume (or root if Docker uses root)
 get_disk_usage() {
-  df "$DOCKER_VOLUME_PATH" 2>/dev/null | tail -1 | awk '{print $5}' | sed 's/%//' || echo "0"
+  local result
+  result=$(df "$DOCKER_VOLUME_PATH" 2>/dev/null | tail -1 | awk '{print $5}' | sed 's/%//')
+  if [ -z "$result" ] || ! [[ "$result" =~ ^[0-9]+$ ]]; then
+    echo "0"
+  else
+    echo "$result"
+  fi
 }
 
 main() {
