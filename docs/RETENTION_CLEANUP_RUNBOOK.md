@@ -4,10 +4,11 @@
 
 | Component | Retention | Status |
 |-----------|-----------|--------|
-| Kafka | 24 hours | ✓ Configured |
+| Kafka | 1 hour | ✓ Configured |
 | Prometheus | 7 days / 5GB | ✓ Configured |
 | Loki | 7 days | ✓ Configured |
 | PostgreSQL WAL | 4GB max | ✓ Configured |
+| Docker Container Logs | 100MB x 5 files | ✓ Configured |
 | Docker Cache | Passive cleanup | ✓ Configured |
 
 ## Monitoring
@@ -168,7 +169,7 @@ docker exec simpleec-kafka kafka-topics.sh --bootstrap-server localhost:9092 \
 
 Edit `docker-compose.yml` Kafka section - change:
 ```yaml
-KAFKA_LOG_RETENTION_HOURS: 24
+KAFKA_LOG_RETENTION_HOURS: 1
 ```
 
 To:
@@ -180,6 +181,8 @@ Then restart:
 ```bash
 docker compose up -d kafka
 ```
+
+⚠️ **Warning**: Infinite retention can cause disk exhaustion. Only use for debugging purposes and revert immediately.
 
 ### View Current Topic Retention Settings
 
@@ -199,11 +202,37 @@ crontab -e
 chmod -x /home/tom/ONEEC/simpleec-oms/docker/cleanup-disk.sh
 ```
 
+## Docker Log Rotation
+
+Docker container logs should be configured with automatic rotation to prevent disk exhaustion.
+
+### Setup
+
+```bash
+# Copy daemon.json to Docker config directory
+sudo cp docker/daemon.json /etc/docker/daemon.json
+
+# Reload Docker daemon
+sudo systemctl reload docker
+```
+
+See [DOCKER_LOG_ROTATION_SETUP.md](DOCKER_LOG_ROTATION_SETUP.md) for detailed instructions.
+
+### Check Docker Log Usage
+
+```bash
+# Overall Docker system usage
+docker system df
+
+# Check specific container logs
+du -sh /var/lib/docker/containers/{container-id}/
+```
+
 ## Performance Impact
 
-- **Kafka 24h retention**: 500MB - 1GB per day (depends on message volume)
-  - Formula: `~500MB * (messages_per_second / 100)`
-  - High-volume days (peak traffic): 1.5GB - 2GB
+- **Kafka 1 hour retention**: 100-200MB per hour (depends on message volume)
+  - Formula: `~100MB * (messages_per_second / 100)`
+  - At full capacity (1000 msg/sec): ~100MB/hour retention cycle
 
 - **Prometheus 7 days**: ~5GB max (enforced by retention policy)
   - Per million series: ~500MB per day
@@ -212,6 +241,10 @@ chmod -x /home/tom/ONEEC/simpleec-oms/docker/cleanup-disk.sh
 - **Loki 7 days**: 2-3GB based on ingestion
   - Per GB/hour ingestion: ~7GB in 7 days
   - Typical (100MB/hour logs): 2.1GB per week
+
+- **Docker Container Logs**: 100MB x 5 per container (automatic rotation)
+  - Automatic cleanup when 5 files reached
+  - Old files deleted to maintain limit
 
 - **PostgreSQL WAL**: Up to 4GB (circular buffer, auto-archived)
   - Only high-traffic days approach 4GB limit
