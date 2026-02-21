@@ -33,8 +33,8 @@ public class Order {
      * 主鍵：OMS 訂單 ID (NanoID 20 字元)
      */
     @Id
-    @Column(name = "order_id", length = 20, nullable = false)
-    private String orderId;
+    @Column(name = "id", length = 20, nullable = false)
+    private String id;
 
     /**
      * 商家 ID
@@ -93,16 +93,28 @@ public class Order {
     private String shippingMethod;
 
     /**
-     * 買家信息 (JSONB，包含加密的 name/phone/email)
+     * 買家名稱
      */
-    @Column(name = "buyer_info", columnDefinition = "jsonb")
-    private String buyerInfo;  // JSON object
+    @Column(name = "buyer_name", length = 512)
+    private String buyerName;
 
     /**
-     * 配送地址信息 (JSONB，包含加密的地址)
+     * 買家電話
      */
-    @Column(name = "shipping_info", columnDefinition = "jsonb")
-    private String shippingInfo;  // JSON object
+    @Column(name = "buyer_phone", length = 256)
+    private String buyerPhone;
+
+    /**
+     * 買家郵箱
+     */
+    @Column(name = "buyer_email", length = 512)
+    private String buyerEmail;
+
+    /**
+     * 配送地址
+     */
+    @Column(name = "shipping_address")
+    private String shippingAddress;
 
     /**
      * 支付方式
@@ -123,10 +135,10 @@ public class Order {
     private LocalDateTime channelCreatedAt;
 
     /**
-     * 是否為回補訂單（遺漏的過往訂單）
+     * 出貨時間
      */
-    @Column(name = "is_rollback", nullable = false)
-    private Boolean isRollback = false;
+    @Column(name = "shipped_at")
+    private LocalDateTime shippedAt;
 
     /**
      * 建立時間

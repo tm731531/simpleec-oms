@@ -18,7 +18,7 @@ import java.util.Optional;
  */
 @Slf4j
 @RestController
-@RequestMapping("/api/products")
+@RequestMapping("/products")
 @RequiredArgsConstructor
 public class ProductController {
 
@@ -103,7 +103,7 @@ public class ProductController {
     public ResponseEntity<Product> createProduct(@RequestBody Product product) {
         try {
             Product created = productService.createProduct(product);
-            log.info("Created product: {} (SKU: {})", created.getProductId(), created.getSku());
+            log.info("Created product: {} (SKU: {})", created.getId(), created.getSku());
             return ResponseEntity.status(HttpStatus.CREATED).body(created);
         } catch (Exception e) {
             log.error("Error creating product", e);

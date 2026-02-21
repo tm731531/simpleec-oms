@@ -64,11 +64,11 @@ public class OrderService {
     @Transactional
     public Order createOrder(Order order) {
         // 生成 OMS 訂單 ID
-        if (order.getOrderId() == null) {
-            order.setOrderId(NanoIdUtil.generateWithPrefix("ORD_"));
+        if (order.getId() == null) {
+            order.setId(NanoIdUtil.generateWithPrefix("ORD_"));
         }
 
-        log.info("Creating order: {} from channel {}", order.getOrderId(), order.getChannelId());
+        log.info("Creating order: {} from channel {}", order.getId(), order.getChannelId());
         return orderRepository.save(order);
     }
 
@@ -77,7 +77,7 @@ public class OrderService {
      */
     @Transactional
     public Order updateOrder(Order order) {
-        log.info("Updating order: {}", order.getOrderId());
+        log.info("Updating order: {}", order.getId());
         return orderRepository.save(order);
     }
 

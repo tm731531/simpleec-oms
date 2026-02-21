@@ -31,8 +31,8 @@ public class Product {
      * 主鍵：OMS 商品 ID (NanoID)
      */
     @Id
-    @Column(name = "product_id", length = 20, nullable = false)
-    private String productId;
+    @Column(name = "id", length = 20, nullable = false)
+    private String id;
 
     /**
      * 商家 ID
@@ -49,7 +49,7 @@ public class Product {
     /**
      * 商品名稱
      */
-    @Column(name = "product_name", length = 255)
+    @Column(name = "name", length = 512)
     private String productName;
 
     /**

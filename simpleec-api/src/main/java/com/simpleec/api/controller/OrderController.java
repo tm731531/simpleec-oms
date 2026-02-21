@@ -19,7 +19,7 @@ import java.util.Optional;
  */
 @Slf4j
 @RestController
-@RequestMapping("/api/orders")
+@RequestMapping("/orders")
 @RequiredArgsConstructor
 public class OrderController {
 
@@ -97,7 +97,7 @@ public class OrderController {
     public ResponseEntity<Order> createOrder(@RequestBody Order order) {
         try {
             Order created = orderService.createOrder(order);
-            log.info("Created order: {}", created.getOrderId());
+            log.info("Created order: {}", created.getId());
             return ResponseEntity.status(HttpStatus.CREATED).body(created);
         } catch (Exception e) {
             log.error("Error creating order", e);

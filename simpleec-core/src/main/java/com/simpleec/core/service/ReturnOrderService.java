@@ -34,8 +34,8 @@ public class ReturnOrderService {
     /**
      * 根據通路退貨 ID 查詢
      */
-    public Optional<ReturnOrder> findByChannelReturnId(String channelId, String channelReturnId) {
-        return returnOrderRepository.findByChannelIdAndChannelReturnId(channelId, channelReturnId);
+    public Optional<ReturnOrder> findByChannelRefundId(String channelRefundId) {
+        return returnOrderRepository.findByChannelRefundId(channelRefundId);
     }
 
     /**
@@ -64,11 +64,11 @@ public class ReturnOrderService {
      */
     @Transactional
     public ReturnOrder createReturn(ReturnOrder returnOrder) {
-        if (returnOrder.getReturnId() == null) {
-            returnOrder.setReturnId(NanoIdUtil.generateWithPrefix("RET_"));
+        if (returnOrder.getId() == null) {
+            returnOrder.setId(NanoIdUtil.generateWithPrefix("RET_"));
         }
 
-        log.info("Creating return: {} for order {}", returnOrder.getReturnId(), returnOrder.getOrderId());
+        log.info("Creating return: {} for order {}", returnOrder.getId(), returnOrder.getOrderId());
         return returnOrderRepository.save(returnOrder);
     }
 
@@ -77,7 +77,7 @@ public class ReturnOrderService {
      */
     @Transactional
     public ReturnOrder updateReturn(ReturnOrder returnOrder) {
-        log.info("Updating return: {}", returnOrder.getReturnId());
+        log.info("Updating return: {}", returnOrder.getId());
         return returnOrderRepository.save(returnOrder);
     }
 

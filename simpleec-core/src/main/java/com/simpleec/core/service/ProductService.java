@@ -69,11 +69,11 @@ public class ProductService {
      */
     @Transactional
     public Product createProduct(Product product) {
-        if (product.getProductId() == null) {
-            product.setProductId(NanoIdUtil.generateWithPrefix("PROD_"));
+        if (product.getId() == null) {
+            product.setId(NanoIdUtil.generateWithPrefix("PROD_"));
         }
 
-        log.info("Creating product: {} (SKU: {})", product.getProductId(), product.getSku());
+        log.info("Creating product: {} (SKU: {})", product.getId(), product.getSku());
         return productRepository.save(product);
     }
 
@@ -82,7 +82,7 @@ public class ProductService {
      */
     @Transactional
     public Product updateProduct(Product product) {
-        log.info("Updating product: {}", product.getProductId());
+        log.info("Updating product: {}", product.getId());
         return productRepository.save(product);
     }
 

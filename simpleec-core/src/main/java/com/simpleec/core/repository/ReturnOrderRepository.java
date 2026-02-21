@@ -19,7 +19,7 @@ public interface ReturnOrderRepository extends JpaRepository<ReturnOrder, String
     /**
      * 根據通路退貨 ID 查詢
      */
-    Optional<ReturnOrder> findByChannelIdAndChannelReturnId(String channelId, String channelReturnId);
+    Optional<ReturnOrder> findByChannelRefundId(String channelRefundId);
 
     /**
      * 查詢訂單的退貨

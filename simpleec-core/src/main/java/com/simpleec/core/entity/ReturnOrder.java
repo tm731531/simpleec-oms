@@ -18,7 +18,6 @@ import java.time.LocalDateTime;
 @Entity
 @Table(name = "refund_orders", indexes = {
     @Index(name = "idx_order_id", columnList = "order_id"),
-    @Index(name = "idx_channel_return_id", columnList = "channel_id,channel_return_id"),
     @Index(name = "idx_return_status", columnList = "return_status")
 })
 @Data
@@ -31,8 +30,8 @@ public class ReturnOrder {
      * 主鍵：OMS 退貨 ID (NanoID)
      */
     @Id
-    @Column(name = "return_id", length = 20, nullable = false)
-    private String returnId;
+    @Column(name = "id", length = 20, nullable = false)
+    private String id;
 
     /**
      * 商家 ID
@@ -47,16 +46,10 @@ public class ReturnOrder {
     private String orderId;
 
     /**
-     * 通路實例 ID
-     */
-    @Column(name = "channel_id", length = 50, nullable = false)
-    private String channelId;
-
-    /**
      * 通路的原始退貨 ID
      */
-    @Column(name = "channel_return_id", length = 100, nullable = false)
-    private String channelReturnId;
+    @Column(name = "channel_refund_id", length = 100)
+    private String channelRefundId;
 
     /**
      * 退貨狀態

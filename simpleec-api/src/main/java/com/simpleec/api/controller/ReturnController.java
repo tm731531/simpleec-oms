@@ -20,7 +20,7 @@ import java.util.Optional;
  */
 @Slf4j
 @RestController
-@RequestMapping("/api/returns")
+@RequestMapping("/returns")
 @RequiredArgsConstructor
 public class ReturnController {
 
@@ -92,7 +92,7 @@ public class ReturnController {
     public ResponseEntity<ReturnOrder> createReturn(@RequestBody ReturnOrder returnOrder) {
         try {
             ReturnOrder created = returnOrderService.createReturn(returnOrder);
-            log.info("Created return: {} for order {}", created.getReturnId(), created.getOrderId());
+            log.info("Created return: {} for order {}", created.getId(), created.getOrderId());
             return ResponseEntity.status(HttpStatus.CREATED).body(created);
         } catch (Exception e) {
             log.error("Error creating return", e);
