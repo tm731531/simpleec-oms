@@ -365,4 +365,31 @@ CORE_CONTRACTS.md (基礎)
 
 ---
 
+## 🔴 **系統可靠性 & 運維 (NEW - Feb 21)**
+
+### Retention & Cleanup 相關文檔
+
+由於 **Feb 21 磁碟爆炸事件** (Kafka broker crash at 12:36:49)，已實施系統級 retention 及自動清理策略：
+
+| 文檔 | 內容 | 讀者 |
+|------|------|------|
+| **[RETENTION_CLEANUP_RUNBOOK.md](RETENTION_CLEANUP_RUNBOOK.md)** | 日常運維手冊：監控、故障排除、手動操作 | DevOps / SRE |
+| **[DOCKER_LOG_ROTATION_SETUP.md](DOCKER_LOG_ROTATION_SETUP.md)** | Docker daemon.json 部署指南 | DevOps / 基礎設施 |
+| **[plans/2026-02-21-system-retention-cleanup-design.md](plans/2026-02-21-system-retention-cleanup-design.md)** | 架構設計與 12 層決策 | 架構師 / Tech Lead |
+| **[plans/2026-02-21-system-retention-cleanup-implementation.md](plans/2026-02-21-system-retention-cleanup-implementation.md)** | 實施計劃 12 個任務 (已全數完成) | 開發 / 部署 |
+
+**快速了解**：
+- **Kafka**: 1 小時 retention (vs 無限)
+- **Prometheus**: 7 天或 5GB (whichever first)
+- **Loki**: 7 天 retention
+- **Docker 容器日誌**: 100MB × 5 per container (自動輪轉)
+- **自動清理**: cron 每 30 分鐘檢查；80% 告警，85% 觸發清理
+
+✅ **已完成**：
+- ✓ 13 個 git commits，所有測試通過 (27 unit tests)
+- ✓ 清理腳本已部署，cron 已啟用
+- ✓ Docker log rotation 配置已就位
+
+---
+
 **有疑問？** 先查 [快速查找](#🚀-快速查找按角色) 對應的閱讀清單，然後按順序讀。
