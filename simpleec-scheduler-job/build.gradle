@@ -1,3 +1,10 @@
+configurations {
+    all {
+        exclude group: 'com.baomidou', module: 'mybatis-plus-spring-boot3-starter'
+        exclude group: 'org.springframework.boot', module: 'spring-boot-starter-data-jpa'
+    }
+}
+
 dependencies {
     implementation project(':simpleec-common')
 
