@@ -6,8 +6,10 @@ dependencies {
     implementation 'org.springframework.kafka:spring-kafka'
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
     implementation 'io.lettuce:lettuce-core'
+    implementation 'com.fasterxml.jackson.core:jackson-databind'
 }
 
-bootJar {
+tasks.named('bootJar') {
+    enabled = true
     mainClass = 'com.simpleec.schedulerjob.SchedulerJobApplication'
 }
