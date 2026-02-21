@@ -34,6 +34,7 @@ public class ChannelJobConsumer {
     private final ChannelAdapter shopifyAdapter;
     private final ChannelAdapter easystoreAdapter;
     private final ChannelAdapter shopeeAdapter;
+    private final ChannelAdapter cyberbizAdapter;
 
     /**
      * 消費 Shopify slow channel
@@ -65,6 +66,22 @@ public class ChannelJobConsumer {
     @KafkaListener(topics = "shopee.detail", groupId = "channel-job-group")
     public void consumeShopeeDetailChannel(String message) {
         consumeDetailChannel(message, "shopee");
+    }
+
+    /**
+     * 消費 Cyberbiz slow channel
+     */
+    @KafkaListener(topics = "cyberbiz.slow", groupId = "channel-job-group")
+    public void consumeCyberbizSlowChannel(String message) {
+        consumeChannelMessage(message, "cyberbiz");
+    }
+
+    /**
+     * 消費 Cyberbiz detail channel（Mode B）
+     */
+    @KafkaListener(topics = "cyberbiz.detail", groupId = "channel-job-group")
+    public void consumeCyberbizDetailChannel(String message) {
+        consumeDetailChannel(message, "cyberbiz");
     }
 
     /**
@@ -191,6 +208,8 @@ public class ChannelJobConsumer {
                 return easystoreAdapter;
             case "shopee":
                 return shopeeAdapter;
+            case "cyberbiz":
+                return cyberbizAdapter;
             default:
                 log.warn("Unknown platform: {}", platformCode);
                 return null;
