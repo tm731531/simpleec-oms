@@ -273,6 +273,7 @@ CREATE TABLE public.sell_pack (
     status               VARCHAR(20)   NOT NULL DEFAULT 'draft',
     visibility           VARCHAR(20),            -- 通路上的可見性（VISIBLE, HIDDEN）
     last_sync_at         TIMESTAMPTZ,
+    sync_status          JSONB,                  -- 同步狀態追蹤（pending|syncing|completed|failed）
     created_at           TIMESTAMPTZ   NOT NULL DEFAULT now(),
     updated_at           TIMESTAMPTZ   NOT NULL DEFAULT now(),
     PRIMARY KEY (id),
