@@ -10,6 +10,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
+import java.sql.Types;
+import org.hibernate.annotations.JdbcTypeCode;
 
 /**
  * 銷售平台實體
@@ -71,6 +73,7 @@ public class Platform {
     /**
      * 配送選項 JSON (平台支援的物流方式等)
      */
+    @JdbcTypeCode(Types.OTHER)
     @Column(name = "ship_options", columnDefinition = "jsonb")
     private JsonNode shipOptions;
 

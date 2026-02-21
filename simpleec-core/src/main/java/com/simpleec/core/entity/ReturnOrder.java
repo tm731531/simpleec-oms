@@ -18,7 +18,7 @@ import java.time.LocalDateTime;
 @Entity
 @Table(name = "refund_orders", indexes = {
     @Index(name = "idx_order_id", columnList = "order_id"),
-    @Index(name = "idx_return_status", columnList = "return_status")
+    @Index(name = "idx_refund_status", columnList = "refund_status")
 })
 @Data
 @NoArgsConstructor
@@ -54,7 +54,7 @@ public class ReturnOrder {
     /**
      * 退貨狀態
      */
-    @Column(name = "return_status", length = 50, nullable = false)
+    @Column(name = "refund_status", length = 20, nullable = false)
     @Enumerated(EnumType.STRING)
     private ReturnStatusEnum returnStatus;
 
