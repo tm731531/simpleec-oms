@@ -123,6 +123,28 @@ public class Order {
     private String paymentMethod;
 
     /**
+     * 買家資訊 (JSONB 格式)
+     * 存儲買家相關的詳細資訊（如地址、特殊標籤等）
+     */
+    @Column(name = "buyer_info", columnDefinition = "jsonb")
+    private String buyerInfo;
+
+    /**
+     * 配送資訊 (JSONB 格式)
+     * 存儲配送相關的詳細資訊（如物流追蹤、估計送達時間等）
+     */
+    @Column(name = "shipping_info", columnDefinition = "jsonb")
+    private String shippingInfo;
+
+    /**
+     * 是否為回補訂單
+     * true = 回補訂單（回補過去遺漏的訂單）
+     * false = 新訂單
+     */
+    @Column(name = "is_rollback", nullable = false, columnDefinition = "boolean default false")
+    private Boolean isRollback;
+
+    /**
      * 支付時間
      */
     @Column(name = "paid_at")
