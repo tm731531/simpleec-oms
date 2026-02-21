@@ -142,8 +142,8 @@ async function handleSubmit() {
   try {
     let result
     if (isEdit.value) {
-      await merchantAPI.update(formData.value.id!, formData.value)
-      result = formData.value as Merchant
+      const res = await merchantAPI.update(formData.value.id!, formData.value)
+      result = res.data.data
     } else {
       const res = await merchantAPI.create(formData.value)
       result = res.data.data

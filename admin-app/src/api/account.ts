@@ -35,7 +35,7 @@ export const accountAPI = {
   resetPassword(id: string, newPassword: string) {
     return axios.post<{ code: number }>(
       `${API_BASE}/account/${id}/reset-password`,
-      { password: newPassword }
+      { newPassword: newPassword }
     )
   },
 

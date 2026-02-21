@@ -189,6 +189,8 @@ async function handleResetPasswordSubmit() {
 
     await accountAPI.resetPassword(accountId, resetPasswordForm.value.newPassword)
     ElMessage.success('密碼重設成功')
+    // 觸發頁面刷新以顯示最新數據
+    emit('saved', props.resetPasswordAccount as Account)
     handleCloseReset()
   } catch (err) {
     ElMessage.error('密碼重設失敗')
