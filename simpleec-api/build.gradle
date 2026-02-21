@@ -12,6 +12,7 @@ dependencies {
     runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.3'
 }
 
-bootJar {
+tasks.named('bootJar') {
+    enabled = true
     mainClass = 'com.simpleec.api.ApiApplication'
 }
