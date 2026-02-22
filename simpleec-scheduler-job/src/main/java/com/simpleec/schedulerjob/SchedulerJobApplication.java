@@ -19,7 +19,8 @@ import org.springframework.stereotype.Component;
 @SpringBootApplication(
     scanBasePackages = {"com.simpleec.common", "com.simpleec.schedulerjob"},
     exclude = {
-        RedisRepositoriesAutoConfiguration.class  // 只排除 Redis 倉庫，其他 JPA 配置都啟用
+        RedisRepositoriesAutoConfiguration.class,  // 只排除 Redis 倉庫，其他 JPA 配置都啟用
+        com.simpleec.core.config.ServiceAutoConfiguration.class
     }
 )
 @EntityScan(basePackages = "com.simpleec.core.entity")

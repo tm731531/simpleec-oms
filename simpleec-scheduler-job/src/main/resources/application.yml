@@ -12,12 +12,12 @@ spring:
     username: simpleec
     password: simpleec123
   kafka:
-    bootstrap-servers: localhost:9092
+    bootstrap-servers: simpleec-kafka:9092
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
     consumer:
-      bootstrap-servers: localhost:9092
+      bootstrap-servers: simpleec-kafka:9092
       group-id: scheduler-consumer-group
       auto-offset-reset: earliest
   redis:

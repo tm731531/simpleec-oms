@@ -9,7 +9,7 @@ spring:
     username: simpleec
     password: simpleec123
   kafka:
-    bootstrap-servers: localhost:9092
+    bootstrap-servers: simpleec-kafka:9092
     consumer:
       group-id: retry-job-group
       auto-offset-reset: earliest

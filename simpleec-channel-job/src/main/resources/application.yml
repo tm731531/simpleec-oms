@@ -1,21 +1,20 @@
 spring:
   application:
     name: simpleec-channel-job
-  jpa:
-    hibernate:
-      ddl-auto: validate
-  datasource:
-    url: jdbc:postgresql://simpleec-postgres:5432/simpleec
-    username: simpleec
-    password: simpleec123
+  main:
+    web-application-type: none
   kafka:
     bootstrap-servers: simpleec-kafka:9092
     consumer:
       group-id: channel-job-group
       auto-offset-reset: earliest
-
-server:
-  port: 8084
+  jpa:
+    enabled: false
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+      - org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
 
 logging:
   level:

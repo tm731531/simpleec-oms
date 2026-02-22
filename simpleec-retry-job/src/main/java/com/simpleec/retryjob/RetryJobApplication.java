@@ -15,7 +15,17 @@ import org.springframework.stereotype.Component;
  * - task.failed: 失敗消息的重試處理
  * - task.dlt: 死信隊列（達到最大重試次數）
  */
-@SpringBootApplication(scanBasePackages = "com.simpleec")
+@SpringBootApplication(
+    scanBasePackages = {
+        "com.simpleec.retryjob",
+        "com.simpleec.common"
+    },
+    exclude = {
+        org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration.class,
+        org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration.class,
+        com.simpleec.core.config.ServiceAutoConfiguration.class
+    }
+)
 @EnableKafka
 public class RetryJobApplication {
     public static void main(String[] args) {

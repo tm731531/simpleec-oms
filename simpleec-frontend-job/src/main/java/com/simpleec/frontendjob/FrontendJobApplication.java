@@ -19,7 +19,9 @@ import org.springframework.stereotype.Component;
 @SpringBootApplication(
     scanBasePackages = {"com.simpleec.common", "com.simpleec.frontendjob"},
     exclude = {
-        RedisRepositoriesAutoConfiguration.class
+        RedisRepositoriesAutoConfiguration.class,
+        org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration.class,
+        com.simpleec.core.config.ServiceAutoConfiguration.class
     }
 )
 @EnableKafka

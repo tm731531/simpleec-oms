@@ -1,9 +1,16 @@
 dependencies {
     implementation project(':simpleec-common')
-    implementation project(':simpleec-core')
+    implementation(project(':simpleec-core')) {
+        exclude group: 'org.springframework.boot', module: 'spring-boot-starter-data-jpa'
+        exclude group: 'org.springframework.boot', module: 'spring-boot-starter-web'
+        exclude group: 'org.springframework.boot', module: 'spring-boot-starter-jdbc'
+        exclude group: 'org.hibernate', module: 'hibernate-core'
+        exclude group: 'org.hibernate.orm', module: 'hibernate-core'
+        exclude group: 'org.springframework.data', module: 'spring-data-jpa'
+    }
     implementation project(':simpleec-channel')
 
-    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter'
     implementation 'org.springframework.kafka:spring-kafka'
 }
 

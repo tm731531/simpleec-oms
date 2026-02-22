@@ -14,6 +14,11 @@ import org.springframework.stereotype.Component;
         "com.simpleec.channeljob",
         "com.simpleec.channel",
         "com.simpleec.common"
+    },
+    exclude = {
+        org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration.class,
+        org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration.class,
+        com.simpleec.core.config.ServiceAutoConfiguration.class
     }
 )
 @Import(KafkaConfig.class)

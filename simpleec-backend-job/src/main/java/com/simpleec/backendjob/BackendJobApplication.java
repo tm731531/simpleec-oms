@@ -19,7 +19,17 @@ import org.springframework.stereotype.Component;
  *
  * 使用 EventHandlerRegistry 路由不同 TaskType 到對應 Handler
  */
-@SpringBootApplication(scanBasePackages = "com.simpleec")
+@SpringBootApplication(
+    scanBasePackages = {
+        "com.simpleec.backendjob",
+        "com.simpleec.common"
+    },
+    exclude = {
+        org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration.class,
+        org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration.class,
+        com.simpleec.core.config.ServiceAutoConfiguration.class
+    }
+)
 @EnableKafka
 public class BackendJobApplication {
     public static void main(String[] args) {
