@@ -59,25 +59,17 @@ public class HeartbeatJob {
             message.set("body", body);
 
             // 發送到 scheduler topic（給 SchedulerConsumer 消費以派發排程任務）
-            log.info("Sending heartbeat message to topics: {} and {}", TopicConstants.SCHEDULER, TopicConstants.SCHEDULER_HEARTBEAT);
+            log.info("Sending heartbeat message to topic: {}", TopicConstants.SCHEDULER);
             try {
                 // 發送到 scheduler topic
-                var future1 = kafkaTemplate.send(TopicConstants.SCHEDULER, header.get("messageId").asText(), message);
-                var result1 = future1.get(5, java.util.concurrent.TimeUnit.SECONDS);
+                var future = kafkaTemplate.send(TopicConstants.SCHEDULER, header.get("messageId").asText(), message);
+                var result = future.get(5, java.util.concurrent.TimeUnit.SECONDS);
                 log.debug("Heartbeat sent to '{}' - partition {}, offset {}",
                     TopicConstants.SCHEDULER,
-                    result1.getRecordMetadata().partition(),
-                    result1.getRecordMetadata().offset());
+                    result.getRecordMetadata().partition(),
+                    result.getRecordMetadata().offset());
 
-                // 發送到 scheduler.heartbeat topic
-                var future2 = kafkaTemplate.send(TopicConstants.SCHEDULER_HEARTBEAT, header.get("messageId").asText(), message);
-                var result2 = future2.get(5, java.util.concurrent.TimeUnit.SECONDS);
-                log.debug("Heartbeat sent to '{}' - partition {}, offset {}",
-                    TopicConstants.SCHEDULER_HEARTBEAT,
-                    result2.getRecordMetadata().partition(),
-                    result2.getRecordMetadata().offset());
-
-                log.info("Heartbeat successfully sent to both topics");
+                log.info("Heartbeat sent successfully");
             } catch (Exception e) {
                 log.error("Failed to send heartbeat to Kafka", e);
             }

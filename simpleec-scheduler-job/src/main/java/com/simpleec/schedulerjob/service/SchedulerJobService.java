@@ -13,14 +13,16 @@ import org.springframework.stereotype.Service;
 import java.util.Map;
 
 /**
- * SchedulerJobService - 排程工作協調器
+ * SchedulerJobService - 【已廢棄】
  *
- * 監聽 scheduler.heartbeat 主題
- * 根據心跳信號的分鐘位和秒位，定期觸發任務
- * 每 5 分鐘（當 minute % 5 == 0）發送 FETCH_ORDERS 和 FETCH_RETURNS 到所有平台的 .slow 主題
+ * 此 service 被 SchedulerConsumer 取代。
+ * SchedulerConsumer 提供完整的排程邏輯，包括多種任務類型。
+ * SchedulerJobService 只是冗餘的簡化版本。
+ *
+ * @deprecated 由 SchedulerConsumer 取代
  */
 @Slf4j
-@Service
+//@Service  // ❌ 禁用 - 由 SchedulerConsumer 取代
 @RequiredArgsConstructor
 public class SchedulerJobService {
 
