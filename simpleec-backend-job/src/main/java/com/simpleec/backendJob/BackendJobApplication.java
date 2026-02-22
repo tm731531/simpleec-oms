@@ -27,6 +27,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @EntityScan(basePackages = "com.simpleec.core.entity")
 @EnableJpaRepositories(basePackages = "com.simpleec.core.repository")
 @EnableScheduling
+@org.springframework.kafka.annotation.EnableKafka
 public class BackendJobApplication {
     public static void main(String[] args) {
         SpringApplication.run(BackendJobApplication.class, args);

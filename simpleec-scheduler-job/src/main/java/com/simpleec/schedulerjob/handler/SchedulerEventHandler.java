@@ -7,6 +7,8 @@ import com.simpleec.common.constants.TopicConstants;
 import com.simpleec.common.enums.TaskTypeEnum;
 import com.simpleec.common.util.DateUtil;
 import com.simpleec.common.util.NanoIdUtil;
+import com.simpleec.core.entity.Channel;
+import com.simpleec.core.repository.ChannelRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -33,15 +35,23 @@ public class SchedulerEventHandler {
 
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final ObjectMapper objectMapper;
+    private final ChannelRepository channelRepository;
 
     /**
      * 處理 heartbeat 訊號並派發排程任務
+     * 注意：只在滿足條件的分鐘的第 0 秒派發，避免重複派發
      */
     public void handleHeartbeat(JsonNode body, long timestamp) {
         try {
             int minuteOfHour = body.get("minuteOfHour").asInt();
+            int secondOfMinute = body.get("secondOfMinute").asInt();
             int mod5 = minuteOfHour % 5;
             int mod10 = minuteOfHour % 10;
+
+            // 只在秒數為 0 時才派發，避免同一分鐘內重複派發
+            if (secondOfMinute != 0) {
+                return;
+            }
 
             // :00, :05, :10, :15 ...
             if (mod5 == 0) {
@@ -84,24 +94,31 @@ public class SchedulerEventHandler {
     }
 
     /**
-     * 派發 FETCH_ORDERS 到所有平台的 slow topic
+     * 派發 FETCH_ORDERS 到已啟用通路的 slow topic
+     * 根據 Channel 表查詢已啟用的通路，只派送給啟用的通路
      */
     private void dispatchFetchOrders(long timestamp) {
         try {
             log.info("Dispatching FETCH_ORDERS at {}", DateUtil.toIsoString(timestamp));
 
-            // 平台列表（應從資料庫讀取，這裡先用靜態列表）
-            List<String> platforms = List.of("cyberbiz", "shopee", "shopify", "pchome", "momo", "shopline", "yahoo");
+            // 從數據庫查詢已啟用的通路
+            List<Channel> enabledChannels = channelRepository.findByActivedTrueAndEnableSyncTrue();
 
-            for (String platform : platforms) {
+            if (enabledChannels.isEmpty()) {
+                log.warn("No enabled channels found for FETCH_ORDERS dispatch");
+                return;
+            }
+
+            for (Channel channel : enabledChannels) {
                 try {
-                    String topic = TopicConstants.platformSlowTopic(platform.toLowerCase());
-                    ObjectNode message = buildTaskMessage(TaskTypeEnum.FETCH_ORDERS, timestamp);
+                    String platformId = channel.getPlatformId().toLowerCase();
+                    String topic = TopicConstants.platformSlowTopic(platformId);
+                    ObjectNode message = buildFetchOrdersMessage(TaskTypeEnum.FETCH_ORDERS, timestamp, channel);
 
-                    kafkaTemplate.send(topic, message.get("header").get("messageId").asText(), message);
-                    log.debug("Sent FETCH_ORDERS to {} topic", topic);
+                    kafkaTemplate.send(topic, message.get("header").get("requestId").asText(), message);
+                    log.debug("Sent FETCH_ORDERS to {} topic for channel {}", topic, channel.getChannelSn());
                 } catch (Exception e) {
-                    log.error("Error dispatching FETCH_ORDERS for platform {}", platform, e);
+                    log.error("Error dispatching FETCH_ORDERS for channel {}", channel.getChannelSn(), e);
                 }
             }
 
@@ -126,6 +143,32 @@ public class SchedulerEventHandler {
         } catch (Exception e) {
             log.error("Error dispatching {}", taskType.getCode(), e);
         }
+    }
+
+    /**
+     * 構建 FETCH_ORDERS 消息
+     */
+    private ObjectNode buildFetchOrdersMessage(TaskTypeEnum taskType, long timestamp, Channel channel) {
+        ObjectNode message = objectMapper.createObjectNode();
+
+        ObjectNode header = objectMapper.createObjectNode();
+        header.put("taskType", taskType.getCode());
+        header.put("merchantId", "MERCHANT_001");
+        header.put("platformId", channel.getPlatformId());
+        header.put("channelId", channel.getChannelSn());
+        header.put("requestId", "sched-" + NanoIdUtil.generate());
+        header.put("timestamp", DateUtil.toIsoString(timestamp));
+        header.put("source", "scheduler");
+        header.put("version", 1);
+        header.put("priority", "NORMAL");
+
+        ObjectNode body = objectMapper.createObjectNode();
+        body.set("fetchSpec", objectMapper.createObjectNode());
+
+        message.set("header", header);
+        message.set("body", body);
+
+        return message;
     }
 
     /**

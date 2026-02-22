@@ -3,11 +3,24 @@ package com.simpleec.orderjob;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration;
+import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
+import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
+import org.springframework.context.annotation.ComponentScan;
 import org.springframework.stereotype.Component;
 
-@SpringBootApplication(scanBasePackages = "com.simpleec")
+@SpringBootApplication(
+    scanBasePackages = {"com.simpleec.common", "com.simpleec.core", "com.simpleec.orderjob"},
+    exclude = {
+        RedisRepositoriesAutoConfiguration.class
+    }
+)
+@EntityScan(basePackages = "com.simpleec.core.entity")
+@EnableJpaRepositories(basePackages = "com.simpleec.core.repository")
+@ComponentScan(basePackages = "com.simpleec.core.service")
+@org.springframework.kafka.annotation.EnableKafka
 public class OrderJobApplication {
     public static void main(String[] args) {
         SpringApplication.run(OrderJobApplication.class, args);

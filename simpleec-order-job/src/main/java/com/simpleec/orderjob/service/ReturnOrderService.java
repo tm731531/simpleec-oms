@@ -1,4 +1,4 @@
-package com.simpleec.core.service;
+package com.simpleec.orderjob.service;
 
 import com.simpleec.core.entity.ReturnOrder;
 import com.simpleec.core.repository.ReturnOrderRepository;
@@ -6,7 +6,6 @@ import com.simpleec.common.enums.ReturnStatusEnum;
 import com.simpleec.common.util.NanoIdUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -17,13 +16,10 @@ import java.util.List;
 
 /**
  * 退貨服務
- *
- * 只在 ReturnOrderRepository bean 存在時才創建此服務（即有數據庫配置時）
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
-@ConditionalOnBean(ReturnOrderRepository.class)
 public class ReturnOrderService {
 
     private final ReturnOrderRepository returnOrderRepository;

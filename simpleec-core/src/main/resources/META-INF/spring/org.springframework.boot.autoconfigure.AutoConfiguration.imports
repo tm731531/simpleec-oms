@@ -1,0 +1,2 @@
+com.simpleec.core.config.ServiceAutoConfiguration
+com.simpleec.core.config.KafkaConfig

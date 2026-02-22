@@ -5,6 +5,7 @@ import com.simpleec.core.repository.ProductRepository;
 import com.simpleec.common.util.NanoIdUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -14,10 +15,13 @@ import java.util.Optional;
 
 /**
  * 商品服務
+ *
+ * 只在 ProductRepository bean 存在時才創建此服務（即有數據庫配置時）
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
+@ConditionalOnBean(ProductRepository.class)
 public class ProductService {
 
     private final ProductRepository productRepository;

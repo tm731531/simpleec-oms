@@ -37,7 +37,7 @@ import java.util.*;
 @RequiredArgsConstructor
 public class ModeBOrderDetailHandler {
 
-    private final KafkaTemplate<String, String> kafkaTemplate;
+    private final KafkaTemplate<String, Object> kafkaTemplate;
     private final ObjectMapper objectMapper;
 
     /**
@@ -231,8 +231,7 @@ public class ModeBOrderDetailHandler {
         message.set("body", body);
 
         // 發送到 order.process topic
-        String messageStr = objectMapper.writeValueAsString(message);
-        kafkaTemplate.send(TopicConstants.ORDER_PROCESS, channelOrderId, messageStr);
+        kafkaTemplate.send(TopicConstants.ORDER_PROCESS, channelOrderId, message);
 
         log.info("Sent ORDER_UPSERT to order.process for {}", channelOrderId);
     }

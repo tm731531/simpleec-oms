@@ -8,7 +8,6 @@ import org.springframework.kafka.annotation.EnableKafka;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
-import org.springframework.kafka.support.serializer.JsonDeserializer;
 
 /**
  * Kafka 消費者配置
@@ -18,20 +17,19 @@ import org.springframework.kafka.support.serializer.JsonDeserializer;
 public class KafkaConfig {
 
     @Bean
-    public ConsumerFactory<String, Object> consumerFactory(KafkaProperties properties) {
+    public ConsumerFactory<String, String> consumerFactory(KafkaProperties properties) {
         var configs = new java.util.HashMap<String, Object>();
         configs.put("bootstrap.servers", properties.getBootstrapServers());
         configs.put("group.id", properties.getConsumer().getGroupId());
         configs.put("key.deserializer", StringDeserializer.class);
-        configs.put("value.deserializer", JsonDeserializer.class);
-        configs.put("json.trusted.packages", "*");
+        configs.put("value.deserializer", StringDeserializer.class);
         return new DefaultKafkaConsumerFactory<>(configs);
     }
 
     @Bean
-    public ConcurrentKafkaListenerContainerFactory<String, Object> kafkaListenerContainerFactory(
-            ConsumerFactory<String, Object> consumerFactory) {
-        var factory = new ConcurrentKafkaListenerContainerFactory<String, Object>();
+    public ConcurrentKafkaListenerContainerFactory<String, String> kafkaListenerContainerFactory(
+            ConsumerFactory<String, String> consumerFactory) {
+        var factory = new ConcurrentKafkaListenerContainerFactory<String, String>();
         factory.setCommonErrorHandler(new org.springframework.kafka.listener.DefaultErrorHandler());
         factory.setConcurrency(1);
         factory.setConsumerFactory(consumerFactory);

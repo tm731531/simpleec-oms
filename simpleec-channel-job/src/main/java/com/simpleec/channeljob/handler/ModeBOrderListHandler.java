@@ -34,7 +34,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ModeBOrderListHandler {
 
-    private final KafkaTemplate<String, String> kafkaTemplate;
+    private final KafkaTemplate<String, Object> kafkaTemplate;
     private final ObjectMapper objectMapper;
 
     /**
@@ -118,9 +118,8 @@ public class ModeBOrderListHandler {
 
         // 發送到 {platform}.slow topic（同一個 channel topic，只是 tasktype 不同）
         String slowTopic = TopicConstants.platformSlowTopic(channelId);
-        String messageStr = objectMapper.writeValueAsString(message);
 
-        kafkaTemplate.send(slowTopic, channelOrderId, messageStr);
+        kafkaTemplate.send(slowTopic, channelOrderId, message);
         log.debug("Sent FETCH_ORDER_DETAIL for {} to topic {}", channelOrderId, slowTopic);
     }
 }

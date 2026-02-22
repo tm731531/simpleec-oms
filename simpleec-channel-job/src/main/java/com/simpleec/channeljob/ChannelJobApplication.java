@@ -1,13 +1,28 @@
 package com.simpleec.channeljob;
 
+import com.simpleec.core.config.KafkaConfig;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
+import org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.annotation.Import;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
-@SpringBootApplication(scanBasePackages = "com.simpleec")
+@SpringBootApplication(
+    scanBasePackages = {
+        "com.simpleec.channeljob",
+        "com.simpleec.channel",
+        "com.simpleec.common"
+    },
+    exclude = {
+        DataSourceAutoConfiguration.class,
+        HibernateJpaAutoConfiguration.class
+    }
+)
+@Import(KafkaConfig.class)
 public class ChannelJobApplication {
     public static void main(String[] args) {
         SpringApplication.run(ChannelJobApplication.class, args);
