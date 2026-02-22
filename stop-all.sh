@@ -13,8 +13,9 @@ pkill -f "gradle.*bootRun" || true
 pkill -f "java.*ApiApplication" || true
 
 # 停止 Node 進程 (Vite)
-echo "停止前端開發伺服器..."
+echo "停止前端應用開發伺服器..."
 pkill -f "node.*vite" || true
+pkill -f "npm.*dev" || true
 
 # 停止 Docker 容器
 echo "停止 Docker 容器..."

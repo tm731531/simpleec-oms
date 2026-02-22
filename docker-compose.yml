@@ -361,6 +361,19 @@ services:
       <<: *common-depends
     restart: unless-stopped
 
+  simpleec-channel-job:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.channel-job
+    container_name: simpleec-channel-job
+    environment:
+      <<: *common-env
+      OTEL_SERVICE_NAME: simpleec-channel-job
+      SPRING_AUTOCONFIGURE_EXCLUDE: org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration,org.springframework.boot.autoconfigure.data.jpa.JpaRepositoriesAutoConfiguration,org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+    depends_on:
+      <<: *common-depends
+    restart: unless-stopped
+
   simpleec-backend-job:
     build:
       context: .
@@ -395,5 +408,35 @@ services:
       OTEL_SERVICE_NAME: simpleec-retry-job
     depends_on:
       <<: *common-depends
+    restart: unless-stopped
+
+  # ============ Frontend Apps ============
+
+  simpleec-admin-app:
+    build:
+      context: admin-app
+      dockerfile: Dockerfile.admin
+    container_name: simpleec-admin-app
+    ports:
+      - "8084:8084"
+    environment:
+      - VITE_API_BASE_URL=http://simpleec-api:8080/api
+    depends_on:
+      simpleec-api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  simpleec-user-app:
+    build:
+      context: user-app
+      dockerfile: Dockerfile.user
+    container_name: simpleec-user-app
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_BASE_URL=http://simpleec-api:8080/api
+    depends_on:
+      simpleec-api:
+        condition: service_healthy
     restart: unless-stopped
 

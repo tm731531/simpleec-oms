@@ -20,7 +20,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 # 1. 啟動 Docker 容器 (基礎設施 + 事件流 Job)
-echo -e "${BLUE}[1/4] 啟動 Docker 容器...${NC}"
+echo -e "${BLUE}[1/5] 啟動 Docker 容器...${NC}"
 echo "     - PostgreSQL 資料庫 (port 5433)"
 echo "     - Redis 緩存 (port 6379)"
 echo "     - Kafka 事件流 (port 9092)"
@@ -34,7 +34,7 @@ sleep 5
 
 # 2. 編譯並啟動後端 API
 echo ""
-echo -e "${BLUE}[2/4] 編譯並啟動後端 API...${NC}"
+echo -e "${BLUE}[2/5] 編譯並啟動後端 API...${NC}"
 echo "     - 編譯 simpleec-core 和 simpleec-api"
 echo "     - 啟動 Spring Boot (port 8083)"
 echo ""
@@ -57,30 +57,51 @@ for i in {1..60}; do
     fi
 done
 
-# 3. 啟動前端 (Vite 開發伺服器)
+# 3. 啟動前端應用 (Vite 開發伺服器)
 echo ""
-echo -e "${BLUE}[3/4] 啟動前端開發伺服器...${NC}"
+echo -e "${BLUE}[3/5] 啟動前端應用開發伺服器...${NC}"
 echo "     - Vue 3 + Vite + TypeScript"
+echo "     - Admin App (port 8084)"
 echo "     - User App (port 5173)"
 echo ""
 
-cd user-app
-nohup npm run dev > /tmp/frontend.log 2>&1 &
-FRONTEND_PID=$!
-echo "Frontend PID: $FRONTEND_PID"
+# Admin App
+cd admin-app
+nohup npm run dev > /tmp/admin-app.log 2>&1 &
+ADMIN_PID=$!
+echo "Admin App PID: $ADMIN_PID"
+cd ..
 
-# 等待前端啟動
-echo "等待前端啟動..."
+# User App
+cd user-app
+nohup npm run dev > /tmp/user-app.log 2>&1 &
+USER_PID=$!
+echo "User App PID: $USER_PID"
+cd ..
+
+# 等待前端應用啟動
+echo "等待前端應用啟動..."
 for i in {1..30}; do
+    admin_ok=false
+    user_ok=false
+
+    if lsof -i :8084 2>/dev/null | grep -q LISTEN; then
+        admin_ok=true
+        echo -e "${GREEN}✓ Admin App 已啟動 (port 8084)${NC}"
+    fi
+
     if lsof -i :5173 2>/dev/null | grep -q LISTEN; then
-        echo -e "${GREEN}✓ 前端已啟動 (port 5173)${NC}"
+        user_ok=true
+        echo -e "${GREEN}✓ User App 已啟動 (port 5173)${NC}"
+    fi
+
+    if [ "$admin_ok" = true ] && [ "$user_ok" = true ]; then
         break
     fi
+
     echo -n "."
     sleep 1
 done
-
-cd ..
 
 # 4. 顯示完整系統狀態和連線資訊
 echo ""
@@ -90,9 +111,11 @@ echo "════════════════════════�
 echo ""
 echo -e "${YELLOW}📍 連線資訊:${NC}"
 echo ""
-echo "  前端頁面:"
-echo "    • 本機:    http://localhost:5173"
-echo "    • 遠端:    http://[伺服器IP]:5173"
+echo "  前端應用:"
+echo "    • Admin App (本機):   http://localhost:8084"
+echo "    • Admin App (遠端):   http://[伺服器IP]:8084"
+echo "    • User App (本機):    http://localhost:5173"
+echo "    • User App (遠端):    http://[伺服器IP]:5173"
 echo ""
 echo "  後端 API:"
 echo "    • 本機:    http://localhost:8083/api"
@@ -144,27 +167,35 @@ else
     services_ok=false
 fi
 
-if lsof -i :5173 2>/dev/null | grep -q LISTEN; then
-    echo -e "${GREEN}  ✓${NC} 前端頁面 (Vue 3 + Vite)"
+if lsof -i :8084 2>/dev/null | grep -q LISTEN; then
+    echo -e "${GREEN}  ✓${NC} Admin App (Vue 3 + Vite)"
 else
-    echo -e "${YELLOW}  ✗${NC} 前端頁面"
+    echo -e "${YELLOW}  ✗${NC} Admin App"
+    services_ok=false
+fi
+
+if lsof -i :5173 2>/dev/null | grep -q LISTEN; then
+    echo -e "${GREEN}  ✓${NC} User App (Vue 3 + Vite)"
+else
+    echo -e "${YELLOW}  ✗${NC} User App"
     services_ok=false
 fi
 
 echo ""
 echo -e "${YELLOW}📝 快速測試:${NC}"
 echo ""
-echo "  1. 在瀏覽器打開前端: http://[伺服器IP]:5173"
-echo "  2. 使用商家帳號登入"
+echo "  1. Admin App: http://[伺服器IP]:8084 (平台管理)"
+echo "  2. User App:  http://[伺服器IP]:5173 (商家訂單)"
 echo "  3. 檢查後端 API:"
 echo "     curl http://[伺服器IP]:8083/api/auth/me"
 echo ""
 
 if [ "$services_ok" = false ]; then
     echo -e "${YELLOW}⚠ 某些服務可能未完全啟動，請檢查日誌:${NC}"
-    echo "  • 後端:   tail -f /tmp/backend-api.log"
-    echo "  • 前端:   tail -f /tmp/frontend.log"
-    echo "  • Docker: docker-compose logs -f"
+    echo "  • 後端:      tail -f /tmp/backend-api.log"
+    echo "  • Admin App: tail -f /tmp/admin-app.log"
+    echo "  • User App:  tail -f /tmp/user-app.log"
+    echo "  • Docker:    docker-compose logs -f"
 fi
 
 echo ""
