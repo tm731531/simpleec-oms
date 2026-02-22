@@ -19,7 +19,6 @@ import java.util.*;
  * - 退貨可通過 refund_at 時間參數查詢
  */
 @Slf4j
-@Component
 @RequiredArgsConstructor
 public class CyberbizAdapter implements ChannelAdapter {
 

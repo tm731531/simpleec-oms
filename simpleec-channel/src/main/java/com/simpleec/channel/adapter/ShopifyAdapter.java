@@ -16,7 +16,6 @@ import java.util.Map;
  * 列表 API 已包含完整資訊：items, shipping_address, customer
  */
 @Slf4j
-@Component
 @RequiredArgsConstructor
 public class ShopifyAdapter implements ChannelAdapter {
 

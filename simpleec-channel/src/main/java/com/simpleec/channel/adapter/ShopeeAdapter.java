@@ -17,7 +17,6 @@ import java.util.*;
  * - Rate limit: ~100 requests/min
  */
 @Slf4j
-@Component
 public class ShopeeAdapter implements ChannelAdapter {
 
     @Override

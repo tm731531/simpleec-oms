@@ -15,7 +15,6 @@ import java.util.*;
  * - 時間範圍過濾支援 created_at/updated_at 比對
  */
 @Slf4j
-@Component
 public class EasystoreAdapter implements ChannelAdapter {
 
     @Override
