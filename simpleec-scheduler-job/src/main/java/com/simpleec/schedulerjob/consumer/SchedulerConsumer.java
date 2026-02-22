@@ -44,8 +44,14 @@ public class SchedulerConsumer {
     /**
      * 消費 scheduler topic 中的 Heartbeat
      */
-    @KafkaListener(topics = "scheduler", groupId = "scheduler-dispatcher-group")
+    //@KafkaListener(
+    //    topics = "scheduler",
+    //    groupId = "scheduler-dispatcher-group-v3",
+    //    containerFactory = "kafkaListenerContainerFactory"  // ✅ 指定 containerFactory
+    //)
+    // NOTE: 已移至 ManualSchedulerConsumer 使用直接的 KafkaConsumer
     public void consume(String message) {
+        log.warn("🔥🔥🔥 MESSAGE RECEIVED in consume(): {}", message.substring(0, Math.min(50, message.length())));
         try {
             JsonNode json = objectMapper.readTree(message);
             JsonNode body = json.get("body");

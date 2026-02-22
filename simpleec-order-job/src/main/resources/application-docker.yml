@@ -4,7 +4,7 @@ spring:
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
-      ddl-auto: none  # 只查詢，不驗證或修改 schema
+      ddl-auto: validate
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
@@ -13,10 +13,16 @@ spring:
             non_contextual_creation: true
   kafka:
     bootstrap-servers: kafka:9092
-    producer:
-      bootstrap-servers: kafka:9092
     consumer:
-      bootstrap-servers: kafka:9092
+      group-id: order-job-group
+      auto-offset-reset: earliest
   redis:
     host: redis
     port: 6379
+
+server:
+  port: 8085
+
+logging:
+  level:
+    com.simpleec: DEBUG
