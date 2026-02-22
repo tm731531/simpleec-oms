@@ -64,8 +64,15 @@ public class UserRefundController {
     public ResponseEntity<ReturnOrder> createRefund(
             @AuthenticationPrincipal UserPrincipal principal,
             @RequestBody Map<String, Object> body) {
+        // Generate ReturnOrder ID: merchant(4) + yyyyMMddHHmmss(14) + random(2) = 20 chars
+        String merchantId = principal.getMerchantId();
+        String merchantPrefix = merchantId != null && merchantId.length() >= 4 ? merchantId.substring(0, 4) : "XXXX";
+        String timestamp = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
+        String randomPart = NanoIdUtil.generate().substring(0, 2);
+        String returnOrderId = merchantPrefix + timestamp + randomPart;
+
         ReturnOrder ro = ReturnOrder.builder()
-            .id(NanoIdUtil.generateWithPrefix("RET_"))
+            .id(returnOrderId)
             .merchantId(principal.getMerchantId())
             .orderId((String) body.get("orderId"))
             .reason((String) body.get("reason"))

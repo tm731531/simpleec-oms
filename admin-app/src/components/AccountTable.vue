@@ -66,8 +66,8 @@ async function loadAccounts() {
   loading.value = true
   try {
     const res = await accountAPI.list(currentPage.value, pageSize.value)
-    accounts.value = res.data.data.items
-    total.value = res.data.data.total
+    accounts.value = res.items
+    total.value = res.total
   } catch (err) {
     ElMessage.error('加載帳戶列表失敗')
     console.error(err)

@@ -73,9 +73,9 @@ async function loadStats() {
     ])
 
     stats.value = {
-      merchantCount: merchantRes.data.data.total,
-      accountCount: accountRes.data.data.total,
-      platformCount: platformRes.data.data.total,
+      merchantCount: merchantRes.total,
+      accountCount: accountRes.total,
+      platformCount: platformRes.total,
       orderCount: 0 // 暫時為 0，待後端補充訂單 API
     }
   } catch (err) {

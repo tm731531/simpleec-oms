@@ -9,7 +9,7 @@
     <el-card>
       <MerchantTable :refresh="refreshCount" @edit="handleEditMerchant" />
     </el-card>
-    <MerchantForm :merchant="selectedMerchant" @saved="handleSaved" @close="selectedMerchant = null" />
+    <MerchantForm :merchant="selectedMerchant" @saved="handleSaved" @close="handleFormClose" />
   </div>
 </template>
 
@@ -19,7 +19,7 @@ import { Merchant } from '../types'
 import MerchantTable from '../components/MerchantTable.vue'
 import MerchantForm from '../components/MerchantForm.vue'
 
-const selectedMerchant = ref<Merchant | null>(null)
+const selectedMerchant = ref<Merchant | null | undefined>(undefined)
 const refreshCount = ref(0)
 
 function handleNewMerchant() {
@@ -32,7 +32,11 @@ function handleEditMerchant(merchant: Merchant) {
 
 function handleSaved() {
   refreshCount.value++
-  selectedMerchant.value = null
+  selectedMerchant.value = undefined
+}
+
+function handleFormClose() {
+  selectedMerchant.value = undefined
 }
 </script>
 

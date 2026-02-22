@@ -55,8 +55,8 @@ async function loadMerchants() {
   loading.value = true
   try {
     const res = await merchantAPI.list(currentPage.value, pageSize.value)
-    merchants.value = res.data.data.items
-    total.value = res.data.data.total
+    merchants.value = res.items
+    total.value = res.total
   } catch (err) {
     ElMessage.error('加載商家列表失敗')
     console.error(err)

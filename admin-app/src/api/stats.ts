@@ -1,11 +1,10 @@
-import axios from 'axios'
+import axiosInstance from './index'
 
-// 使用相對路徑 - Cloudflare 反向代理會轉發到後端
-const API_BASE = '/api/admin'
+const API_BASE = '/admin'
 
 export const statsAPI = {
   getStats() {
-    return axios.get<{
+    return axiosInstance.get<{
       code: number
       data: {
         merchantCount: number

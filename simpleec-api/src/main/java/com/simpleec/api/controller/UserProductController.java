@@ -40,7 +40,13 @@ public class UserProductController {
     public ResponseEntity<Product> createProduct(
             @AuthenticationPrincipal UserPrincipal principal,
             @RequestBody Product product) {
-        product.setId(NanoIdUtil.generateWithPrefix("PROD_"));
+        // Generate Product ID: merchant(4) + yyyyMMddHHmmss(14) + random(2) = 20 chars
+        String merchantId = principal.getMerchantId();
+        String merchantPrefix = merchantId != null && merchantId.length() >= 4 ? merchantId.substring(0, 4) : "XXXX";
+        String timestamp = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
+        String randomPart = NanoIdUtil.generate().substring(0, 2);
+        String productId = merchantPrefix + timestamp + randomPart;
+        product.setId(productId);
         product.setMerchantId(principal.getMerchantId());
         if (product.getStatus() == null) product.setStatus("active");
         Product saved = productRepository.save(product);

@@ -1,5 +1,15 @@
 <template>
-  <el-dialog v-model="visible" :title="isEdit ? '編輯商家' : '新增商家'" width="600px" @close="handleClose">
+  <!-- DEBUG: 診斷 visible 值 -->
+  <div v-if="true" style="position: fixed; top: 10px; right: 10px; background: yellow; padding: 10px; font-size: 12px; z-index: 9999;">
+    visible: {{ visible }} | isEdit: {{ isEdit }} | mode: {{ isEdit ? '編輯' : '新增' }}
+  </div>
+
+  <!-- 測試用簡單 div 替換 el-dialog -->
+  <div v-if="visible" style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; border: 2px solid red; padding: 20px; width: 600px; max-height: 80vh; overflow-y: auto; z-index: 10000; box-shadow: 0 0 20px rgba(0,0,0,0.3);">
+    <div style="font-size: 20px; font-weight: bold; margin-bottom: 20px;">
+      {{ isEdit ? '編輯商家' : '新增商家' }}
+    </div>
+
     <el-form ref="form" :model="formData" label-width="120px">
       <el-form-item v-if="!isEdit" label="商家ID">
         <el-input v-model="formData.id" placeholder="輸入商家ID" />
@@ -56,23 +66,24 @@
         </el-select>
       </el-form-item>
     </el-form>
-    <template #footer>
+
+    <div style="margin-top: 20px; text-align: right;">
       <el-button @click="handleClose">取消</el-button>
       <el-button type="primary" @click="handleSubmit" :loading="loading">
         {{ isEdit ? '更新' : '建立' }}
       </el-button>
-    </template>
-  </el-dialog>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, onMounted, watchEffect } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Merchant } from '../types'
 import { merchantAPI } from '../api/merchant'
 
 const props = defineProps<{
-  merchant?: Merchant | null
+  merchant?: Merchant | null | undefined
 }>()
 
 const emit = defineEmits<{
@@ -104,14 +115,32 @@ const formData = ref<Partial<Merchant>>({
   status: 'active'
 })
 
-watch(() => props.merchant, (newVal) => {
-  if (newVal) {
-    formData.value = { ...newVal }
-    isEdit.value = true
+// 使用 watchEffect 確保每次 merchant 改變都會執行
+watchEffect(() => {
+  const merchant = props.merchant
+  console.log('watchEffect triggered, merchant:', merchant, 'type:', typeof merchant)
+
+  if (merchant !== undefined) {
+    console.log('merchant !== undefined is true')
+    if (merchant) {
+      // Edit mode
+      console.log('Edit mode')
+      formData.value = { ...merchant }
+      isEdit.value = true
+    } else {
+      // New mode (merchant is null)
+      console.log('New mode')
+      resetForm()
+      isEdit.value = false
+    }
+    console.log('Opening dialog')
     visible.value = true
-  } else {
-    resetForm()
   }
+})
+
+// 額外的 onMounted 檢查
+onMounted(() => {
+  console.log('MerchantForm onMounted, merchant prop value:', props.merchant)
 })
 
 function resetForm() {
@@ -140,13 +169,11 @@ function resetForm() {
 async function handleSubmit() {
   loading.value = true
   try {
-    let result
+    let result: Merchant
     if (isEdit.value) {
-      const res = await merchantAPI.update(formData.value.id!, formData.value)
-      result = res.data.data
+      result = await merchantAPI.update(formData.value.id!, formData.value)
     } else {
-      const res = await merchantAPI.create(formData.value)
-      result = res.data.data
+      result = await merchantAPI.create(formData.value)
     }
     ElMessage.success(isEdit.value ? '更新成功' : '建立成功')
     emit('saved', result)

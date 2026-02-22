@@ -6,7 +6,6 @@ import com.simpleec.common.enums.OrderStatusEnum;
 import com.simpleec.common.util.NanoIdUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -16,14 +15,10 @@ import java.util.Optional;
 
 /**
  * 訂單服務
- *
- * 只在 OrderRepository bean 存在時才創建此服務（即有數據庫配置時）
- * 這允許 ChannelJob 等無數據庫的應用程式載入 Core 配置而不需要提供 OrderRepository
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
-@ConditionalOnBean(OrderRepository.class)
 public class OrderService {
 
     private final OrderRepository orderRepository;

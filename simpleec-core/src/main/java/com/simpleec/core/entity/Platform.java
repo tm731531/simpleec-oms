@@ -1,12 +1,14 @@
 package com.simpleec.core.entity;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
-import com.fasterxml.jackson.databind.JsonNode;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
@@ -25,6 +27,7 @@ import org.hibernate.annotations.JdbcTypeCode;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public class Platform {
 
     /**

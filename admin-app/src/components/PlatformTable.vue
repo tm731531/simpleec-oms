@@ -1,11 +1,15 @@
 <template>
   <div>
     <el-table :data="platforms" stripe border v-loading="loading">
-      <el-table-column prop="id" label="通路ID" width="120" />
-      <el-table-column prop="platform_name" label="通路名稱" />
-      <el-table-column prop="platform_code" label="通路代碼" width="120" />
-      <el-table-column prop="merchant_id" label="商家ID" width="120" />
-      <el-table-column prop="status" label="狀態" width="80" />
+      <el-table-column prop="id" label="平台ID" width="120" />
+      <el-table-column prop="platform_name" label="平台名稱" />
+      <el-table-column prop="queue_topic" label="Kafka Topic" width="150" />
+      <el-table-column prop="currency" label="幣種" width="80" />
+      <el-table-column prop="actived" label="狀態" width="80">
+        <template #default="{ row }">
+          {{ row.actived ? '啟用' : '停用' }}
+        </template>
+      </el-table-column>
       <el-table-column label="操作" width="150">
         <template #default="{ row }">
           <el-button type="primary" size="small" @click="handleEdit(row)">
@@ -55,10 +59,10 @@ async function loadPlatforms() {
   loading.value = true
   try {
     const res = await platformAPI.list(currentPage.value, pageSize.value)
-    platforms.value = res.data.data.items
-    total.value = res.data.data.total
+    platforms.value = res.items
+    total.value = res.total
   } catch (err) {
-    ElMessage.error('加載通路列表失敗')
+    ElMessage.error('加載平台列表失敗')
     console.error(err)
   } finally {
     loading.value = false
@@ -75,7 +79,7 @@ function handleEdit(row: Platform) {
 
 async function handleDelete(row: Platform) {
   ElMessageBox.confirm(
-    `確認刪除通路 ${row.platform_name}？`,
+    `確認刪除平台 ${row.platform_name}？`,
     '警告',
     { type: 'warning' }
   )

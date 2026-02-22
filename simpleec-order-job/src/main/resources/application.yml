@@ -5,16 +5,16 @@ spring:
     hibernate:
       ddl-auto: validate
   datasource:
-    url: jdbc:postgresql://localhost:5432/simpleec
+    url: jdbc:postgresql://simpleec-postgres:5432/simpleec
     username: simpleec
     password: simpleec123
   kafka:
-    bootstrap-servers: localhost:9092
+    bootstrap-servers: simpleec-kafka:9092
     consumer:
       group-id: order-job-group
       auto-offset-reset: earliest
   redis:
-    host: localhost
+    host: simpleec-redis
     port: 6379
 
 server:

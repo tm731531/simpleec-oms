@@ -1,15 +1,15 @@
 <template>
   <div>
     <div class="page-header">
-      <h2>通路管理</h2>
+      <h2>平台管理</h2>
       <el-button type="primary" @click="handleNewPlatform">
-        + 新增通路
+        + 新增平台
       </el-button>
     </div>
     <el-card>
       <PlatformTable :refresh="refreshCount" @edit="handleEditPlatform" />
     </el-card>
-    <PlatformForm :platform="selectedPlatform" @saved="handleSaved" @close="selectedPlatform = null" />
+    <PlatformForm :platform="selectedPlatform" @saved="handleSaved" @close="handleFormClose" />
   </div>
 </template>
 
@@ -19,7 +19,7 @@ import { Platform } from '../types'
 import PlatformTable from '../components/PlatformTable.vue'
 import PlatformForm from '../components/PlatformForm.vue'
 
-const selectedPlatform = ref<Platform | null>(null)
+const selectedPlatform = ref<Platform | null | undefined>(undefined)
 const refreshCount = ref(0)
 
 function handleNewPlatform() {
@@ -32,7 +32,11 @@ function handleEditPlatform(platform: Platform) {
 
 function handleSaved() {
   refreshCount.value++
-  selectedPlatform.value = null
+  selectedPlatform.value = undefined
+}
+
+function handleFormClose() {
+  selectedPlatform.value = undefined
 }
 </script>
 

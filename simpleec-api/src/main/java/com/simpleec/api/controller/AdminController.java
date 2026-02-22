@@ -64,7 +64,7 @@ public class AdminController {
     @PostMapping("/platform")
     public ResponseEntity<AdminResponse<Platform>> createPlatform(@RequestBody Map<String, Object> body) {
         Platform platform = Platform.builder()
-            .id(NanoIdUtil.generateWithPrefix("PLAT_"))
+            .id((String) body.get("id"))
             .platformName((String) body.get("platform_name"))
             .credential1((String) body.get("credential1"))
             .credential2((String) body.getOrDefault("credential2", ""))
@@ -158,8 +158,15 @@ public class AdminController {
                     .build());
         }
 
+        // Generate Account ID: merchant(4) + yyyyMMddHHmmss(14) + random(2) = 20 chars
+        String merchantId = (String) body.get("merchant_id");
+        String merchantPrefix = merchantId != null && merchantId.length() >= 4 ? merchantId.substring(0, 4) : "XXXX";
+        String timestamp = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
+        String randomPart = NanoIdUtil.generate().substring(0, 2);
+        String accountId = merchantPrefix + timestamp + randomPart;
+
         Account account = Account.builder()
-            .id(NanoIdUtil.generateWithPrefix("ACC_"))
+            .id(accountId)
             .accountName((String) body.get("account_name"))
             .accountEmail((String) body.get("account_email"))
             .accountPassword(passwordEncoder.encode(password))
@@ -270,7 +277,7 @@ public class AdminController {
     @PostMapping("/merchant")
     public ResponseEntity<AdminResponse<Merchant>> createMerchant(@RequestBody Map<String, Object> body) {
         Merchant merchant = Merchant.builder()
-            .id(NanoIdUtil.generateWithPrefix("MERCH_"))
+            .id(NanoIdUtil.generate().substring(0, 6))
             .merchantName((String) body.get("merchant_name"))
             .merchantEmail((String) body.get("merchant_email"))
             .merchantPhoneNumber((String) body.getOrDefault("merchant_phone_number", ""))

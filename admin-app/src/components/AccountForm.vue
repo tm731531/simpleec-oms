@@ -94,10 +94,11 @@ import { ref, watch, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Account, Merchant } from '../types'
 import { accountAPI } from '../api/account'
+import { merchantAPI } from '../api/merchant'
 
 const props = defineProps<{
-  account?: Account | null
-  resetPasswordAccount?: Account | null
+  account?: Account | null | undefined
+  resetPasswordAccount?: Account | null | undefined
 }>()
 
 const emit = defineEmits<{
@@ -130,9 +131,16 @@ const resetPasswordForm = ref({
 })
 
 watch(() => props.account, (newVal) => {
-  if (newVal) {
-    formData.value = { ...newVal }
-    isEdit.value = true
+  if (newVal !== undefined) {
+    if (newVal) {
+      // Edit mode
+      formData.value = { ...newVal }
+      isEdit.value = true
+    } else {
+      // New mode (newVal is null)
+      resetForm()
+      isEdit.value = false
+    }
     editDialogVisible.value = true
   }
 })
@@ -164,19 +172,8 @@ function resetForm() {
 
 async function loadMerchants() {
   try {
-    const response = await accountAPI.list(1, 100)
-    const merchants = response.data.data?.items || []
-    // Get unique merchants from all accounts
-    const uniqueMerchants = new Map<string, Merchant>()
-    merchants.forEach((account: Account) => {
-      if (account.merchant_id && !uniqueMerchants.has(account.merchant_id)) {
-        uniqueMerchants.set(account.merchant_id, {
-          id: account.merchant_id,
-          merchant_name: account.merchant_id,
-        } as Merchant)
-      }
-    })
-    merchantList.value = Array.from(uniqueMerchants.values())
+    const response = await merchantAPI.list(1, 100)
+    merchantList.value = response.items || []
   } catch (error) {
     console.error('Failed to load merchants:', error)
   }
@@ -191,7 +188,7 @@ async function handleSubmit() {
       result = formData.value as Account
     } else {
       const res = await accountAPI.create(formData.value)
-      result = res.data.data
+      result = res
     }
     ElMessage.success(isEdit.value ? '更新成功' : '建立成功')
     emit('saved', result)

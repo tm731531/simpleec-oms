@@ -197,6 +197,12 @@ services:
       MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,prometheus,info,metrics
     depends_on:
       <<: *common-depends
+    healthcheck:
+      test: ["CMD", "sh", "-c", "nc -z localhost 8080 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
     restart: unless-stopped
 
   simpleec-gateway:
@@ -411,6 +417,21 @@ services:
     restart: unless-stopped
 
   # ============ Frontend Apps ============
+
+  # ============ Reverse Proxy (nginx) ============
+  simpleec-nginx:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.nginx
+    container_name: simpleec-nginx
+    ports:
+      - "8089:80"
+      - "8090:443"
+    depends_on:
+      - simpleec-user-app
+      - simpleec-admin-app
+      - simpleec-api
+    restart: unless-stopped
 
   simpleec-admin-app:
     build:

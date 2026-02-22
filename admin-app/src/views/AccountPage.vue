@@ -24,8 +24,8 @@ import { Account } from '../types'
 import AccountTable from '../components/AccountTable.vue'
 import AccountForm from '../components/AccountForm.vue'
 
-const selectedAccount = ref<Account | null>(null)
-const resetPasswordAccount = ref<Account | null>(null)
+const selectedAccount = ref<Account | null | undefined>(undefined)
+const resetPasswordAccount = ref<Account | null | undefined>(undefined)
 const refreshCount = ref(0)
 
 function handleNewAccount() {
@@ -42,12 +42,12 @@ function handleResetPassword(account: Account) {
 
 function handleSaved() {
   refreshCount.value++
-  selectedAccount.value = null
+  selectedAccount.value = undefined
 }
 
 function handleFormClose() {
-  selectedAccount.value = null
-  resetPasswordAccount.value = null
+  selectedAccount.value = undefined
+  resetPasswordAccount.value = undefined
 }
 </script>
 

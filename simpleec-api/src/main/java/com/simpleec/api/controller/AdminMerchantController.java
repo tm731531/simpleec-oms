@@ -139,8 +139,8 @@ public class AdminMerchantController {
                         .body(AdminApiResponse.conflict("Merchant email already exists: " + merchant.getMerchantEmail()));
             }
 
-            // 生成 ID
-            merchant.setId(NanoIdUtil.generate());
+            // 生成 ID - 6 碼隨機數
+            merchant.setId(NanoIdUtil.generate().substring(0, 6));
 
             // 儲存商家
             Merchant created = merchantRepository.save(merchant);
