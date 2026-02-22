@@ -44,7 +44,7 @@ public class SchedulerConsumer {
     /**
      * 消費 scheduler topic 中的 Heartbeat
      */
-    @KafkaListener(topics = "scheduler", groupId = "scheduler-consumer-group")
+    @KafkaListener(topics = "scheduler", groupId = "scheduler-dispatcher-group")
     public void consume(String message) {
         try {
             JsonNode json = objectMapper.readTree(message);

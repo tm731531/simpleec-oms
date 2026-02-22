@@ -35,7 +35,7 @@ public class SchedulerJobService {
      */
     @KafkaListener(
         topics = TopicConstants.SCHEDULER_HEARTBEAT,
-        groupId = "scheduler-consumer-group",
+        groupId = "scheduler-heartbeat-processor-group",
         containerFactory = "kafkaListenerContainerFactory"
     )
     public void processHeartbeat(String message) {
