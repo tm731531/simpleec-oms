@@ -12,11 +12,11 @@ spring:
           lob:
             non_contextual_creation: true
   kafka:
-    bootstrap-servers: kafka:9092
+    bootstrap-servers: simpleec-kafka:9092
     producer:
-      bootstrap-servers: kafka:9092
+      bootstrap-servers: simpleec-kafka:9092
     consumer:
-      bootstrap-servers: kafka:9092
+      bootstrap-servers: simpleec-kafka:9092
   redis:
     host: redis
     port: 6379

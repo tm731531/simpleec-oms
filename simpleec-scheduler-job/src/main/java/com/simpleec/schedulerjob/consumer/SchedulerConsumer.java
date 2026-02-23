@@ -38,7 +38,7 @@ public class SchedulerConsumer {
      */
     @KafkaListener(
         topics = "scheduler",
-        groupId = "scheduler-dispatcher-group-v3",
+        groupId = "scheduler-dispatcher-group-v4",
         concurrency = "1"
     )
     public void consumeHeartbeat(String message) {
