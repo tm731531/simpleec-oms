@@ -69,6 +69,39 @@
   - Publishes CHECK_HEALTH_PLATFORM for each active platform
   - Messages include taskType, merchantId, channelId/platformCode, timestamp
 
+### Phase 5: Logging & Health Services (2 Tasks)
+
+#### Task 5.1: Implement Platform API Client
+- **Status:** ✅ COMPLETED
+- **Commit:** 7f30c31
+- **Summary:** Created platform API client for health checking
+- **Files Created:**
+  - PlatformApiClient.java - Interface defining health check contract
+  - PlatformApiClientImpl.java - Implementation with platform endpoint mapping
+  - RestTemplateConfig.java - Spring RestTemplate configuration with 5s/10s timeouts
+- **Features:**
+  - healthCheck(platformCode, token) - Authenticated channel health checks
+  - platformHealthCheck(platformCode) - Unauthenticated platform status checks
+  - Maps all 7 platforms to their API endpoints (momo, shopee, yahoo, pchome, cyberbiz, shopline, shopify)
+  - Error handling: RestClientException → 500, unavailable → 503
+  - Returns HTTP status codes as primary diagnostic signal
+
+#### Task 5.2: Implement Health Check Service and Tests
+- **Status:** ✅ COMPLETED
+- **Commit:** 7f30c31
+- **Summary:** Created health check service and comprehensive unit tests
+- **Files Created:**
+  - HealthCheckService.java - Core health check business logic
+  - HealthCheckServiceTest.java - 10 unit tests (success/failure scenarios)
+  - PlatformApiClientImplTest.java - 6 unit tests for API client
+- **Features:**
+  - performChannelHealthCheck(channelId) - Checks merchant channel health
+  - performPlatformHealthCheck(platformCode) - Checks platform availability
+  - Records results in channel_sync_logs with HTTP status
+  - Error message mapping: 401→token expired, 403→permissions, 500→platform error, 503→unavailable
+  - HealthCheckResult DTO with httpStatus, health ("healthy"/"unhealthy"), errorMessage
+  - Comprehensive exception handling with detailed logging
+
 ---
 
 ## ⏳ In Progress
@@ -77,8 +110,7 @@ None currently
 
 ---
 
-## ⭕ Pending (19 tasks remaining)
-### Phase 5: Logging & Health Services (2 tasks)
+## ⭕ Pending (17 tasks remaining)
 ### Phase 6: API Endpoints (1 task)
 ### Phase 7: Frontend Updates (1 task)
 ### Phase 8: Integration & Testing (1 task)
@@ -88,9 +120,10 @@ None currently
 
 ## Next Steps
 
-1. **Phase 3:** Implement enable_sync gate in Channel-Job processor
-2. **Phase 4:** Create Scheduler health check publishing
-3. Continue through remaining phases...
+1. **Phase 6:** Create REST API endpoints for health status (HealthCheckController)
+2. **Phase 7:** Update frontend to display health status
+3. **Phase 8:** Integration testing across all components
+4. **Phase 9-10:** Documentation and final verification
 
 ---
 
