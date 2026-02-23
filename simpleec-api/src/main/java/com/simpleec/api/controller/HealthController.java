@@ -13,7 +13,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  */
 @Slf4j
 @RestController
-@RequestMapping("/api")
+@RequestMapping("")
 public class HealthController {
 
     private final ObjectMapper objectMapper;

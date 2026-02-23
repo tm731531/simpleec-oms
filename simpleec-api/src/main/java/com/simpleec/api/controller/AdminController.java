@@ -38,7 +38,7 @@ public class AdminController {
     // ======================== Platform Endpoints ========================
 
     /** GET /api/admin/platform?page=1&pageSize=20 */
-    @GetMapping("/platform")
+    @GetMapping("/platforms")
     public ResponseEntity<AdminPageResponse<Platform>> listPlatforms(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int pageSize) {
@@ -47,7 +47,7 @@ public class AdminController {
     }
 
     /** GET /api/admin/platform/{id} */
-    @GetMapping("/platform/{id}")
+    @GetMapping("/platforms/{id}")
     public ResponseEntity<AdminResponse<Platform>> getPlatform(@PathVariable String id) {
         Optional<Platform> platform = platformRepository.findById(id);
         if (platform.isEmpty()) {
@@ -61,7 +61,7 @@ public class AdminController {
     }
 
     /** POST /api/admin/platform */
-    @PostMapping("/platform")
+    @PostMapping("/platforms")
     public ResponseEntity<AdminResponse<Platform>> createPlatform(@RequestBody Map<String, Object> body) {
         Platform platform = Platform.builder()
             .id((String) body.get("id"))
@@ -77,7 +77,7 @@ public class AdminController {
     }
 
     /** PUT /api/admin/platform/{id} */
-    @PutMapping("/platform/{id}")
+    @PutMapping("/platforms/{id}")
     public ResponseEntity<AdminResponse<Platform>> updatePlatform(
             @PathVariable String id,
             @RequestBody Map<String, Object> body) {
@@ -101,7 +101,7 @@ public class AdminController {
     }
 
     /** DELETE /api/admin/platform/{id} */
-    @DeleteMapping("/platform/{id}")
+    @DeleteMapping("/platforms/{id}")
     public ResponseEntity<AdminResponse<Void>> deletePlatform(@PathVariable String id) {
         Optional<Platform> platform = platformRepository.findById(id);
         if (platform.isEmpty()) {
@@ -117,8 +117,8 @@ public class AdminController {
 
     // ======================== Account Endpoints ========================
 
-    /** GET /api/admin/account?page=1&pageSize=20&merchant_id=xxx */
-    @GetMapping("/account")
+    /** GET /api/admin/accounts?page=1&pageSize=20&merchant_id=xxx */
+    @GetMapping("/accounts")
     public ResponseEntity<AdminPageResponse<Account>> listAccounts(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int pageSize,
@@ -132,8 +132,8 @@ public class AdminController {
         return ResponseEntity.ok(AdminPageResponse.success(accounts));
     }
 
-    /** GET /api/admin/account/{id} */
-    @GetMapping("/account/{id}")
+    /** GET /api/admin/accounts/{id} */
+    @GetMapping("/accounts/{id}")
     public ResponseEntity<AdminResponse<Account>> getAccount(@PathVariable String id) {
         Optional<Account> account = accountRepository.findById(id);
         if (account.isEmpty()) {
@@ -146,8 +146,8 @@ public class AdminController {
         return ResponseEntity.ok(AdminResponse.success(account.get()));
     }
 
-    /** POST /api/admin/account */
-    @PostMapping("/account")
+    /** POST /api/admin/accounts */
+    @PostMapping("/accounts")
     public ResponseEntity<AdminResponse<Account>> createAccount(@RequestBody Map<String, Object> body) {
         String password = (String) body.get("account_password");
         if (password == null || password.isEmpty()) {
@@ -181,8 +181,8 @@ public class AdminController {
         return ResponseEntity.status(HttpStatus.CREATED).body(AdminResponse.success(saved));
     }
 
-    /** PUT /api/admin/account/{id} */
-    @PutMapping("/account/{id}")
+    /** PUT /api/admin/accounts/{id} */
+    @PutMapping("/accounts/{id}")
     public ResponseEntity<AdminResponse<Account>> updateAccount(
             @PathVariable String id,
             @RequestBody Map<String, Object> body) {
@@ -205,8 +205,8 @@ public class AdminController {
         return ResponseEntity.ok(AdminResponse.success(updated));
     }
 
-    /** POST /api/admin/account/{id}/reset-password */
-    @PostMapping("/account/{id}/reset-password")
+    /** POST /api/admin/accounts/{id}/reset-password */
+    @PostMapping("/accounts/{id}/reset-password")
     public ResponseEntity<AdminResponse<Void>> resetPassword(
             @PathVariable String id,
             @RequestBody Map<String, String> body) {
@@ -233,8 +233,8 @@ public class AdminController {
         return ResponseEntity.ok(AdminResponse.success());
     }
 
-    /** DELETE /api/admin/account/{id} */
-    @DeleteMapping("/account/{id}")
+    /** DELETE /api/admin/accounts/{id} */
+    @DeleteMapping("/accounts/{id}")
     public ResponseEntity<AdminResponse<Void>> deleteAccount(@PathVariable String id) {
         Optional<Account> account = accountRepository.findById(id);
         if (account.isEmpty()) {
@@ -251,7 +251,7 @@ public class AdminController {
     // ======================== Merchant Endpoints ========================
 
     /** GET /api/admin/merchant?page=1&pageSize=20 */
-    @GetMapping("/merchant")
+    @GetMapping("/merchants")
     public ResponseEntity<AdminPageResponse<Merchant>> listMerchants(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int pageSize) {
@@ -260,7 +260,7 @@ public class AdminController {
     }
 
     /** GET /api/admin/merchant/{id} */
-    @GetMapping("/merchant/{id}")
+    @GetMapping("/merchants/{id}")
     public ResponseEntity<AdminResponse<Merchant>> getMerchant(@PathVariable String id) {
         Optional<Merchant> merchant = merchantRepository.findById(id);
         if (merchant.isEmpty()) {
@@ -274,7 +274,7 @@ public class AdminController {
     }
 
     /** POST /api/admin/merchant */
-    @PostMapping("/merchant")
+    @PostMapping("/merchants")
     public ResponseEntity<AdminResponse<Merchant>> createMerchant(@RequestBody Map<String, Object> body) {
         Merchant merchant = Merchant.builder()
             .id(NanoIdUtil.generate().substring(0, 6))
@@ -302,7 +302,7 @@ public class AdminController {
     }
 
     /** PUT /api/admin/merchant/{id} */
-    @PutMapping("/merchant/{id}")
+    @PutMapping("/merchants/{id}")
     public ResponseEntity<AdminResponse<Merchant>> updateMerchant(
             @PathVariable String id,
             @RequestBody Map<String, Object> body) {
@@ -337,7 +337,7 @@ public class AdminController {
     }
 
     /** DELETE /api/admin/merchant/{id} */
-    @DeleteMapping("/merchant/{id}")
+    @DeleteMapping("/merchants/{id}")
     public ResponseEntity<AdminResponse<Void>> deleteMerchant(@PathVariable String id) {
         Optional<Merchant> merchant = merchantRepository.findById(id);
         if (merchant.isEmpty()) {

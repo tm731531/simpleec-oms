@@ -26,9 +26,9 @@ spring:
       auto-offset-reset: earliest
 
 server:
-  port: 8083
+  port: 8080
   servlet:
-    context-path: /api
+    context-path: /
 
 jwt:
   secret: simpleec-jwt-secret-key-must-be-at-least-256-bits-long-for-hs256-algorithm-security
