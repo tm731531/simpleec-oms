@@ -5,6 +5,38 @@
 
 ---
 
+## 🚀 最近修復和文檔整理 (Feb 24, 2026)
+
+### ✅ API 路由完全修復
+- 所有11個Spring控制器的`@RequestMapping`已修正（添加`/api`前綴）
+- **13/13 API端點全部運行** ✅
+  - 6個用戶端點 (需JWT認證)
+  - 2個管理端點 (需JWT認證)
+  - 3個公開端點 (無需認證)
+  - 2個後端端點 (內部使用)
+
+### ✅ 系統重啟部署修復
+- `start-on-boot.sh` 現在會自動rebuild Docker images
+- 防止系統重啟後運行舊版本代碼
+
+### 📚 新文檔索引
+使用新的**文檔導航系統**，快速找到所需文檔：
+
+| 文檔 | 用途 |
+|------|------|
+| **[OPERATIONS_CURRENT_STATUS.md](OPERATIONS_CURRENT_STATUS.md)** ⭐ | 當前系統狀態、最新修復、故障排除 |
+| **[DOCUMENTATION_INDEX.md](DOCUMENTATION_INDEX.md)** | 30+個文檔的完整導航指南 |
+| **[QUICK_COMMANDS.md](QUICK_COMMANDS.md)** | 可複製貼上的常用命令 |
+
+### 協作建議
+與Claude合作時：
+1. 查看 **[OPERATIONS_CURRENT_STATUS.md](OPERATIONS_CURRENT_STATUS.md)** 了解當前系統狀態
+2. 用 **[QUICK_COMMANDS.md](QUICK_COMMANDS.md)** 中的命令快速診斷問題
+3. 查看 **[DOCUMENTATION_INDEX.md](DOCUMENTATION_INDEX.md)** 找相關設計文檔
+4. 重大修復後更新 OPERATIONS_CURRENT_STATUS.md 中的狀態
+
+---
+
 ## 🔥 最新架構更新 (2026-02-19)
 
 ### 統一訊息結構 (Header/Body)
@@ -56,6 +88,14 @@ Channel Job 內部決策:
 
 ## 快速定位
 
+### 🆕 新人必讀（Feb 24開始）
+| 你要做什麼 | 讀哪份文件 |
+|-----------|-----------|
+| **⭐ 系統當前狀態** | [OPERATIONS_CURRENT_STATUS.md](OPERATIONS_CURRENT_STATUS.md) — 最新修復、API狀態、故障排除 |
+| **⭐ 找文檔導航** | [DOCUMENTATION_INDEX.md](DOCUMENTATION_INDEX.md) — 30+文檔的完整指南 |
+| **⭐ 快速複製命令** | [QUICK_COMMANDS.md](QUICK_COMMANDS.md) — Docker、API測試、Kafka操作 |
+
+### 📖 架構和設計
 | 你要做什麼 | 讀哪份文件 |
 |-----------|-----------|
 | **⭐ 理解事件流架構** | `docs/CORE_CONTRACTS.md` — 核心契約定義 |
@@ -65,14 +105,20 @@ Channel Job 內部決策:
 | 看訊息範例 | `docs/EVENT_SAMPLES.md` — 所有 Topic 訊息範例 |
 | 理解系統全貌 | `DESIGN_v2.md` §0（現狀）→ §1-§15（完整設計） |
 | 看 DB Schema | `docs/SCHEMA.md`（19 張表 DDL） |
-| 看目前完成到哪 | `docs/STATUS.md`（唯一進度真相來源） |
 | 看詳細修改歷史 | `REWRITE_PLAN.md`（16 輪演進） |
 | 看事件流設計 | `docs/event-flows/FETCH_ORDERS.md`, `FETCH_PRODUCTS.md` |
 | 看各平台抓取策略 | `docs/event-flows/FETCH_STRATEGY.md` |
 | 看 Entity↔Schema 差異 | `docs/event-flows/DB_ENTITY_GAPS.md` |
 | 看統計設計 | `docs/STATISTICS_DESIGN.md`（多角色統計 + 退貨流程） |
-| Docker 操作 | `docs/DOCKER_GUIDE.md` |
-| Kafka 維運 | `docs/OPERATIONS_RUNBOOK.md` |
+
+### 🛠️ 操作和維運
+| 你要做什麼 | 讀哪份文件 |
+|-----------|-----------|
+| 系統啟動和重啟 | [QUICK_COMMANDS.md](QUICK_COMMANDS.md) — 複製貼上命令 |
+| API 測試 | [QUICK_COMMANDS.md](QUICK_COMMANDS.md) 的 "API 測試" 部分 |
+| Kafka 操作 | [QUICK_COMMANDS.md](QUICK_COMMANDS.md) 的 "Kafka 操作" 部分 |
+| systemd 服務修復 | `docker/SYSTEMD_SERVICE_FIX.md` |
+| Docker 操作 | [QUICK_COMMANDS.md](QUICK_COMMANDS.md) 或 `docs/DOCKER_GUIDE.md` |
 
 ---
 
@@ -317,30 +363,122 @@ public class ShopeeOrderHandler {
 
 ---
 
+## 與 Claude 協作指南
+
+### 工作流程
+1. **描述問題或需求**
+   - 參考 [OPERATIONS_CURRENT_STATUS.md](OPERATIONS_CURRENT_STATUS.md) 了解當前狀態
+   - 用 [QUICK_COMMANDS.md](QUICK_COMMANDS.md) 中的命令快速診斷
+
+2. **規劃修復**
+   - Claude 會查看相關代碼和文檔
+   - 提出實施計畫（如需要）
+
+3. **實施和測試**
+   - 修改代碼
+   - 本地測試（使用 QUICK_COMMANDS.md）
+   - 查看日誌驗證
+
+4. **更新文檔**
+   - 修復完成後，更新 OPERATIONS_CURRENT_STATUS.md
+   - 提交時使用清晰的 commit 訊息
+
+### 提交規範
+所有 commit 訊息應包含：
+- 簡短描述 (修了什麼)
+- 修復的原因或背景
+- 驗證方式 (如何測試)
+- 相關文檔更新
+
+### 系統級修復檢查清單
+修復後務必驗證：
+- [ ] 代碼編譯無誤
+- [ ] Docker 容器啟動成功
+- [ ] 相關 API 端點可用
+- [ ] 日誌中無錯誤或警告
+- [ ] 文檔已更新
+- [ ] commit 訊息清晰
+
+---
+
 ## Git 資訊
 
 - GitHub: `tm731531/simpleec-oms` (SSH)
-- Branch: `main`, `docs-only`（純文檔分支，詳見架構/設計文檔）
-- 最近重要 commits (docs-only 分支):
-  - `1727a52` — fix: FETCH_ORDERS routing table - {platform}.fast → {platform}.slow
-  - `d725025` — fix: Clarify that Queue contains NO RANGE - only timestamp
-  - `3c773c2` — feat: Complete isRollback coverage across all order/return TaskTypes
-  - `ba8cce6` — feat: Add isRollback flag to header for handling backfill orders
-  - `308b1be` — fix: Align EVENT_SAMPLES.md with updated CORE_CONTRACTS.md
-  - `a2a2063` — clarify: Orders Channel Job fetches in multiple batches by order status lifecycle
-  - `1a47db7` — refactor: Restructure message body - move channelOrderId to orderData, add platformId, channelItemId
-  - `112cda8` — refactor: Align orderData structure with actual DB schema
+- Branch:
+  - `main` — 主分支
+  - `fix/admin-app-api-routing-and-nginx-proxy` — 當前工作分支 (API 路由修復)
+  - `docs-only` — 純文檔分支（詳見架構/設計文檔）
+
+### 最近重要 commits (當前分支 - Feb 24)
+- `37488e4` — docs: Organize and consolidate documentation (OPERATIONS_CURRENT_STATUS, DOCUMENTATION_INDEX, QUICK_COMMANDS)
+- `34d5805` — fix: API version deployment issue - rebuild images on system restart
+- `7f594a7` — fix: All user and backend API endpoint routing - add /api prefix
+- `0ed6853` — fix: API endpoint routing and authentication flow
+
+### 文檔分支 (docs-only) 的最近 commits
+- `1727a52` — fix: FETCH_ORDERS routing table - {platform}.fast → {platform}.slow
+- `d725025` — fix: Clarify that Queue contains NO RANGE - only timestamp
+- `3c773c2` — feat: Complete isRollback coverage across all order/return TaskTypes
+- `ba8cce6` — feat: Add isRollback flag to header for handling backfill orders
+- `308b1be` — fix: Align EVENT_SAMPLES.md with updated CORE_CONTRACTS.md
+- `a2a2063` — clarify: Orders Channel Job fetches in multiple batches by order status lifecycle
+- `1a47db7` — refactor: Restructure message body - move channelOrderId to orderData, add platformId, channelItemId
+- `112cda8` — refactor: Align orderData structure with actual DB schema
 
 ---
 
 ## 文檔分支
 
-純文檔分支（無程式碼）：
-```bash
-git checkout docs-only
-```
+### 文檔結構說明
+- **main 分支** — 完整代碼 + 最新文檔
+  - 包含 OPERATIONS_CURRENT_STATUS.md（當前狀態）
+  - 包含 QUICK_COMMANDS.md（操作命令）
+  - 新人開發者應該從這裡開始
 
-適合：
-- 分享架構設計
-- 討論系統流程
-- 不暴露實作細節
+- **docs-only 分支** — 純文檔分支（無程式碼）
+  ```bash
+  git checkout docs-only
+  ```
+  適合：
+  - 分享架構設計（不涉及程式碼細節）
+  - 討論系統流程
+  - 外部評審或文檔維護
+
+### 文檔維護責任
+| 文檔 | 維護頻率 | 責任 |
+|------|---------|------|
+| OPERATIONS_CURRENT_STATUS.md | 每週或每次修復後 | 記錄系統狀態、最新修復 |
+| DOCUMENTATION_INDEX.md | 每季或新增文檔時 | 更新文檔導航和分類 |
+| QUICK_COMMANDS.md | 每次添加新功能時 | 更新常用命令 |
+| DESIGN_v2.md | 架構變更時 | 更新設計文檔 |
+
+---
+
+## 🎯 下一步工作
+
+### 立即事項（優先）
+- [ ] 1. **測試系統重啟** — 驗證 rebuild 機制是否正常工作
+  ```bash
+  sudo reboot && sleep 120 && curl http://localhost:8082/api/health
+  ```
+
+- [ ] 2. **診斷 Kafka 剩餘問題** — 用戶提到還有一點點 Kafka 問題
+  ```bash
+  docker logs simpleec-kafka 2>&1 | tail -50
+  ```
+
+- [ ] 3. **更新 systemd 服務**（可選但推薦）
+  - 查看 `docker/SYSTEMD_SERVICE_FIX.md`
+  - 手動更新 `/etc/systemd/system/simpleec-oms.service`
+
+### 中期工作（本週）
+- [ ] 4. **驗證用戶事件流**
+  - 用户登录 → 查看商品 → 瀏覽通路 → 完整流程測試
+  - 檢查 Kafka 事件是否正確流轉
+
+- [ ] 5. **定期更新文檔**
+  - 每週檢查 OPERATIONS_CURRENT_STATUS.md
+  - 記錄系統狀態、新增的功能
+
+### 長期計畫（後續）
+詳見 `docs/STATUS.md` 和 `REWRITE_PLAN.md`
