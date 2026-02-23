@@ -150,7 +150,7 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       JOB_CHANNEL_TOPICS: momo.fast
       JOB_CHANNEL_GROUP_ID: channel-job-momo
-      JOB_CHANNEL_CONCURRENCY: '8'
+      JOB_CHANNEL_CONCURRENCY: '3'
     depends_on:
       postgres:
         condition: service_healthy
@@ -177,7 +177,7 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       JOB_CHANNEL_TOPICS: momo.slow
       JOB_CHANNEL_GROUP_ID: channel-job-momo
-      JOB_CHANNEL_CONCURRENCY: '4'
+      JOB_CHANNEL_CONCURRENCY: '3'
     depends_on:
       postgres:
         condition: service_healthy
@@ -204,7 +204,7 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       JOB_CHANNEL_TOPICS: shopee.fast
       JOB_CHANNEL_GROUP_ID: channel-job-shopee
-      JOB_CHANNEL_CONCURRENCY: '8'
+      JOB_CHANNEL_CONCURRENCY: '3'
     depends_on:
       postgres:
         condition: service_healthy
@@ -231,7 +231,7 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       JOB_CHANNEL_TOPICS: shopee.slow
       JOB_CHANNEL_GROUP_ID: channel-job-shopee
-      JOB_CHANNEL_CONCURRENCY: '4'
+      JOB_CHANNEL_CONCURRENCY: '3'
     depends_on:
       postgres:
         condition: service_healthy
@@ -258,7 +258,7 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       JOB_CHANNEL_TOPICS: yahoo.fast
       JOB_CHANNEL_GROUP_ID: channel-job-yahoo
-      JOB_CHANNEL_CONCURRENCY: '8'
+      JOB_CHANNEL_CONCURRENCY: '3'
     depends_on:
       postgres:
         condition: service_healthy
@@ -285,7 +285,7 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       JOB_CHANNEL_TOPICS: yahoo.slow
       JOB_CHANNEL_GROUP_ID: channel-job-yahoo
-      JOB_CHANNEL_CONCURRENCY: '4'
+      JOB_CHANNEL_CONCURRENCY: '3'
     depends_on:
       postgres:
         condition: service_healthy
@@ -312,7 +312,7 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       JOB_CHANNEL_TOPICS: pchome.fast
       JOB_CHANNEL_GROUP_ID: channel-job-pchome
-      JOB_CHANNEL_CONCURRENCY: '8'
+      JOB_CHANNEL_CONCURRENCY: '3'
     depends_on:
       postgres:
         condition: service_healthy
@@ -339,7 +339,7 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       JOB_CHANNEL_TOPICS: pchome.slow
       JOB_CHANNEL_GROUP_ID: channel-job-pchome
-      JOB_CHANNEL_CONCURRENCY: '4'
+      JOB_CHANNEL_CONCURRENCY: '3'
     depends_on:
       postgres:
         condition: service_healthy
@@ -366,7 +366,7 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       JOB_CHANNEL_TOPICS: cyberbiz.fast
       JOB_CHANNEL_GROUP_ID: channel-job-cyberbiz
-      JOB_CHANNEL_CONCURRENCY: '6'
+      JOB_CHANNEL_CONCURRENCY: '3'
     depends_on:
       postgres:
         condition: service_healthy
@@ -420,7 +420,7 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       JOB_CHANNEL_TOPICS: shopline.fast
       JOB_CHANNEL_GROUP_ID: channel-job-shopline
-      JOB_CHANNEL_CONCURRENCY: '6'
+      JOB_CHANNEL_CONCURRENCY: '3'
     depends_on:
       postgres:
         condition: service_healthy
@@ -474,7 +474,7 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       JOB_CHANNEL_TOPICS: shopify.fast
       JOB_CHANNEL_GROUP_ID: channel-job-shopify
-      JOB_CHANNEL_CONCURRENCY: '8'
+      JOB_CHANNEL_CONCURRENCY: '3'
     depends_on:
       postgres:
         condition: service_healthy
@@ -501,7 +501,7 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       JOB_CHANNEL_TOPICS: shopify.slow
       JOB_CHANNEL_GROUP_ID: channel-job-shopify
-      JOB_CHANNEL_CONCURRENCY: '4'
+      JOB_CHANNEL_CONCURRENCY: '3'
     depends_on:
       postgres:
         condition: service_healthy
