@@ -3,7 +3,7 @@
 > Multi-Channel Order Management System
 > 支持 7 個通路：Cyberbiz, PChome, MOMO, Shopline, Yahoo 購物中心, Shopee, Shopify
 
-**Status**: MVP Phase 1 - 基礎設施完成，準備測試
+**Status**: ✅ **OPERATIONAL** - Backend complete, Frontend fully operational, Infrastructure fixed (Feb 23, 2026)
 
 ---
 
@@ -20,46 +20,77 @@ JDK 17+ (推薦用 sdkman)
 ```bash
 git clone https://github.com/tm731531/simpleec-oms.git
 cd simpleec-oms
-git checkout ops/production
 
-# 啟動全部容器 (Infrastructure + Services)
-docker-compose up -d
+# 方式一：使用啟動腳本（推薦）
+bash start-all.sh
+
+# 方式二：使用 Docker Compose
+docker compose up -d
 
 # 檢查容器狀態
-docker-compose ps
+docker compose ps
 
 # 查看日誌
-docker-compose logs -f
+docker compose logs -f simpleec-api
 ```
 
 ### 3. 驗證系統
 ```bash
-# API 健康檢查
-curl http://localhost:8082/health
+# User App 登入（經由反向代理）
+# 瀏覽器: http://localhost:8089
+# Email: admin@a00000.com
+# Password: pass123456
+
+# API 直接測試
+curl -X POST http://localhost:8083/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@a00000.com","password":"pass123456"}'
 
 # Kafka UI (查看 topics)
 # 瀏覽器: http://localhost:8088
 
-# Grafana (監控儀表盤)
-# 瀏覽器: http://localhost:3000 (admin/admin)
+# 系統架構圖
+# 詳見: https://localhost:8089/admin/ (Admin App)
 ```
 
 ---
 
-## 📊 系統架構 (3 層)
+## 📊 系統架構
 
+### 前端架構（Feb 22+）
 ```
-┌─────────────────────────────────────────┐
-│ Scheduler Job + Heartbeat               │  <- 時間源
-├─────────────────────────────────────────┤
-│ Channel Jobs (8 instance)               │  <- 適配層
-│ MOMO, Shopee, Yahoo, PChome (fast/slow) │
-├─────────────────────────────────────────┤
-│ Process Handlers                        │  <- 業務邏輯
-│ ORDER_UPSERT, RETURN_UPSERT             │
-└─────────────────────────────────────────┘
-        ↓          ↓
-    PostgreSQL  Redis
+┌──────────────────────────────────────────┐
+│    Nginx 反向代理 (8089)                  │
+│  Route: / → User App (5173)               │
+│  Route: /admin/ → Admin App (8084)        │
+│  Route: /api/* → Backend API (8083)       │
+└────────────┬─────────────┬────────────────┘
+             │             │
+    ┌────────▼─────┐  ┌────▼──────────┐
+    │ User App     │  │ Admin App     │
+    │ (5173)       │  │ (8084)        │
+    │ Vue 3+Vite   │  │ Vue 3+Vite    │
+    └──────────────┘  └───────────────┘
+```
+
+### 後端架構（消費者驅動）
+```
+┌──────────────────────────────────────────┐
+│ Kafka 消費者組 (8 groups)                 │
+├──────────────────────────────────────────┤
+│ ChannelJob: 通路資料同步 (5 platform)    │
+│ OrderJob: 訂單/退貨處理                   │
+│ RetryJob: 失敗消息處理 + DLT              │
+│ BackendJob, FrontendJob, SchedulerJob    │
+├──────────────────────────────────────────┤
+│ Kafka Topics (15 個)                      │
+│ - 10 platform (cyberbiz/momo/.../shopee) │
+│ - 1 order workflow (order.process)       │
+│ - 4 system (scheduler, task.*, failed)   │
+└────────┬──────────────┬──────────────────┘
+         ↓              ↓
+    PostgreSQL      Redis
+    (16 tables)   (cache/dedup)
 ```
 
 ---
@@ -138,63 +169,122 @@ docker-compose logs simpleec-order-job
 ## 📋 環境配置
 
 ```yaml
-# Database
-DB_HOST: postgres
-DB_PORT: 5432
-DB_NAME: simpleec
-DB_USER: simpleec
-DB_PASSWORD: simpleec123
+# Database (PostgreSQL 16)
+SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/simpleec_oms
+SPRING_DATASOURCE_USERNAME: postgres
+SPRING_DATASOURCE_PASSWORD: postgres123
 
-# Redis
+# Redis (Cache & Dedup)
 REDIS_HOST: redis
 REDIS_PORT: 6379
 
-# Kafka
+# Kafka (KRaft mode, no ZooKeeper)
 KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+KAFKA_LOG_RETENTION_HOURS: 1
+KAFKA_LOG_SEGMENT_BYTES: 104857600  # 100MB
+
+# API 認證
+JWT_SECRET: (auto-generated)
+
+# 前端 API 端點偵測
+# 本地: http://localhost:8083/api
+# 遠端: /api (經由反向代理)
 ```
 
 ---
 
 ## 🌐 服務端點
 
+### 前端（通過反向代理）
 | 服務 | URL | 說明 |
 |------|-----|------|
-| API | http://localhost:8082 | REST API |
-| Gateway | http://localhost:8081 | Webhook 入口 |
-| Grafana | http://localhost:3000 | 監控儀表板 |
-| Kafka UI | http://localhost:8088 | Kafka 管理 |
-| Prometheus | http://localhost:9090 | Metrics |
-| PostgreSQL | localhost:5433 | DB |
-| Redis | localhost:6379 | Cache |
+| Nginx 反向代理 | http://localhost:8089 | 統一入口 |
+| User App | http://localhost:8089/ | 商家端（訂單/通路管理） |
+| Admin App | http://localhost:8089/admin/ | 平台端（商家/平台管理） |
+
+### 後端（直接訪問）
+| 服務 | URL | 說明 |
+|------|-----|------|
+| API | http://localhost:8083/api | REST API |
+| Kafka UI | http://localhost:8088 | Kafka 消費組/Topics 監控 |
+| PostgreSQL | localhost:5433 | 數據庫 |
+| Redis | localhost:6379 | Cache 與去重 |
+
+### 前端開發訪問（不使用代理）
+| 服務 | URL | 說明 |
+|------|-----|------|
+| User App | http://localhost:5173 | 直接開發伺服器 |
+| Admin App | http://localhost:8084 | 直接開發伺服器 |
+
+### 外部訪問（Cloudflare）
+| 服務 | URL | 說明 |
+|------|-----|------|
+| User App | https://oms.tomting.com | 商家端公網 |
+| Admin App | https://oms-admin.tomting.com | 平台端公網 |
 
 ---
 
 ## 🐛 故障排除
 
-### 容器無法啟動
+### User App 登入失敗
+**症狀**: 登入頁面無法登入（Feb 23 已修復）
+
+**修復**:
+- ✅ API 端點已更正：8082 → 8083
+- ✅ Response interceptor 已修復：支援多種格式
+- ✅ Docker 網路已修復：User App 連接到 simpleec-oms_default
+
+**驗證**:
 ```bash
-docker-compose logs simpleec-api
-docker-compose ps  # 檢查依賴
-docker-compose restart postgres kafka redis
+# 直接測試 API
+curl -X POST http://localhost:8083/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@a00000.com","password":"pass123456"}'
+
+# 檢查 User App 網路
+docker inspect simpleec-user-app | grep NetworkID
 ```
 
-### Kafka Lag 高
+### Kafka 消費者組未建立
+**症狀**: `kafka-consumer-groups.sh --list` 無輸出
+
+**狀態**: ✅ 已修復（Feb 23）- 8 個消費者組已運作
+
+**根本原因** (已修復):
+1. ServiceAutoConfiguration 自動載入 OrderService（非 JPA jobs 失敗）
+2. KafkaConfig bean 衝突（core + job 的多重定義）
+3. 過寬的組件掃描範圍
+
+**驗證**:
 ```bash
-docker-compose logs kafka
-docker-compose exec kafka /opt/kafka/bin/kafka-consumer-groups.sh \
-  --bootstrap-server localhost:9092 \
-  --group channel-job-momo-fast \
-  --describe
+# 檢查消費者組日誌
+docker logs simpleec-channel-job | grep "groupId="
+
+# 檢查 Kafka topics
+docker exec simpleec-kafka /opt/kafka/bin/kafka-topics.sh \
+  --bootstrap-server localhost:9092 --list
+```
+
+### 容器無法啟動
+```bash
+# 查看詳細日誌
+docker compose logs simpleec-api --tail 100
+
+# 檢查依賴服務
+docker compose ps
+
+# 重新啟動基礎設施
+docker compose restart postgres kafka redis
 ```
 
 ### 數據未進入 DB
 ```bash
-# 檢查日誌
-docker-compose logs simpleec-order-job
+# 檢查 OrderJob 日誌
+docker compose logs simpleec-order-job -f
 
-# 檢查去重
-docker-compose exec redis redis-cli
-> KEYS "dedup:order:*"
+# 檢查 Redis 去重
+docker compose exec redis redis-cli
+> KEYS "dedup:*" | head -20
 ```
 
 ---
@@ -220,9 +310,31 @@ docker-compose exec redis redis-cli
 
 ---
 
-**Last Updated**: 2026-02-20
+## 📖 詳細文檔
+
+### 快速參考
+- **[DEPLOYMENT.md](docs/DEPLOYMENT.md)** ⭐ - 部署指南 (Feb 23 已更新)
+- **[ARCHITECTURE_OVERVIEW.md](docs/ARCHITECTURE_OVERVIEW.md)** - 系統架構詳解
+- **[CORE_CONTRACTS.md](docs/CORE_CONTRACTS.md)** - Kafka Topics 定義
+- **[PLATFORM_MAPPING.md](docs/PLATFORM_MAPPING.md)** - 7 個通路映射
+
+### 深度學習
+- **[DATA_FLOW_MAPPING.md](docs/DATA_FLOW_MAPPING.md)** - 消息流與 DB 映射
+- **[CHANNEL_IMPLEMENTATION_GUIDE.md](docs/CHANNEL_IMPLEMENTATION_GUIDE.md)** - 通路實作
+- **[EVENT_SAMPLES.md](docs/EVENT_SAMPLES.md)** - 事件範例
+- **[docs/](docs/)** - 完整技術文檔（30+ 個檔案）
+
+### 最新修復（Feb 23）
+- **[User App 登入修復](docs/DEPLOYMENT.md#user-app-login-fails)** - API 端點、Response 格式、Docker 網路
+- **[Kafka 消費者組修復](docs/DEPLOYMENT.md#kafka-consumer-groups-not-created)** - Bean 配置、掃描範圍調整
+- **[系統保留策略](docs/RETENTION_CLEANUP_RUNBOOK.md)** - Kafka 1h, Prometheus 7d, Loki 7d
+
+---
+
+**Last Updated**: 2026-02-23
 **Version**: v0.1-MVP
-**Branch**: ops/production
+**Status**: ✅ Fully Operational
+**Branch**: main
 
 ## License
 
