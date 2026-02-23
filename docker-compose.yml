@@ -428,9 +428,12 @@ services:
       - "8089:80"
       - "8090:443"
     depends_on:
-      - simpleec-user-app
-      - simpleec-admin-app
-      - simpleec-api
+      simpleec-user-app:
+        condition: service_started
+      simpleec-admin-app:
+        condition: service_started
+      simpleec-api:
+        condition: service_healthy
     restart: unless-stopped
 
   simpleec-admin-app:
