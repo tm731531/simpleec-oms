@@ -56,6 +56,31 @@ infrastructure:
     autoCreateTopics: true
     retentionHours: 1
 
+  prometheus:
+    port: 9090
+    image: prom/prometheus:v3.1.0
+    container_name: simpleec-prometheus
+
+  grafana:
+    port: 3000
+    image: grafana/grafana:11.4.0
+    container_name: simpleec-grafana
+
+  loki:
+    port: 3100
+    image: grafana/loki:3.3.2
+    container_name: simpleec-loki
+
+  otel-collector:
+    port: 4317
+    image: otel/opentelemetry-collector-contrib:0.114.0
+    container_name: simpleec-otel-collector
+
+  tempo:
+    port: 3200
+    image: grafana/tempo:2.6.1
+    container_name: simpleec-tempo
+
 services:
   api:
     port: 8082

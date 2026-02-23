@@ -96,6 +96,33 @@ def generate_compose(config: Dict[str, Any]) -> Dict[str, Any]:
         }
     }
 
+    # Additional Infrastructure (Monitoring, Logging, etc.)
+    # Skip postgres, redis, kafka which are already handled above
+    infrastructure_config = config.get('infrastructure', {})
+    for infra_key, infra_cfg in infrastructure_config.items():
+        if infra_key in ['postgres', 'redis', 'kafka']:
+            continue  # Already handled
+
+        # Create generic infrastructure service
+        service_name = infra_key
+        if not service_name.startswith('simpleec-'):
+            service_name = f'simpleec-{infra_key}'
+
+        services[service_name] = {
+            'image': infra_cfg.get('image'),
+            'container_name': infra_cfg.get('container_name', service_name),
+            'ports': [f"{infra_cfg['port']}:{infra_cfg.get('internal_port', infra_cfg['port'])}"]
+                if 'port' in infra_cfg else [],
+        }
+
+        if 'depends_on' in infra_cfg:
+            services[service_name]['depends_on'] = infra_cfg['depends_on']
+
+        if infra_cfg.get('restart'):
+            services[service_name]['restart'] = infra_cfg['restart']
+        else:
+            services[service_name]['restart'] = 'unless-stopped'
+
     # Channel Jobs (dynamically from platforms)
     for platform in config['platforms']:
         code = platform['code']
@@ -110,6 +137,7 @@ def generate_compose(config: Dict[str, Any]) -> Dict[str, Any]:
             },
             'container_name': fast_service,
             'environment': {
+                'SPRING_PROFILES_ACTIVE': 'docker',
                 'DB_HOST': 'postgres',
                 'DB_PORT': '5432',
                 'DB_NAME': 'simpleec',
@@ -140,6 +168,7 @@ def generate_compose(config: Dict[str, Any]) -> Dict[str, Any]:
             },
             'container_name': slow_service,
             'environment': {
+                'SPRING_PROFILES_ACTIVE': 'docker',
                 'DB_HOST': 'postgres',
                 'DB_PORT': '5432',
                 'DB_NAME': 'simpleec',
@@ -178,6 +207,7 @@ def generate_compose(config: Dict[str, Any]) -> Dict[str, Any]:
             },
             'container_name': job_name,
             'environment': {
+                'SPRING_PROFILES_ACTIVE': 'docker',
                 'DB_HOST': 'postgres',
                 'DB_PORT': '5432',
                 'DB_NAME': 'simpleec',
@@ -205,6 +235,7 @@ def generate_compose(config: Dict[str, Any]) -> Dict[str, Any]:
         'container_name': 'simpleec-api',
         'ports': ['8082:8080'],
         'environment': {
+            'SPRING_PROFILES_ACTIVE': 'docker',
             'SERVER_PORT': '8080',
             'SERVER_SERVLET_CONTEXT_PATH': '/api',
             'DB_HOST': 'postgres',
