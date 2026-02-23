@@ -76,6 +76,20 @@ services:
       timeout: 10s
       retries: 15
       start_period: 30s
+  kafka-init:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.kafka-init
+    container_name: simpleec-kafka-init
+    environment:
+      KAFKA_BROKER: kafka:9092
+      KAFKA_PARTITIONS: '3'
+      KAFKA_REPLICATION_FACTOR: '1'
+      KAFKA_RETENTION_MS: '3600000'
+    depends_on:
+      kafka:
+        condition: service_healthy
+    restart: on-failure
   simpleec-kafka-ui:
     image: provectuslabs/kafka-ui:v0.7.2
     container_name: simpleec-kafka-ui
@@ -85,8 +99,8 @@ services:
       KAFKA_CLUSTERS_0_NAME: simpleec
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
     depends_on:
-      kafka:
-        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
     restart: unless-stopped
   simpleec-prometheus:
     image: prom/prometheus:v3.1.0
@@ -142,8 +156,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      kafka:
-        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
     restart: unless-stopped
   simpleec-channel-momo-slow:
     image: simpleec-channel-job
@@ -169,8 +183,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      kafka:
-        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
     restart: unless-stopped
   simpleec-channel-shopee-fast:
     image: simpleec-channel-job
@@ -196,8 +210,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      kafka:
-        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
     restart: unless-stopped
   simpleec-channel-shopee-slow:
     image: simpleec-channel-job
@@ -223,8 +237,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      kafka:
-        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
     restart: unless-stopped
   simpleec-channel-yahoo-fast:
     image: simpleec-channel-job
@@ -250,8 +264,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      kafka:
-        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
     restart: unless-stopped
   simpleec-channel-yahoo-slow:
     image: simpleec-channel-job
@@ -277,8 +291,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      kafka:
-        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
     restart: unless-stopped
   simpleec-channel-pchome-fast:
     image: simpleec-channel-job
@@ -304,8 +318,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      kafka:
-        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
     restart: unless-stopped
   simpleec-channel-pchome-slow:
     image: simpleec-channel-job
@@ -331,8 +345,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      kafka:
-        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
     restart: unless-stopped
   simpleec-channel-cyberbiz-fast:
     image: simpleec-channel-job
@@ -358,8 +372,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      kafka:
-        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
     restart: unless-stopped
   simpleec-channel-cyberbiz-slow:
     image: simpleec-channel-job
@@ -385,8 +399,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      kafka:
-        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
     restart: unless-stopped
   simpleec-channel-shopline-fast:
     image: simpleec-channel-job
@@ -412,8 +426,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      kafka:
-        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
     restart: unless-stopped
   simpleec-channel-shopline-slow:
     image: simpleec-channel-job
@@ -439,8 +453,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      kafka:
-        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
     restart: unless-stopped
   simpleec-channel-shopify-fast:
     image: simpleec-channel-job
@@ -466,8 +480,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      kafka:
-        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
     restart: unless-stopped
   simpleec-channel-shopify-slow:
     image: simpleec-channel-job
@@ -493,8 +507,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      kafka:
-        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
     restart: unless-stopped
   simpleec-order-job:
     image: simpleec-order-job
@@ -517,8 +531,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      kafka:
-        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
     restart: unless-stopped
   simpleec-scheduler-job:
     image: simpleec-scheduler-job
@@ -543,8 +557,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      kafka:
-        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
     restart: unless-stopped
   simpleec-backend-job:
     image: simpleec-backend-job
@@ -567,8 +581,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      kafka:
-        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
     restart: unless-stopped
   simpleec-frontend-job:
     image: simpleec-frontend-job
@@ -591,8 +605,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      kafka:
-        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
     restart: unless-stopped
   simpleec-retry-job:
     image: simpleec-retry-job
@@ -615,8 +629,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      kafka:
-        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
     restart: unless-stopped
   simpleec-api:
     image: simpleec-api
