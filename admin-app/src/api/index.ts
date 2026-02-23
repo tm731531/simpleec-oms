@@ -1,15 +1,19 @@
 import axios from 'axios'
 
 /**
- * Smart API URL detection for different deployment environments:
- * - Always use /api relative path to go through reverse proxy (Nginx)
- * - Nginx handles routing to backend API
+ * API URL configuration:
+ * Uses relative path /api which works in all environments:
+ * - Browser requests /api/...
+ * - Nginx reverse proxy on 8089 routes to backend API
+ * - Works for localhost, Docker domains, and remote domains
+ * This is the correct approach because:
+ * - Browsers cannot access Docker container names (simpleec-api)
+ * - Relative paths are resolved by the browser to current host:port
+ * - Nginx handles the internal routing to backend
  */
 function getAPIBaseURL(): string {
-  if (typeof window === 'undefined') return '/api' // SSR fallback
-
-  // Always use relative path for reverse proxy
-  // Works for both localhost (via Nginx 8089) and remote domains
+  // Always use relative path - browser will resolve to current host
+  // This works in all environments and lets Nginx handle routing
   return '/api'
 }
 

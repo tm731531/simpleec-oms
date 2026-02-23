@@ -7,6 +7,14 @@
 </head>
 <body>
     <div id="app"></div>
+    <!-- API configuration - injected by environment -->
+    <script>
+        // Dynamically set API base URL based on environment
+        // Docker: http://simpleec-api:8080/api
+        // Development: http://localhost:8082/api
+        // Production: /api (via Nginx reverse proxy)
+        window.__API_BASE_URL = window.__API_BASE_URL || '/api';
+    </script>
     <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

@@ -1,0 +1,11 @@
+# Use the local dist directly - assumes npm run build was already done locally
+FROM node:20-alpine
+WORKDIR /app
+RUN npm install -g http-server
+COPY admin-app/dist ./dist
+
+# No API URL injection needed - browser uses relative path /api
+# which goes through Nginx reverse proxy on port 8089
+
+EXPOSE 8084
+CMD ["http-server", "dist", "-p", "8084", "--gzip", "-c-1"]
