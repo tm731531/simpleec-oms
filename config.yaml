@@ -1,0 +1,95 @@
+system:
+  name: "SimpleEC OMS"
+  version: 1
+
+platforms:
+  - code: momo
+    name: "MOMO"
+    fastConcurrency: 8
+    slowConcurrency: 4
+
+  - code: shopee
+    name: "Shopee"
+    fastConcurrency: 8
+    slowConcurrency: 4
+
+  - code: yahoo
+    name: "Yahoo 購物中心"
+    fastConcurrency: 8
+    slowConcurrency: 4
+
+  - code: pchome
+    name: "PChome"
+    fastConcurrency: 8
+    slowConcurrency: 4
+
+  - code: cyberbiz
+    name: "Cyberbiz"
+    fastConcurrency: 6
+    slowConcurrency: 3
+
+  - code: shopline
+    name: "Shopline"
+    fastConcurrency: 6
+    slowConcurrency: 3
+
+  - code: shopify
+    name: "Shopify"
+    fastConcurrency: 8
+    slowConcurrency: 4
+
+infrastructure:
+  postgres:
+    port: 5433
+    image: postgres:16-alpine
+    container_name: simpleec-postgres
+
+  redis:
+    port: 6379
+    image: redis:7-alpine
+    container_name: simpleec-redis
+
+  kafka:
+    port: 9092
+    image: apache/kafka:3.7.1
+    container_name: simpleec-kafka
+    autoCreateTopics: true
+    retentionHours: 1
+
+services:
+  api:
+    port: 8082
+    image: simpleec-api
+    contextPath: /api
+
+  gateway:
+    port: 8081
+    image: simpleec-gateway
+
+  nginx:
+    port: 8089
+    image: simpleec-nginx
+
+  userApp:
+    port: 5173
+    image: simpleec-user-app
+
+  adminApp:
+    port: 8084
+    image: simpleec-admin-app
+
+jobs:
+  orderJob:
+    image: simpleec-order-job
+
+  schedulerJob:
+    image: simpleec-scheduler-job
+
+  backendJob:
+    image: simpleec-backend-job
+
+  frontendJob:
+    image: simpleec-frontend-job
+
+  retryJob:
+    image: simpleec-retry-job

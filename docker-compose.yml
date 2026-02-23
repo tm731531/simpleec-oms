@@ -1,432 +1,621 @@
-x-common-env: &common-env
-  DB_HOST: postgres
-  DB_PORT: 5432
-  DB_NAME: simpleec
-  DB_USER: simpleec
-  DB_PASSWORD: simpleec123
-  REDIS_HOST: redis
-  REDIS_PORT: 6379
-  KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-  # OpenTelemetry
-  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
-  OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
-  OTEL_LOGS_EXPORTER: otlp
-  OTEL_METRICS_EXPORTER: otlp
-  OTEL_TRACES_EXPORTER: otlp
-  SPRING_PROFILES_ACTIVE: docker
-
-x-common-depends: &common-depends
-  postgres:
-    condition: service_healthy
-  redis:
-    condition: service_healthy
-  kafka:
-    condition: service_healthy
-  otel-collector:
-    condition: service_started
-
+version: '3.8'
 services:
-  # ============ Infrastructure ============
   postgres:
     image: postgres:16-alpine
     container_name: simpleec-postgres
     ports:
-      - "5433:5432"
+    - 5433:5432
     environment:
       POSTGRES_DB: simpleec
       POSTGRES_USER: simpleec
       POSTGRES_PASSWORD: simpleec123
     volumes:
-      - ${DATA_DIR:-./data}/postgres:/var/lib/postgresql/data
-      - ./docker/init-db:/docker-entrypoint-initdb.d
+    - ${DATA_DIR:-./data}/postgres:/var/lib/postgresql/data
+    - ./docker/init-db:/docker-entrypoint-initdb.d
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U simpleec"]
+      test:
+      - CMD-SHELL
+      - pg_isready -U simpleec
       interval: 5s
       timeout: 5s
       retries: 10
-
   redis:
     image: redis:7-alpine
     container_name: simpleec-redis
     ports:
-      - "6379:6379"
-    command: ["redis-server", "--appendonly", "yes", "--dir", "/data"]
+    - 6379:6379
+    command:
+    - redis-server
+    - --appendonly
+    - 'yes'
+    - --dir
+    - /data
     volumes:
-      - ${DATA_DIR:-./data}/redis:/data
+    - ${DATA_DIR:-./data}/redis:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test:
+      - CMD
+      - redis-cli
+      - ping
       interval: 5s
       timeout: 3s
       retries: 10
-
   kafka:
     image: apache/kafka:3.7.1
     container_name: simpleec-kafka
     ports:
-      - "9092:9092"
+    - 9092:9092
     environment:
-      KAFKA_NODE_ID: 1
+      KAFKA_NODE_ID: '1'
       KAFKA_PROCESS_ROLES: broker,controller
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
       KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
-      KAFKA_LOG_RETENTION_HOURS: 1
-      KAFKA_LOG_RETENTION_BYTES: -1
-      KAFKA_LOG_SEGMENT_BYTES: 104857600
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+      KAFKA_LOG_RETENTION_HOURS: '1'
+      KAFKA_LOG_RETENTION_BYTES: '-1'
       KAFKA_LOG_CLEANUP_POLICY: delete
-      KAFKA_LOG_CLEANUP_ENABLE: "true"
-      KAFKA_LOG_RETENTION_CHECK_INTERVAL_MS: 300000
-      KAFKA_NUM_PARTITIONS: 8
+      KAFKA_LOG_CLEANUP_ENABLE: 'true'
       CLUSTER_ID: simpleec-kraft-cluster-001
     volumes:
-      - ${DATA_DIR:-./data}/kafka:/tmp/kraft-combined-logs
+    - ${DATA_DIR:-./data}/kafka:/tmp/kraft-combined-logs
     healthcheck:
-      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 || exit 1"]
+      test:
+      - CMD-SHELL
+      - /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092
+        || exit 1
       interval: 10s
       timeout: 10s
       retries: 15
       start_period: 30s
-
-  # ============ Observability ============
-  tempo:
-    image: grafana/tempo:2.6.1
-    container_name: simpleec-tempo
-    ports:
-      - "3200:3200"
-    volumes:
-      - ./docker/tempo/tempo.yml:/etc/tempo.yaml
-      - ${DATA_DIR:-./data}/tempo:/var/tempo
-    command: ["-config.file=/etc/tempo.yaml"]
-    restart: unless-stopped
-
-  loki:
-    image: grafana/loki:3.3.2
-    container_name: simpleec-loki
-    ports:
-      - "3100:3100"
-    volumes:
-      - ./docker/loki/loki.yml:/etc/loki/local-config.yaml
-      - ${DATA_DIR:-./data}/loki:/loki
-    command: ["-config.file=/etc/loki/local-config.yaml"]
-    restart: unless-stopped
-
-  otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.114.0
-    container_name: simpleec-otel-collector
-    ports:
-      - "4317:4317"
-      - "4318:4318"
-      - "8889:8889"
-    volumes:
-      - ./docker/otel/otel-collector-config.yml:/etc/otelcol-contrib/config.yaml
-    depends_on:
-      tempo:
-        condition: service_started
-      loki:
-        condition: service_started
-    restart: unless-stopped
-
-  prometheus:
-    image: prom/prometheus:v3.1.0
-    container_name: simpleec-prometheus
-    ports:
-      - "0.0.0.0:9090:9090"
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--storage.tsdb.retention.time=7d'
-      - '--storage.tsdb.retention.size=5GB'
-    volumes:
-      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
-      - ${DATA_DIR:-./data}/prometheus:/prometheus
-    depends_on:
-      otel-collector:
-        condition: service_started
-    restart: unless-stopped
-
-  grafana:
-    image: grafana/grafana:11.4.0
-    container_name: simpleec-grafana
-    ports:
-      - "0.0.0.0:3000:3000"
-    environment:
-      GF_SECURITY_ADMIN_PASSWORD: admin
-      GF_AUTH_ANONYMOUS_ENABLED: "true"
-      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
-    volumes:
-      - ./docker/grafana/provisioning:/etc/grafana/provisioning
-      - ${DATA_DIR:-./data}/grafana:/var/lib/grafana
-    depends_on:
-      prometheus:
-        condition: service_started
-      loki:
-        condition: service_started
-      tempo:
-        condition: service_started
-    restart: unless-stopped
-
-  kafka-ui:
-    image: provectuslabs/kafka-ui:v0.7.2
-    container_name: simpleec-kafka-ui
-    ports:
-      - "8088:8080"
-    environment:
-      KAFKA_CLUSTERS_0_NAME: simpleec
-      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
-    depends_on:
-      kafka:
-        condition: service_healthy
-    restart: unless-stopped
-
-  # ============ API Services ============
-  simpleec-api:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.api
-    container_name: simpleec-api
-    ports:
-      - "8082:8080"
-    environment:
-      <<: *common-env
-      SERVER_PORT: 8080
-      SERVER_SERVLET_CONTEXT_PATH: /api
-      OTEL_SERVICE_NAME: simpleec-api
-      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,prometheus,info,metrics
-    depends_on:
-      <<: *common-depends
-    healthcheck:
-      test: ["CMD", "sh", "-c", "nc -z localhost 8080 || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 30
-      start_period: 60s
-    restart: unless-stopped
-
-  simpleec-gateway:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.gateway
-    container_name: simpleec-gateway
-    ports:
-      - "8081:8081"
-    environment:
-      <<: *common-env
-      SERVER_PORT: 8081
-      OTEL_SERVICE_NAME: simpleec-gateway
-      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,prometheus,info,metrics
-    depends_on:
-      <<: *common-depends
-    restart: unless-stopped
-
-  # ============ Channel JOBs (8 instances) ============
   simpleec-channel-momo-fast:
+    image: simpleec-channel-job
     build:
       context: .
       dockerfile: docker/Dockerfile.channel-job
     container_name: simpleec-channel-momo-fast
     environment:
-      <<: *common-env
-      OTEL_SERVICE_NAME: simpleec-channel-momo-fast
+      DB_HOST: postgres
+      DB_PORT: '5432'
+      DB_NAME: simpleec
+      DB_USER: simpleec
+      DB_PASSWORD: simpleec123
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       JOB_CHANNEL_TOPICS: momo.fast
       JOB_CHANNEL_GROUP_ID: channel-job-momo-fast
-      JOB_CHANNEL_CONCURRENCY: 8
+      JOB_CHANNEL_CONCURRENCY: '8'
     depends_on:
-      <<: *common-depends
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
     restart: unless-stopped
-
   simpleec-channel-momo-slow:
+    image: simpleec-channel-job
     build:
       context: .
       dockerfile: docker/Dockerfile.channel-job
     container_name: simpleec-channel-momo-slow
     environment:
-      <<: *common-env
-      OTEL_SERVICE_NAME: simpleec-channel-momo-slow
+      DB_HOST: postgres
+      DB_PORT: '5432'
+      DB_NAME: simpleec
+      DB_USER: simpleec
+      DB_PASSWORD: simpleec123
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       JOB_CHANNEL_TOPICS: momo.slow
       JOB_CHANNEL_GROUP_ID: channel-job-momo-slow
-      JOB_CHANNEL_CONCURRENCY: 4
+      JOB_CHANNEL_CONCURRENCY: '4'
     depends_on:
-      <<: *common-depends
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
     restart: unless-stopped
-
   simpleec-channel-shopee-fast:
+    image: simpleec-channel-job
     build:
       context: .
       dockerfile: docker/Dockerfile.channel-job
     container_name: simpleec-channel-shopee-fast
     environment:
-      <<: *common-env
-      OTEL_SERVICE_NAME: simpleec-channel-shopee-fast
+      DB_HOST: postgres
+      DB_PORT: '5432'
+      DB_NAME: simpleec
+      DB_USER: simpleec
+      DB_PASSWORD: simpleec123
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       JOB_CHANNEL_TOPICS: shopee.fast
       JOB_CHANNEL_GROUP_ID: channel-job-shopee-fast
-      JOB_CHANNEL_CONCURRENCY: 8
+      JOB_CHANNEL_CONCURRENCY: '8'
     depends_on:
-      <<: *common-depends
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
     restart: unless-stopped
-
   simpleec-channel-shopee-slow:
+    image: simpleec-channel-job
     build:
       context: .
       dockerfile: docker/Dockerfile.channel-job
     container_name: simpleec-channel-shopee-slow
     environment:
-      <<: *common-env
-      OTEL_SERVICE_NAME: simpleec-channel-shopee-slow
+      DB_HOST: postgres
+      DB_PORT: '5432'
+      DB_NAME: simpleec
+      DB_USER: simpleec
+      DB_PASSWORD: simpleec123
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       JOB_CHANNEL_TOPICS: shopee.slow
       JOB_CHANNEL_GROUP_ID: channel-job-shopee-slow
-      JOB_CHANNEL_CONCURRENCY: 4
+      JOB_CHANNEL_CONCURRENCY: '4'
     depends_on:
-      <<: *common-depends
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
     restart: unless-stopped
-
   simpleec-channel-yahoo-fast:
+    image: simpleec-channel-job
     build:
       context: .
       dockerfile: docker/Dockerfile.channel-job
     container_name: simpleec-channel-yahoo-fast
     environment:
-      <<: *common-env
-      OTEL_SERVICE_NAME: simpleec-channel-yahoo-fast
+      DB_HOST: postgres
+      DB_PORT: '5432'
+      DB_NAME: simpleec
+      DB_USER: simpleec
+      DB_PASSWORD: simpleec123
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       JOB_CHANNEL_TOPICS: yahoo.fast
       JOB_CHANNEL_GROUP_ID: channel-job-yahoo-fast
-      JOB_CHANNEL_CONCURRENCY: 8
+      JOB_CHANNEL_CONCURRENCY: '8'
     depends_on:
-      <<: *common-depends
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
     restart: unless-stopped
-
   simpleec-channel-yahoo-slow:
+    image: simpleec-channel-job
     build:
       context: .
       dockerfile: docker/Dockerfile.channel-job
     container_name: simpleec-channel-yahoo-slow
     environment:
-      <<: *common-env
-      OTEL_SERVICE_NAME: simpleec-channel-yahoo-slow
+      DB_HOST: postgres
+      DB_PORT: '5432'
+      DB_NAME: simpleec
+      DB_USER: simpleec
+      DB_PASSWORD: simpleec123
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       JOB_CHANNEL_TOPICS: yahoo.slow
       JOB_CHANNEL_GROUP_ID: channel-job-yahoo-slow
-      JOB_CHANNEL_CONCURRENCY: 4
+      JOB_CHANNEL_CONCURRENCY: '4'
     depends_on:
-      <<: *common-depends
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
     restart: unless-stopped
-
   simpleec-channel-pchome-fast:
+    image: simpleec-channel-job
     build:
       context: .
       dockerfile: docker/Dockerfile.channel-job
     container_name: simpleec-channel-pchome-fast
     environment:
-      <<: *common-env
-      OTEL_SERVICE_NAME: simpleec-channel-pchome-fast
+      DB_HOST: postgres
+      DB_PORT: '5432'
+      DB_NAME: simpleec
+      DB_USER: simpleec
+      DB_PASSWORD: simpleec123
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       JOB_CHANNEL_TOPICS: pchome.fast
       JOB_CHANNEL_GROUP_ID: channel-job-pchome-fast
-      JOB_CHANNEL_CONCURRENCY: 8
+      JOB_CHANNEL_CONCURRENCY: '8'
     depends_on:
-      <<: *common-depends
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
     restart: unless-stopped
-
   simpleec-channel-pchome-slow:
+    image: simpleec-channel-job
     build:
       context: .
       dockerfile: docker/Dockerfile.channel-job
     container_name: simpleec-channel-pchome-slow
     environment:
-      <<: *common-env
-      OTEL_SERVICE_NAME: simpleec-channel-pchome-slow
+      DB_HOST: postgres
+      DB_PORT: '5432'
+      DB_NAME: simpleec
+      DB_USER: simpleec
+      DB_PASSWORD: simpleec123
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       JOB_CHANNEL_TOPICS: pchome.slow
       JOB_CHANNEL_GROUP_ID: channel-job-pchome-slow
-      JOB_CHANNEL_CONCURRENCY: 4
+      JOB_CHANNEL_CONCURRENCY: '4'
     depends_on:
-      <<: *common-depends
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
     restart: unless-stopped
-
-  # ============ Independent JOBs ============
+  simpleec-channel-cyberbiz-fast:
+    image: simpleec-channel-job
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.channel-job
+    container_name: simpleec-channel-cyberbiz-fast
+    environment:
+      DB_HOST: postgres
+      DB_PORT: '5432'
+      DB_NAME: simpleec
+      DB_USER: simpleec
+      DB_PASSWORD: simpleec123
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      JOB_CHANNEL_TOPICS: cyberbiz.fast
+      JOB_CHANNEL_GROUP_ID: channel-job-cyberbiz-fast
+      JOB_CHANNEL_CONCURRENCY: '6'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    restart: unless-stopped
+  simpleec-channel-cyberbiz-slow:
+    image: simpleec-channel-job
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.channel-job
+    container_name: simpleec-channel-cyberbiz-slow
+    environment:
+      DB_HOST: postgres
+      DB_PORT: '5432'
+      DB_NAME: simpleec
+      DB_USER: simpleec
+      DB_PASSWORD: simpleec123
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      JOB_CHANNEL_TOPICS: cyberbiz.slow
+      JOB_CHANNEL_GROUP_ID: channel-job-cyberbiz-slow
+      JOB_CHANNEL_CONCURRENCY: '3'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    restart: unless-stopped
+  simpleec-channel-shopline-fast:
+    image: simpleec-channel-job
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.channel-job
+    container_name: simpleec-channel-shopline-fast
+    environment:
+      DB_HOST: postgres
+      DB_PORT: '5432'
+      DB_NAME: simpleec
+      DB_USER: simpleec
+      DB_PASSWORD: simpleec123
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      JOB_CHANNEL_TOPICS: shopline.fast
+      JOB_CHANNEL_GROUP_ID: channel-job-shopline-fast
+      JOB_CHANNEL_CONCURRENCY: '6'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    restart: unless-stopped
+  simpleec-channel-shopline-slow:
+    image: simpleec-channel-job
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.channel-job
+    container_name: simpleec-channel-shopline-slow
+    environment:
+      DB_HOST: postgres
+      DB_PORT: '5432'
+      DB_NAME: simpleec
+      DB_USER: simpleec
+      DB_PASSWORD: simpleec123
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      JOB_CHANNEL_TOPICS: shopline.slow
+      JOB_CHANNEL_GROUP_ID: channel-job-shopline-slow
+      JOB_CHANNEL_CONCURRENCY: '3'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    restart: unless-stopped
+  simpleec-channel-shopify-fast:
+    image: simpleec-channel-job
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.channel-job
+    container_name: simpleec-channel-shopify-fast
+    environment:
+      DB_HOST: postgres
+      DB_PORT: '5432'
+      DB_NAME: simpleec
+      DB_USER: simpleec
+      DB_PASSWORD: simpleec123
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      JOB_CHANNEL_TOPICS: shopify.fast
+      JOB_CHANNEL_GROUP_ID: channel-job-shopify-fast
+      JOB_CHANNEL_CONCURRENCY: '8'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    restart: unless-stopped
+  simpleec-channel-shopify-slow:
+    image: simpleec-channel-job
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.channel-job
+    container_name: simpleec-channel-shopify-slow
+    environment:
+      DB_HOST: postgres
+      DB_PORT: '5432'
+      DB_NAME: simpleec
+      DB_USER: simpleec
+      DB_PASSWORD: simpleec123
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      JOB_CHANNEL_TOPICS: shopify.slow
+      JOB_CHANNEL_GROUP_ID: channel-job-shopify-slow
+      JOB_CHANNEL_CONCURRENCY: '4'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    restart: unless-stopped
   simpleec-order-job:
+    image: simpleec-order-job
     build:
       context: .
       dockerfile: docker/Dockerfile.order-job
     container_name: simpleec-order-job
     environment:
-      <<: *common-env
-      OTEL_SERVICE_NAME: simpleec-order-job
+      DB_HOST: postgres
+      DB_PORT: '5432'
+      DB_NAME: simpleec
+      DB_USER: simpleec
+      DB_PASSWORD: simpleec123
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
     depends_on:
-      <<: *common-depends
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
     restart: unless-stopped
-
   simpleec-scheduler-job:
+    image: simpleec-scheduler-job
     build:
       context: .
       dockerfile: docker/Dockerfile.scheduler-job
     container_name: simpleec-scheduler-job
     environment:
-      <<: *common-env
-      OTEL_SERVICE_NAME: simpleec-scheduler-job
+      DB_HOST: postgres
+      DB_PORT: '5432'
+      DB_NAME: simpleec
+      DB_USER: simpleec
+      DB_PASSWORD: simpleec123
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
     depends_on:
-      <<: *common-depends
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
     restart: unless-stopped
-
-  simpleec-channel-job:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.channel-job
-    container_name: simpleec-channel-job
-    environment:
-      <<: *common-env
-      OTEL_SERVICE_NAME: simpleec-channel-job
-      SPRING_AUTOCONFIGURE_EXCLUDE: org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration,org.springframework.boot.autoconfigure.data.jpa.JpaRepositoriesAutoConfiguration,org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
-    depends_on:
-      <<: *common-depends
-    restart: unless-stopped
-
   simpleec-backend-job:
+    image: simpleec-backend-job
     build:
       context: .
       dockerfile: docker/Dockerfile.backend-job
     container_name: simpleec-backend-job
     environment:
-      <<: *common-env
-      OTEL_SERVICE_NAME: simpleec-backend-job
+      DB_HOST: postgres
+      DB_PORT: '5432'
+      DB_NAME: simpleec
+      DB_USER: simpleec
+      DB_PASSWORD: simpleec123
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
     depends_on:
-      <<: *common-depends
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
     restart: unless-stopped
-
   simpleec-frontend-job:
+    image: simpleec-frontend-job
     build:
       context: .
       dockerfile: docker/Dockerfile.frontend-job
     container_name: simpleec-frontend-job
     environment:
-      <<: *common-env
-      OTEL_SERVICE_NAME: simpleec-frontend-job
+      DB_HOST: postgres
+      DB_PORT: '5432'
+      DB_NAME: simpleec
+      DB_USER: simpleec
+      DB_PASSWORD: simpleec123
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
     depends_on:
-      <<: *common-depends
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
     restart: unless-stopped
-
   simpleec-retry-job:
+    image: simpleec-retry-job
     build:
       context: .
       dockerfile: docker/Dockerfile.retry-job
     container_name: simpleec-retry-job
     environment:
-      <<: *common-env
-      OTEL_SERVICE_NAME: simpleec-retry-job
+      DB_HOST: postgres
+      DB_PORT: '5432'
+      DB_NAME: simpleec
+      DB_USER: simpleec
+      DB_PASSWORD: simpleec123
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
     depends_on:
-      <<: *common-depends
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
     restart: unless-stopped
-
-  # ============ Frontend Apps ============
-
-  # ============ Reverse Proxy (nginx) ============
+  simpleec-api:
+    image: simpleec-api
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    container_name: simpleec-api
+    ports:
+    - 8082:8080
+    environment:
+      SERVER_PORT: '8080'
+      SERVER_SERVLET_CONTEXT_PATH: /api
+      DB_HOST: postgres
+      DB_PORT: '5432'
+      DB_NAME: simpleec
+      DB_USER: simpleec
+      DB_PASSWORD: simpleec123
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+      - CMD
+      - sh
+      - -c
+      - nc -z localhost 8080 || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+    restart: unless-stopped
+  simpleec-user-app:
+    image: simpleec-user-app
+    build:
+      context: user-app
+      dockerfile: Dockerfile.user
+    container_name: simpleec-user-app
+    ports:
+    - 5173:5173
+    environment:
+      VITE_API_BASE_URL: http://simpleec-api:8080/api
+    depends_on:
+      simpleec-api:
+        condition: service_healthy
+    restart: unless-stopped
+  simpleec-admin-app:
+    image: simpleec-admin-app
+    build:
+      context: admin-app
+      dockerfile: Dockerfile.admin
+    container_name: simpleec-admin-app
+    ports:
+    - 8084:8084
+    environment:
+      VITE_API_BASE_URL: http://simpleec-api:8080/api
+    depends_on:
+      simpleec-api:
+        condition: service_healthy
+    restart: unless-stopped
   simpleec-nginx:
+    image: simpleec-nginx
     build:
       context: .
       dockerfile: docker/Dockerfile.nginx
     container_name: simpleec-nginx
     ports:
-      - "8089:80"
-      - "8090:443"
+    - 8089:80
+    - 8090:443
     depends_on:
       simpleec-user-app:
         condition: service_started
@@ -435,32 +624,3 @@ services:
       simpleec-api:
         condition: service_healthy
     restart: unless-stopped
-
-  simpleec-admin-app:
-    build:
-      context: admin-app
-      dockerfile: Dockerfile.admin
-    container_name: simpleec-admin-app
-    ports:
-      - "8084:8084"
-    environment:
-      - VITE_API_BASE_URL=http://simpleec-api:8080/api
-    depends_on:
-      simpleec-api:
-        condition: service_healthy
-    restart: unless-stopped
-
-  simpleec-user-app:
-    build:
-      context: user-app
-      dockerfile: Dockerfile.user
-    container_name: simpleec-user-app
-    ports:
-      - "5173:5173"
-    environment:
-      - VITE_API_BASE_URL=http://simpleec-api:8080/api
-    depends_on:
-      simpleec-api:
-        condition: service_healthy
-    restart: unless-stopped
-
