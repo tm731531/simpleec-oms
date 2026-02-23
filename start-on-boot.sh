@@ -2,7 +2,9 @@
 # Start SimpleEC OMS services on system boot
 cd /home/tom/ONEEC/simpleec-oms
 
-# Start all services (user-app and nginx will start together via depends_on)
+# Start all services with rebuild (ensures latest code is deployed)
+# Build critical services first to ensure latest fixes are applied
+docker compose build simpleec-api simpleec-user-app simpleec-admin-app >> /tmp/simpleec-startup.log 2>&1
 docker compose up -d >> /tmp/simpleec-startup.log 2>&1
 
 # Verify critical services started
