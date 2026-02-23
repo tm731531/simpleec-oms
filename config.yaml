@@ -54,6 +54,8 @@ infrastructure:
     image: apache/kafka:3.7.1
     container_name: simpleec-kafka
     autoCreateTopics: true
+    defaultPartitions: 3
+    defaultReplicationFactor: 1
     retentionHours: 1
 
   kafka-ui:

@@ -54,6 +54,8 @@ services:
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+      KAFKA_NUM_PARTITIONS: '3'
+      KAFKA_DEFAULT_REPLICATION_FACTOR: '1'
       KAFKA_LOG_RETENTION_HOURS: '1'
       KAFKA_LOG_RETENTION_BYTES: '-1'
       KAFKA_LOG_CLEANUP_POLICY: delete
@@ -82,22 +84,6 @@ services:
       kafka:
         condition: service_healthy
     restart: unless-stopped
-  simpleec-kafka-init:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.kafka-init
-    container_name: simpleec-kafka-init
-    depends_on:
-      kafka:
-        condition: service_healthy
-    environment:
-      KAFKA_BROKER: kafka:9092
-      KAFKA_RETENTION_MS: '3600000'
-      KAFKA_PARTITIONS: '3'
-      KAFKA_REPLICATION_FACTOR: '1'
-    networks:
-      - default
-    restart: 'no'
   simpleec-prometheus:
     image: prom/prometheus:v3.1.0
     container_name: simpleec-prometheus

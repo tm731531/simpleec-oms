@@ -80,6 +80,8 @@ def generate_compose(config: Dict[str, Any]) -> Dict[str, Any]:
             'KAFKA_LISTENER_SECURITY_PROTOCOL_MAP': 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT',
             'KAFKA_CONTROLLER_LISTENER_NAMES': 'CONTROLLER',
             'KAFKA_AUTO_CREATE_TOPICS_ENABLE': 'true' if kafka_cfg.get('autoCreateTopics', True) else 'false',
+            'KAFKA_NUM_PARTITIONS': str(kafka_cfg.get('defaultPartitions', 3)),
+            'KAFKA_DEFAULT_REPLICATION_FACTOR': str(kafka_cfg.get('defaultReplicationFactor', 1)),
             'KAFKA_LOG_RETENTION_HOURS': str(kafka_cfg.get('retentionHours', 1)),
             'KAFKA_LOG_RETENTION_BYTES': '-1',
             'KAFKA_LOG_CLEANUP_POLICY': 'delete',
