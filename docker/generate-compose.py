@@ -115,6 +115,13 @@ def generate_compose(config: Dict[str, Any]) -> Dict[str, Any]:
                 if 'port' in infra_cfg else [],
         }
 
+        # Special handling for Kafka UI
+        if infra_key == 'kafka-ui':
+            services[service_name]['environment'] = {
+                'KAFKA_CLUSTERS_0_NAME': 'simpleec',
+                'KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS': 'kafka:9092'
+            }
+
         if 'depends_on' in infra_cfg:
             services[service_name]['depends_on'] = infra_cfg['depends_on']
 
