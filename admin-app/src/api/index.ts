@@ -2,22 +2,22 @@ import axios from 'axios'
 
 /**
  * Smart API URL detection for different deployment environments:
- * - Localhost: Use direct backend URL at http://localhost:8082/api
- * - Remote domains (via Cloudflare): Use /api relative path for reverse proxy
+ * - Localhost: Use direct backend URL at http://localhost:8082
+ * - Remote domains (via Cloudflare): Use root relative path for reverse proxy
  */
 function getAPIBaseURL(): string {
-  if (typeof window === 'undefined') return '/api' // SSR fallback
+  if (typeof window === 'undefined') return '' // SSR fallback
 
   const { hostname } = window.location
 
   // For localhost development/testing, use direct backend URL
   if (hostname === 'localhost' || hostname === '127.0.0.1') {
-    return 'http://localhost:8082/api'
+    return 'http://localhost:8082'
   }
 
   // For remote domains (oms.tomting.com, oms-admin.tomting.com)
-  // Use relative path that the reverse proxy will handle
-  return '/api'
+  // Use root path since API endpoints are at /admin/*, /user/*, etc (no /api prefix)
+  return ''
 }
 
 const API_BASE_URL = getAPIBaseURL()
