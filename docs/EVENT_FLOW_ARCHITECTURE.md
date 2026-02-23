@@ -50,31 +50,35 @@ Layer C: Channel Integration (Depends on Layer A+B)
 ║                    CHANNEL JOB (Layer C - Adapter Layer)                   ║
 ║  Consumer: shopee.{fast,slow}, momo.{fast,slow}, ... (platform topics)    ║
 ║  Transformer: Platform API → OMS Schema (Mode A/B adapters)               ║
-║  Producer: Publishes to order.process topic                              ║
+║  Producer: Publishes to order.process and return.process topics          ║
 ╚════════════════════════════════════════════════════════════════════════════╝
                                       │
-                                      ↓
-                            order.process
-                         (ORDER_UPSERT,
-                          ORDER_STATUS_CHG)
-                                      │
-                ┌─────────────────────┴─────────────────────┐
-                │                                           │
-                ↓                                           ↓
-        ╔═════════════╗                            ╔════════════════╗
-        ║  ORDER JOB  ║                            ║  FRONTEND JOB  ║
-        ║ (Layer B)   ║                            ║   (Layer B)    ║
-        ║             ║                            ║                ║
-        ║ Handler:    ║                            ║ Handler:       ║
-        ║ O-UPSERT    ║                            ║ Filter &       ║
-        ║ (dedup)     ║                            ║ Format         ║
-        ║ O-STATUS    ║                            ║ for SSE/WS     ║
-        ╚═════════════╝                            ╚════════════════╝
-                │                                           │
-                ↓                                           ↓
-              [DB]                                    [Clients]
-             orders                                 WebSocket/
-             table                                  SSE push
+            ┌─────────────────────────┼─────────────────────────┐
+            │                         │                         │
+            ↓                         ↓                         ↓
+     order.process           return.process
+  (ORDER_UPSERT,          (RETURN_UPSERT,
+   ORDER_STATUS_CHG)       RETURN_STATUS_CHG)
+            │                         │
+    ┌───────┴─────────┐       ┌───────┴──────────┐
+    │                 │       │                  │
+    ↓                 ↓       ↓                  ↓
+ ╔═════════╗  ╔════════════╗ ╔═══════════╗  ╔═══════════════╗
+ ║ ORDER   ║  ║ FRONTEND   ║ ║ BACKEND   ║  ║ FRONTEND      ║
+ ║ JOB     ║  ║ JOB        ║ ║ JOB       ║  ║ JOB           ║
+ ║(Layer B)║  ║(Layer B)   ║ ║(Layer B)  ║  ║(Layer B)      ║
+ ║         ║  ║            ║ ║           ║  ║               ║
+ ║Handler: ║  ║Handler:    ║ ║Handler:   ║  ║Handler:       ║
+ ║O-UPSERT ║  ║Filter &    ║ ║Return     ║  ║Filter &       ║
+ ║(dedup)  ║  ║Format      ║ ║Handler    ║  ║Format         ║
+ ║O-STATUS ║  ║for SSE/WS  ║ ║Registry   ║  ║for SSE/WS     ║
+ ╚═════════╝  ╚════════════╝ ╚═══════════╝  ╚═══════════════╝
+    │              │              │              │
+    │              │              │              │
+    ↓              ↓              ↓              ↓
+  [DB]         [Clients]       [DB]          [Clients]
+  orders       WebSocket/       return_orders WebSocket/
+  table        SSE push         table         SSE push
 
 **Note:** SYNC_PACK and UPDATE_PRICE are task types handled separately
 via BackendJob consuming the task.backend topic (not a separate pack.sync topic)
@@ -193,7 +197,8 @@ Any Job (Order, Backend, Frontend, Channel)
 #### 4. **BackendJob** — Event Handler Registry & Routing
 - **Role**: Route events to appropriate handlers based on TaskType
 - **Consumes from**:
-  - `task.backend` — RETURN_UPSERT, RETURN_STATUS_CHANGE, SYNC_PACK, UPDATE_PRICE
+  - `return.process` — RETURN_UPSERT, RETURN_STATUS_CHANGE
+  - `task.backend` — SYNC_PACK, UPDATE_PRICE
     - (Note: SYNC_INVENTORY is scheduled by SchedulerJob, not consumed)
 
 - **Publishes to**: None (database only)
@@ -276,7 +281,8 @@ Any Job (Order, Backend, Frontend, Channel)
 | Topic | TaskTypes | Consumer | Source |
 |-------|-----------|----------|--------|
 | `order.process` | ORDER_UPSERT, ORDER_STATUS_CHANGE | OrderJob, FrontendJob | ChannelJob |
-| `task.backend` | RETURN_UPSERT, SYNC_PACK, UPDATE_PRICE | BackendJob | ChannelJob, Scheduler |
+| `return.process` | RETURN_UPSERT, RETURN_STATUS_CHANGE | BackendJob, FrontendJob | ChannelJob |
+| `task.backend` | SYNC_PACK, UPDATE_PRICE | BackendJob | Scheduler/Admin |
 
 ### Platform Topics (平台特定訊息)
 
@@ -362,8 +368,8 @@ Any Job (Order, Backend, Frontend, Channel)
 | SchedulerJob | N/A (Producer) | N/A | - |
 | RetryJob | `retry-job-group` | 2 | `task.failed` |
 | OrderJob | `order-job-group` | 4 | `order.process` |
-| BackendJob | `backend-job-group` | 6 | `task.backend` |
-| FrontendJob | `frontend-job-group` | 4 | `order.process` (filtered) |
+| BackendJob | `backend-job-group` | 6 | `return.process`, `task.backend` |
+| FrontendJob | `frontend-job-group` | 4 | `order.process`, `return.process` (filtered) |
 | ChannelJob | TBD (per-platform) | TBD | `{platform}.fast`, `{platform}.slow` |
 
 ---

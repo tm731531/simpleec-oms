@@ -45,7 +45,7 @@ public class ChannelJobApplication {
             log.info("║                                                            ║");
             log.info("║  PUBLISHES TO (Producer):                                 ║");
             log.info("║    • order.process (ORDER_UPSERT, ORDER_STATUS_CHANGE)   ║");
-            log.info("║    • task.backend (RETURN_UPSERT, SYNC_PACK, UPDATE_PRICE║");
+            log.info("║    • return.process (RETURN_UPSERT, RETURN_STATUS_CHG)   ║");
             log.info("║                                                            ║");
             log.info("║  ADAPTERS (6 platforms):                                  ║");
             log.info("║    • ShopifyAdapter (Mode A - Direct)                    ║");
@@ -56,7 +56,7 @@ public class ChannelJobApplication {
             log.info("║  HANDLERS (per taskType from platform topics):            ║");
             log.info("║    • FETCH_ORDERS → Call platform API → ORDER_UPSERT    ║");
             log.info("║    • FETCH_RETURNS → Call platform API → RETURN_UPSERT  ║");
-            log.info("║      (via task.backend with RETURN_UPSERT taskType)     ║");
+            log.info("║      (via return.process topic)                          ║");
             log.info("║                                                            ║");
             log.info("║  FLOW: Platform.{fast,slow} → Adapter → OMS Schema      ║");
             log.info("║                          → Hash-based dedup → Publish    ║");

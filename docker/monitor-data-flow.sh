@@ -45,6 +45,7 @@ echo "[${TIMESTAMP}] 2. Kafka Topic Configuration" >> "$LOG_FILE"
 REQUIRED_TOPICS=(
     "scheduler"
     "order.process"
+    "return.process"
     "task.backend"
     "task.frontend"
     "task.failed"
@@ -68,7 +69,7 @@ done
 # 3. Check Message Counts on Key Topics
 echo "[${TIMESTAMP}] 3. Message Flow in Key Topics" >> "$LOG_FILE"
 
-for topic in order.process return.process scheduler task.backend task.frontend; do
+for topic in scheduler order.process return.process task.backend task.frontend task.failed; do
     # Get offset stats (simplified check - just partition count)
     PARTITIONS=$(docker exec simpleec-kafka /opt/kafka/bin/kafka-topics.sh \
         --describe --topic "$topic" --bootstrap-server localhost:9092 2>/dev/null | wc -l)
@@ -120,6 +121,7 @@ echo "[${TIMESTAMP}] ├─ Heartbeat/Health: Check if services are alive" >> "$
 echo "[${TIMESTAMP}] ├─ Scheduler: Check if scheduler topic has messages" >> "$LOG_FILE"
 echo "[${TIMESTAMP}] ├─ Channel Jobs: Check momo/pchome/shopee/yahoo topics" >> "$LOG_FILE"
 echo "[${TIMESTAMP}] ├─ Order Processing: Check order.process topic" >> "$LOG_FILE"
+echo "[${TIMESTAMP}] ├─ Return Processing: Check return.process topic" >> "$LOG_FILE"
 echo "[${TIMESTAMP}] ├─ Backend Jobs: Check task.backend topic (SYNC_PACK, SYNC_PRODUCT, UPDATE_PRICE)" >> "$LOG_FILE"
 echo "[${TIMESTAMP}] └─ Error Handling: Check task.failed and task.dlt topics" >> "$LOG_FILE"
 

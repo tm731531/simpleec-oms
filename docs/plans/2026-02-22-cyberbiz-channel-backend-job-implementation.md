@@ -5,9 +5,9 @@
 **Goal:** Complete Cyberbiz return order fetching and Backend Job product/pack synchronization handlers to enable full Cyberbiz order pipeline (orders → returns → product sync → pack sync → price updates).
 
 **Architecture:**
-- **Cyberbiz Channel Job**: fetchReturns() already implemented via CyberbizAdapter; verify integration with Kafka task.backend topic
+- **Cyberbiz Channel Job**: fetchReturns() already implemented via CyberbizAdapter; publishes to return.process topic
 - **Backend Job**: Two-phase handler implementation for SYNC_PRODUCT and SYNC_PACK task types; price updates handled within SYNC_PRODUCT
-- **Data Flow**: Scheduler → Channel Jobs (fetch returns) → Kafka (task.backend) → BackendJobConsumer → Handlers; price updates within SYNC_PRODUCT task type
+- **Data Flow**: Scheduler → Channel Jobs (fetch returns) → Kafka (return.process) → BackendJobConsumer → Handlers; price updates within SYNC_PRODUCT task type
 - **NOT Implementing**: Inventory/quantity updates (per user requirement: "庫存跟量 不用做")
 
 **Tech Stack:** Spring Boot 3.5.0, Spring Kafka, PostgreSQL, Redis, Kafka 3.7.1
@@ -507,7 +507,7 @@ Messages on task.backend topic:
 ```
 
 ### Data Flow
-1. **Cyberbiz Returns**: ChannelJob → task.backend (RETURN_UPSERT taskType) → BackendJobConsumer → ReturnEventHandler → DB
+1. **Cyberbiz Returns**: ChannelJob → return.process (RETURN_UPSERT) → BackendJobConsumer → ReturnEventHandler → DB
 2. **Product Sync**: Scheduler/Admin → task.backend (SYNC_PRODUCT) → BackendJobConsumer → SyncProductHandler → Platform APIs
 3. **Pack Sync**: Scheduler/Admin → task.backend (SYNC_PACK) → BackendJobConsumer → SyncPackHandler → Platform APIs
 4. **Price Updates**: Included in SYNC_PRODUCT (price is product attribute)
