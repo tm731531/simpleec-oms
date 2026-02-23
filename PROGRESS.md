@@ -102,6 +102,23 @@
   - HealthCheckResult DTO with httpStatus, health ("healthy"/"unhealthy"), errorMessage
   - Comprehensive exception handling with detailed logging
 
+### Phase 6: API Endpoints (1 Task)
+
+#### Task 6.1: Create Health Check REST API
+- **Status:** ✅ COMPLETED
+- **Commit:** 9fd87f0
+- **Summary:** Created REST API endpoints for health status queries
+- **Files Created:**
+  - HealthCheckController.java - REST controller with 5 endpoints
+  - Updated ChannelSyncLogRepository.java - Added query methods
+  - HealthCheckControllerTest.java - 6 unit tests
+- **Features:**
+  - GET /api/health/channel/{channelId} - Query channel health status
+  - GET /api/health/platform/{platformCode} - Query platform health status
+  - GET /api/health/channel/{channelId}/history - Channel health history with pagination
+  - GET /api/health/platform/{platformCode}/history - Platform health history with pagination
+  - GET /api/health/summary - Aggregate health summary (total checks, healthy %, etc.)
+
 ---
 
 ## ⏳ In Progress
@@ -110,8 +127,7 @@ None currently
 
 ---
 
-## ⭕ Pending (17 tasks remaining)
-### Phase 6: API Endpoints (1 task)
+## ⭕ Pending (16 tasks remaining)
 ### Phase 7: Frontend Updates (1 task)
 ### Phase 8: Integration & Testing (1 task)
 ### Phase 9-10: Documentation & Verification (14 tasks)
