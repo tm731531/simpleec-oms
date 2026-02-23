@@ -13,9 +13,10 @@ import java.util.UUID;
 
 /**
  * Service for performing health checks on channels and platforms
+ * NOTE: Disabled - requires JPA which is disabled in Kafka consumer job
  */
 @Slf4j
-@Service
+//@Service
 public class HealthCheckService {
 
     private final ChannelRepository channelRepository;

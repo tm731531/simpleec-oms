@@ -13,9 +13,10 @@ import java.util.UUID;
 /**
  * Processes incoming channel messages from Kafka
  * Implements enable_sync gate before processing
+ * NOTE: Disabled - requires JPA which is disabled in Kafka consumer job
  */
 @Slf4j
-@Component
+//@Component
 public class ChannelMessageProcessor {
 
     private final ChannelService channelService;

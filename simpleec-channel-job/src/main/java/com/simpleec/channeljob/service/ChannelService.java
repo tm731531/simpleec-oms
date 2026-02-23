@@ -8,9 +8,10 @@ import org.springframework.stereotype.Service;
 
 /**
  * Service for channel operations
+ * NOTE: Disabled - requires JPA which is disabled in Kafka consumer job
  */
 @Slf4j
-@Service
+//@Service
 public class ChannelService {
 
     private final ChannelRepository channelRepository;

@@ -15,10 +15,11 @@ import java.util.Map;
 
 /**
  * REST API endpoints for health check status queries
+ * NOTE: Disabled for Kafka consumer job (no REST endpoint needed)
  */
 @Slf4j
-@RestController
-@RequestMapping("/api/health")
+//@RestController
+//@RequestMapping("/api/health")
 public class HealthCheckController {
 
     private final HealthCheckService healthCheckService;

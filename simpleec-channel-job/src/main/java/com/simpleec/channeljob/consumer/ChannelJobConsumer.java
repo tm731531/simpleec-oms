@@ -108,8 +108,19 @@ public class ChannelJobConsumer {
             endpoint.setBean(this);
             endpoint.setConcurrency(concurrency);
 
+            // Set message handler factory - use existing or create new one
             if (messageHandlerMethodFactory != null) {
                 endpoint.setMessageHandlerMethodFactory(messageHandlerMethodFactory);
+            } else {
+                // Create a default factory if not autowired
+                org.springframework.messaging.handler.annotation.support.DefaultMessageHandlerMethodFactory defaultFactory =
+                    new org.springframework.messaging.handler.annotation.support.DefaultMessageHandlerMethodFactory();
+                try {
+                    defaultFactory.afterPropertiesSet();
+                } catch (Exception e) {
+                    log.warn("Failed to initialize default MessageHandlerMethodFactory", e);
+                }
+                endpoint.setMessageHandlerMethodFactory(defaultFactory);
             }
 
             // Register the endpoint with factory
