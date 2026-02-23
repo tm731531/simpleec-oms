@@ -560,11 +560,11 @@ services:
     environment:
       SERVER_PORT: '8080'
       SERVER_SERVLET_CONTEXT_PATH: /api
-      DB_HOST: postgres
-      DB_PORT: '5432'
-      DB_NAME: simpleec
-      DB_USER: simpleec
-      DB_PASSWORD: simpleec123
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/simpleec
+      SPRING_DATASOURCE_USERNAME: simpleec
+      SPRING_DATASOURCE_PASSWORD: simpleec123
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      OTEL_SDK_DISABLED: 'true'
     depends_on:
       postgres:
         condition: service_healthy
