@@ -4,9 +4,9 @@ spring:
   main:
     web-application-type: none
   kafka:
-    bootstrap-servers: simpleec-kafka:9092
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:simpleec-kafka:9092}
     consumer:
-      group-id: channel-job-group
+      group-id: ${JOB_CHANNEL_GROUP_ID:channel-job-group}
       auto-offset-reset: earliest
   jpa:
     enabled: false
