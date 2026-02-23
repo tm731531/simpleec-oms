@@ -21,7 +21,7 @@ import java.util.Optional;
  */
 @Slf4j
 @RestController
-@RequestMapping("/user/sellpacks")
+@RequestMapping("/api/user/sellpacks")
 @RequiredArgsConstructor
 public class UserSellPackController {
     private final SellPackRepository sellPackRepository;

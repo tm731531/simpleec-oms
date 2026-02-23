@@ -19,7 +19,7 @@ import java.util.Optional;
  */
 @Slf4j
 @RestController
-@RequestMapping("/orders")
+@RequestMapping("/api/orders")
 @RequiredArgsConstructor
 public class OrderController {
 

@@ -20,7 +20,7 @@ import java.util.Optional;
  */
 @Slf4j
 @RestController
-@RequestMapping("/returns")
+@RequestMapping("/api/returns")
 @RequiredArgsConstructor
 public class ReturnController {
 

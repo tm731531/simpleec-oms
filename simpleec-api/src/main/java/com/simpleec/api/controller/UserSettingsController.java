@@ -14,7 +14,7 @@ import java.util.Optional;
  * 用戶設定控制器
  */
 @RestController
-@RequestMapping("/user/settings")
+@RequestMapping("/api/user/settings")
 @RequiredArgsConstructor
 public class UserSettingsController {
     private final MerchantRepository merchantRepository;

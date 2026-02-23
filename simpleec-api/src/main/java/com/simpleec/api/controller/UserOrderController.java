@@ -28,7 +28,7 @@ import java.util.Optional;
  */
 @Slf4j
 @RestController
-@RequestMapping("/user/orders")
+@RequestMapping("/api/user/orders")
 @RequiredArgsConstructor
 public class UserOrderController {
     private final OrderRepository orderRepository;

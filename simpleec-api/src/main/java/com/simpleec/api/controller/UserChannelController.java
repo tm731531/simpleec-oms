@@ -13,7 +13,7 @@ import java.util.List;
  * 用戶通路管理控制器
  */
 @RestController
-@RequestMapping("/user/channels")
+@RequestMapping("/api/user/channels")
 @RequiredArgsConstructor
 public class UserChannelController {
     private final ChannelRepository channelRepository;

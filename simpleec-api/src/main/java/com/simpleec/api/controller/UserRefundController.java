@@ -25,7 +25,7 @@ import java.util.Optional;
  */
 @Slf4j
 @RestController
-@RequestMapping("/user/refunds")
+@RequestMapping("/api/user/refunds")
 @RequiredArgsConstructor
 public class UserRefundController {
     private final ReturnOrderRepository returnOrderRepository;
