@@ -36,7 +36,7 @@ create_topic() {
     local replication_factor=${3:-$REPLICATION_FACTOR}
 
     # Check if topic exists
-    existing=$(kafka-topics.sh --bootstrap-server "$KAFKA_BROKER" --list 2>/dev/null | grep "^${topic}$" || true)
+    existing=$(/opt/kafka/bin/kafka-topics.sh --bootstrap-server "$KAFKA_BROKER" --list 2>/dev/null | grep "^${topic}$" || true)
 
     if [ -n "$existing" ]; then
         echo "[$(date '+%H:%M:%S')] ✓ Topic '$topic' already exists"
