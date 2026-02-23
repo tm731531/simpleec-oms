@@ -8,17 +8,28 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
+import org.springframework.kafka.config.MethodKafkaListenerEndpoint;
+import org.springframework.kafka.listener.KafkaListenerErrorHandler;
+import org.springframework.kafka.listener.ListenerExecutionFailedException;
+import org.springframework.messaging.handler.annotation.support.DefaultMessageHandlerMethodFactory;
 import org.springframework.stereotype.Component;
+import jakarta.annotation.PostConstruct;
+import java.lang.reflect.Method;
+import java.util.Arrays;
 
 /**
- * Channel Job Consumer
+ * Channel Job Consumer with Dynamic Listener Registration
  *
- * 消費 {platform}.slow 和 {platform}.fast topic 中的任務
- * 根據 taskType 和 Mode 路由到不同的處理器：
- * - Mode A: FETCH_ORDERS → ModeAOrderListHandler
- * - Mode B: FETCH_ORDERS → ModeBOrderListHandler
- * - Mode B: FETCH_ORDER_DETAIL → ModeBOrderDetailHandler（同一個 topic，不同 tasktype）
+ * 根據環境變數 JOB_CHANNEL_TOPICS 和 JOB_CHANNEL_GROUP_ID 動態註冊 Kafka Listener
+ * 支援 {platform}.fast 和 {platform}.slow topics
+ *
+ * 環境變數：
+ * - JOB_CHANNEL_TOPICS: 逗號分隔的 topics (例如: "momo.fast,momo.slow")
+ * - JOB_CHANNEL_GROUP_ID: consumer group ID (例如: "channel-job-momo")
+ * - JOB_CHANNEL_CONCURRENCY: 並發度 (預設: 8)
  */
 @Slf4j
 @Component
@@ -30,48 +41,100 @@ public class ChannelJobConsumer {
     private final ModeBOrderDetailHandler modeBOrderDetailHandler;
     private final ObjectMapper objectMapper;
 
+    @Autowired(required = false)
+    private KafkaListenerEndpointRegistry kafkaListenerEndpointRegistry;
+
+    @Autowired(required = false)
+    private DefaultMessageHandlerMethodFactory messageHandlerMethodFactory;
+
+    @Autowired(required = false)
+    private org.springframework.kafka.listener.ContainerProperties.AckMode ackMode;
+
+    @Autowired(required = false)
+    private org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory<String, String> kafkaListenerContainerFactory;
+
     // Platform-specific adapters (must be registered as Spring beans)
     private final ChannelAdapter shopifyAdapter;
     private final ChannelAdapter easystoreAdapter;
     private final ChannelAdapter shopeeAdapter;
     private final ChannelAdapter cyberbizAdapter;
 
-    /**
-     * 消費 Shopify slow channel
-     */
-    @KafkaListener(topics = "shopify.slow", groupId = "channel-job-group")
-    public void consumeShopifySlow(String message) {
-        consumeChannelMessage(message, "shopify");
+    @Value("${JOB_CHANNEL_TOPICS:}")
+    private String topicsConfig;
+
+    @Value("${JOB_CHANNEL_GROUP_ID:channel-job-group}")
+    private String groupId;
+
+    @Value("${JOB_CHANNEL_CONCURRENCY:8}")
+    private int concurrency;
+
+    @PostConstruct
+    public void registerDynamicListeners() {
+        System.out.println("=== REGISTER_DYNAMIC_LISTENERS CALLED ===");
+        System.out.println("groupId=" + groupId + ", topicsConfig=" + topicsConfig + ", concurrency=" + concurrency);
+        log.info("Initializing ChannelJobConsumer with groupId={}, topics={}, concurrency={}",
+                groupId, topicsConfig, concurrency);
+
+        if (topicsConfig == null || topicsConfig.trim().isEmpty()) {
+            log.warn("JOB_CHANNEL_TOPICS is not configured, listener registration skipped");
+            return;
+        }
+
+        if (kafkaListenerEndpointRegistry == null) {
+            log.error("KafkaListenerEndpointRegistry not available, cannot register dynamic listener");
+            return;
+        }
+
+        String[] topics = Arrays.stream(topicsConfig.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .toArray(String[]::new);
+
+        if (topics.length == 0) {
+            log.warn("No valid topics configured");
+            return;
+        }
+
+        try {
+            // Get the consume method
+            Method consumeMethod = this.getClass().getDeclaredMethod("consumeChannelMessage", String.class);
+
+            // Create endpoint
+            MethodKafkaListenerEndpoint<String, String> endpoint = new MethodKafkaListenerEndpoint<>();
+            endpoint.setId("dynamic-channel-listener-" + groupId);
+            endpoint.setGroupId(groupId);
+            endpoint.setTopics(topics);
+            endpoint.setMethod(consumeMethod);
+            endpoint.setBean(this);
+            endpoint.setConcurrency(concurrency);
+
+            if (messageHandlerMethodFactory != null) {
+                endpoint.setMessageHandlerMethodFactory(messageHandlerMethodFactory);
+            }
+
+            // Register the endpoint with factory
+            if (kafkaListenerContainerFactory == null) {
+                log.error("KafkaListenerContainerFactory not available");
+                return;
+            }
+            kafkaListenerEndpointRegistry.registerListenerContainer(
+                    endpoint,
+                    kafkaListenerContainerFactory
+            );
+
+            log.info("✓ Dynamic listener registered: groupId={}, topics={}", groupId, Arrays.toString(topics));
+
+        } catch (NoSuchMethodException e) {
+            log.error("Failed to find consumeChannelMessage method", e);
+        } catch (Exception e) {
+            log.error("Failed to register dynamic listener", e);
+        }
     }
 
     /**
-     * 消費 Easystore slow channel
+     * 消費 Channel 消息 (動態註冊，支援所有配置的 topics)
      */
-    @KafkaListener(topics = "easystore.slow", groupId = "channel-job-group")
-    public void consumeEasystoreSlow(String message) {
-        consumeChannelMessage(message, "easystore");
-    }
-
-    /**
-     * 消費 Shopee slow channel
-     */
-    @KafkaListener(topics = "shopee.slow", groupId = "channel-job-group")
-    public void consumeShopeeSlowChannel(String message) {
-        consumeChannelMessage(message, "shopee");
-    }
-
-    /**
-     * 消費 Cyberbiz slow channel
-     */
-    @KafkaListener(topics = "cyberbiz.slow", groupId = "channel-job-group")
-    public void consumeCyberbizSlowChannel(String message) {
-        consumeChannelMessage(message, "cyberbiz");
-    }
-
-    /**
-     * 通用的 Channel 消息消費邏輯（slow topics）
-     */
-    private void consumeChannelMessage(String message, String platformCode) {
+    public void consumeChannelMessage(String message) {
         try {
             JsonNode json = objectMapper.readTree(message);
             JsonNode header = json.get("header");
@@ -80,8 +143,9 @@ public class ChannelJobConsumer {
             String taskType = header.get("taskType").asText();
             String channelId = header.get("channelId").asText();
             String merchantId = header.get("merchantId").asText();
+            String platformCode = extractPlatformFromGroupId();
 
-            log.info("Processing {} message for {} (channel: {})", taskType, platformCode, channelId);
+            log.debug("Processing {} message for {} (channel: {})", taskType, platformCode, channelId);
 
             // 根據 taskType 路由
             if ("FETCH_ORDERS".equals(taskType)) {
@@ -90,9 +154,9 @@ public class ChannelJobConsumer {
                 String channelOrderId = body.get("channelOrderId").asText();
                 handleFetchOrderDetail(platformCode, channelId, merchantId, channelOrderId);
             } else if ("SYNC_PACK".equals(taskType)) {
-                log.info("SYNC_PACK not implemented yet");
+                log.debug("SYNC_PACK not implemented yet");
             } else if ("SHIP_ORDER".equals(taskType) || "UPDATE_INVENTORY".equals(taskType) || "UPDATE_PRICE".equals(taskType)) {
-                log.info("{} not implemented yet", taskType);
+                log.debug("{} not implemented yet", taskType);
             } else {
                 log.warn("Unknown taskType: {}", taskType);
             }
@@ -173,5 +237,16 @@ public class ChannelJobConsumer {
                 log.warn("Unknown platform: {}", platformCode);
                 return null;
         }
+    }
+
+    /**
+     * 從 groupId 提取 platform code
+     * 例如: channel-job-momo → momo
+     */
+    private String extractPlatformFromGroupId() {
+        if (groupId.startsWith("channel-job-")) {
+            return groupId.substring("channel-job-".length());
+        }
+        return "unknown";
     }
 }

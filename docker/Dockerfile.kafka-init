@@ -5,8 +5,5 @@ FROM apache/kafka:3.7.1
 # Copy topic creation script
 COPY docker/init-kafka/create-topics.sh /create-topics.sh
 
-# Make script executable
-RUN chmod +x /create-topics.sh
-
 # Run topic initialization and exit cleanly
-ENTRYPOINT ["/bin/bash", "-c", "/create-topics.sh && echo 'Topics initialized successfully' && exit 0"]
+ENTRYPOINT ["bash", "/create-topics.sh"]
