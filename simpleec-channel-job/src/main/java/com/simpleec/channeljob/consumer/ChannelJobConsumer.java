@@ -51,7 +51,7 @@ public class ChannelJobConsumer {
     private org.springframework.kafka.listener.ContainerProperties.AckMode ackMode;
 
     @Autowired(required = false)
-    private org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory<String, String> kafkaListenerContainerFactory;
+    private org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory<String, Object> kafkaListenerContainerFactory;
 
     // Platform-specific adapters (must be registered as Spring beans)
     private final ChannelAdapter shopifyAdapter;
