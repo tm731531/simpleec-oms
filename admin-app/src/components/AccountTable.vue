@@ -1,5 +1,10 @@
 <template>
   <div>
+    <!-- Error display for debugging -->
+    <el-alert v-if="errorMessage" type="error" :closable="true" style="margin-bottom: 10px">
+      {{ errorMessage }}
+    </el-alert>
+
     <el-table :data="accounts" stripe border v-loading="loading">
       <el-table-column prop="id" label="帳戶ID" width="120" />
       <el-table-column prop="account_name" label="帳戶名稱" />
@@ -61,16 +66,20 @@ const currentPage = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
 const loading = ref(false)
+const errorMessage = ref('')
 
 async function loadAccounts() {
   loading.value = true
+  errorMessage.value = ''
   try {
     const res = await accountAPI.list(currentPage.value, pageSize.value)
     accounts.value = res.items
     total.value = res.total
-  } catch (err) {
-    ElMessage.error('加載帳戶列表失敗')
-    console.error(err)
+  } catch (err: any) {
+    const errorText = err?.message || err?.response?.statusText || JSON.stringify(err)
+    errorMessage.value = `加載帳戶列表失敗: ${errorText}`
+    ElMessage.error(errorMessage.value)
+    console.error('Error loading accounts:', err)
   } finally {
     loading.value = false
   }
