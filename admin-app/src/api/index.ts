@@ -1,19 +1,22 @@
 import axios from 'axios'
 
 /**
- * API URL configuration:
- * Uses relative path /api which works in all environments:
- * - Browser requests /api/...
- * - Nginx reverse proxy on 8089 routes to backend API
- * - Works for localhost, Docker domains, and remote domains
- * This is the correct approach because:
- * - Browsers cannot access Docker container names (simpleec-api)
- * - Relative paths are resolved by the browser to current host:port
- * - Nginx handles the internal routing to backend
+ * Smart API URL detection for different deployment environments:
+ * - Localhost: Use direct backend URL at http://localhost:8082/api
+ * - Remote domains (via Cloudflare): Use /api relative path for reverse proxy
  */
 function getAPIBaseURL(): string {
-  // Always use relative path - browser will resolve to current host
-  // This works in all environments and lets Nginx handle routing
+  if (typeof window === 'undefined') return '/api' // SSR fallback
+
+  const { hostname } = window.location
+
+  // For localhost development/testing, use direct backend URL
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    return 'http://localhost:8082'
+  }
+
+  // For remote domains (oms.tomting.com, oms-admin.tomting.com)
+  // Use relative path that the reverse proxy will handle
   return '/api'
 }
 

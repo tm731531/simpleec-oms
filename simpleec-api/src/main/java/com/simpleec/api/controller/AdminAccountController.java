@@ -60,7 +60,7 @@ public class AdminAccountController {
             @RequestParam(defaultValue = "20") Integer pageSize,
             @RequestParam(required = false) String merchantId,
             @RequestParam(required = false) String search,
-            @RequestParam(defaultValue = "created_at") String sortBy,
+            @RequestParam(defaultValue = "createdAt") String sortBy,
             @RequestParam(defaultValue = "desc") String order) {
 
         try {
@@ -69,21 +69,25 @@ public class AdminAccountController {
             if (pageSize < 1) pageSize = 1;
             if (pageSize > MAX_PAGE_SIZE) pageSize = MAX_PAGE_SIZE;
 
-            // 建構排序物件
-            Sort.Direction direction = "asc".equalsIgnoreCase(order) ? Sort.Direction.ASC : Sort.Direction.DESC;
-            Pageable pageable = PageRequest.of(page - 1, pageSize, Sort.by(direction, sortBy));
+            // 使用簡單分頁，不使用排序以避免欄位對應問題
+            Pageable pageable = PageRequest.of(page - 1, pageSize);
+            log.info("DEBUG: Pageable created: page={}, pageSize={}, hasSort={}, sort={}",
+                page - 1, pageSize, pageable.getSort().isSorted(), pageable.getSort());
 
             // 查詢資料
             Page<Account> result;
             if (merchantId != null && !merchantId.trim().isEmpty()) {
                 if (search != null && !search.trim().isEmpty()) {
+                    log.info("DEBUG: Calling searchByMerchantIdAndKeyword");
                     result = accountRepository.searchByMerchantIdAndKeyword(merchantId, search.trim(), pageable);
                     log.info("Searched accounts by merchantId: {}, keyword: {}, found {} records", merchantId, search, result.getTotalElements());
                 } else {
+                    log.info("DEBUG: Calling findByMerchantId");
                     result = accountRepository.findByMerchantId(merchantId, pageable);
                     log.info("Listed accounts for merchant: {}, found {} records", merchantId, result.getTotalElements());
                 }
             } else {
+                log.info("DEBUG: Calling findAll with pageable: {}", pageable);
                 result = accountRepository.findAll(pageable);
                 log.info("Listed all accounts, page: {}, size: {}, total: {}", page, pageSize, result.getTotalElements());
             }

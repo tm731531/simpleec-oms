@@ -10,7 +10,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -49,9 +48,7 @@ public class AdminPlatformController {
             @RequestParam(defaultValue = "1") Integer page,
             @RequestParam(defaultValue = "20") Integer pageSize,
             @RequestParam(required = false) String search,
-            @RequestParam(required = false) Boolean actived,
-            @RequestParam(defaultValue = "created_at") String sortBy,
-            @RequestParam(defaultValue = "desc") String order) {
+            @RequestParam(required = false) Boolean actived) {
 
         try {
             // 驗證分頁參數
@@ -59,9 +56,8 @@ public class AdminPlatformController {
             if (pageSize < 1) pageSize = 1;
             if (pageSize > MAX_PAGE_SIZE) pageSize = MAX_PAGE_SIZE;
 
-            // 建構排序物件
-            Sort.Direction direction = "asc".equalsIgnoreCase(order) ? Sort.Direction.ASC : Sort.Direction.DESC;
-            Pageable pageable = PageRequest.of(page - 1, pageSize, Sort.by(direction, sortBy));
+            // 使用簡單分頁，不使用排序以避免欄位對應問題
+            Pageable pageable = PageRequest.of(page - 1, pageSize);
 
             // 查詢資料
             Page<Platform> result;
