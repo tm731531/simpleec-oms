@@ -45,17 +45,14 @@ echo "[${TIMESTAMP}] 2. Kafka Topic Configuration" >> "$LOG_FILE"
 REQUIRED_TOPICS=(
     "scheduler"
     "order.process"
-    "return.process"
     "task.backend"
     "task.frontend"
+    "task.failed"
+    "task.dlt"
     "momo.fast" "momo.slow"
     "pchome.fast" "pchome.slow"
     "shopee.fast" "shopee.slow"
     "yahoo.fast" "yahoo.slow"
-    "product.sync"
-    "pack.sync"
-    "inventory.update"
-    "price.update"
 )
 
 ACTUAL_TOPICS=$(docker exec simpleec-kafka /opt/kafka/bin/kafka-topics.sh --list --bootstrap-server localhost:9092 2>/dev/null | sort)
@@ -123,8 +120,8 @@ echo "[${TIMESTAMP}] ├─ Heartbeat/Health: Check if services are alive" >> "$
 echo "[${TIMESTAMP}] ├─ Scheduler: Check if scheduler topic has messages" >> "$LOG_FILE"
 echo "[${TIMESTAMP}] ├─ Channel Jobs: Check momo/pchome/shopee/yahoo topics" >> "$LOG_FILE"
 echo "[${TIMESTAMP}] ├─ Order Processing: Check order.process topic" >> "$LOG_FILE"
-echo "[${TIMESTAMP}] ├─ Return Processing: Check return.process topic" >> "$LOG_FILE"
-echo "[${TIMESTAMP}] └─ Backend Jobs: Check product.sync/pack.sync/inventory.update/price.update topics" >> "$LOG_FILE"
+echo "[${TIMESTAMP}] ├─ Backend Jobs: Check task.backend topic (SYNC_PACK, SYNC_PRODUCT, UPDATE_PRICE)" >> "$LOG_FILE"
+echo "[${TIMESTAMP}] └─ Error Handling: Check task.failed and task.dlt topics" >> "$LOG_FILE"
 
 echo "[${TIMESTAMP}] === Check Complete ===" >> "$LOG_FILE"
 echo "" >> "$LOG_FILE"

@@ -31,11 +31,9 @@
 
 ### Key Topics Configuration
 
-**Business Topics (order.process, order.fast, return.process, pack.sync, etc.)**
+**Business Topics (order.process, task.backend, etc.)**
 - order.process — ORDER_UPSERT, ORDER_STATUS_CHANGE
-- order.fast — Time-sensitive operations
-- return.process — RETURN_UPSERT, REFUND_STATUS_CHANGE
-- pack.sync — SYNC_PACK operations
+- task.backend — RETURN_UPSERT, SYNC_PACK, UPDATE_PRICE operations
 - task.failed — Failed tasks (DLT source)
 - task.dlt — Dead Letter Topic (DLT sink)
 

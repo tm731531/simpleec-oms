@@ -26,7 +26,7 @@
 │     └─ easystore.{fast,slow}                                    │
 │                                                                   │
 │  Kafka Broker (simpleec-kafka:9092)                             │
-│  └─ 21 Topics + 11 Consumer Groups                              │
+│  └─ 13 Topics + 11 Consumer Groups                              │
 │                                                                   │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -71,11 +71,14 @@ easystore.fast  ← EasyStore 快速查詢
 easystore.slow  ← EasyStore 慢速查詢
 ```
 
-### Order 處理主題 (3個)
+### Order 處理主題 (1個)
 ```
 order.process      ← OrderJob 消費: 訂單 UPSERT、狀態變更
-return.process     ← BackendJob/OrderJob 消費: 退貨 UPSERT、狀態變更
-pack.sync          ← BackendJob 消費: 賣場同步、價格更新
+```
+
+### Task Types (非 Kafka Topic)
+```
+SYNC_PACK          ← BackendJob task type: 賣場同步、價格更新（在 task.backend 中傳遞）
 ```
 
 ### Task 系統主題 (5個)

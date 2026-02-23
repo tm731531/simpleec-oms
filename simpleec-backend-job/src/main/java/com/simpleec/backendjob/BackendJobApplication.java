@@ -11,11 +11,11 @@ import org.springframework.stereotype.Component;
 /**
  * Backend Job 應用程序入點 (Layer B - Data Processing)
  *
- * 消費 return.process 和 pack.sync topics 並執行：
- * - 退貨單 UPSERT (RETURN_UPSERT)
- * - 退貨狀態變更 (RETURN_STATUS_CHANGE)
- * - 賣場同步 (SYNC_PACK)
- * - 價格更新 (UPDATE_PRICE)
+ * 消費 task.backend topic 並執行：
+ * - 退貨單 UPSERT (RETURN_UPSERT task type)
+ * - 退貨狀態變更 (RETURN_STATUS_CHANGE task type)
+ * - 賣場同步 (SYNC_PACK task type)
+ * - 價格更新 (UPDATE_PRICE task type)
  *
  * 使用 EventHandlerRegistry 路由不同 TaskType 到對應 Handler
  */
@@ -45,8 +45,9 @@ public class BackendJobApplication {
             log.info("║  BACKEND JOB Started (Layer B - Data Processing)          ║");
             log.info("║                                                            ║");
             log.info("║  LISTENS TO (Consumer):                                   ║");
-            log.info("║    • return.process (RETURN_UPSERT, RETURN_STATUS_CHG)   ║");
-            log.info("║    • pack.sync (SYNC_PACK, UPDATE_PRICE)                 ║");
+            log.info("║    • task.backend (task types):                           ║");
+            log.info("║      - RETURN_UPSERT, RETURN_STATUS_CHANGE               ║");
+            log.info("║      - SYNC_PACK, UPDATE_PRICE                           ║");
             log.info("║                                                            ║");
             log.info("║  WRITES TO:                                               ║");
             log.info("║    • return_orders table (UPSERT logic)                  ║");
