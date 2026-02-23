@@ -32,7 +32,7 @@ public class SecurityConfig {
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .anonymous(a -> a.principal("anonymousUser"))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/auth/**", "/api/admin/**", "/api/health/**", "/api/version", "/actuator/**").permitAll()
+                .requestMatchers("/api/health", "/api/health/**", "/api/version", "/actuator/**", "/api/actuator/**", "/api/auth/**", "/api/admin/**").permitAll()
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)

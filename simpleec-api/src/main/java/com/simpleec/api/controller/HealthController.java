@@ -17,7 +17,7 @@ import java.time.format.DateTimeFormatter;
  */
 @Slf4j
 @RestController
-@RequestMapping("")
+@RequestMapping("/api")
 public class HealthController {
 
     private final ObjectMapper objectMapper;

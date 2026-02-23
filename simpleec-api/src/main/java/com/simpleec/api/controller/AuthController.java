@@ -21,7 +21,7 @@ import java.util.Optional;
  */
 @Slf4j
 @RestController
-@RequestMapping("/auth")
+@RequestMapping("/api/auth")
 @RequiredArgsConstructor
 public class AuthController {
     private final AccountRepository accountRepository;
