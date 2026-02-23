@@ -70,17 +70,35 @@ services:
       timeout: 10s
       retries: 15
       start_period: 30s
-  kafka-ui:
-    image: provectuslabs/kafka-ui:v0.7.2
-    container_name: simpleec-kafka-ui
+  simpleec-prometheus:
+    image: prom/prometheus:v3.1.0
+    container_name: simpleec-prometheus
     ports:
-    - 8088:8080
-    environment:
-      KAFKA_CLUSTERS_0_NAME: simpleec
-      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
-    depends_on:
-      kafka:
-        condition: service_healthy
+    - 9090:9090
+    restart: unless-stopped
+  simpleec-grafana:
+    image: grafana/grafana:11.4.0
+    container_name: simpleec-grafana
+    ports:
+    - 3000:3000
+    restart: unless-stopped
+  simpleec-loki:
+    image: grafana/loki:3.3.2
+    container_name: simpleec-loki
+    ports:
+    - 3100:3100
+    restart: unless-stopped
+  simpleec-otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.114.0
+    container_name: simpleec-otel-collector
+    ports:
+    - 4317:4317
+    restart: unless-stopped
+  simpleec-tempo:
+    image: grafana/tempo:2.6.1
+    container_name: simpleec-tempo
+    ports:
+    - 3200:3200
     restart: unless-stopped
   simpleec-channel-momo-fast:
     image: simpleec-channel-job
@@ -89,6 +107,7 @@ services:
       dockerfile: docker/Dockerfile.channel-job
     container_name: simpleec-channel-momo-fast
     environment:
+      SPRING_PROFILES_ACTIVE: docker
       DB_HOST: postgres
       DB_PORT: '5432'
       DB_NAME: simpleec
@@ -115,6 +134,7 @@ services:
       dockerfile: docker/Dockerfile.channel-job
     container_name: simpleec-channel-momo-slow
     environment:
+      SPRING_PROFILES_ACTIVE: docker
       DB_HOST: postgres
       DB_PORT: '5432'
       DB_NAME: simpleec
@@ -141,6 +161,7 @@ services:
       dockerfile: docker/Dockerfile.channel-job
     container_name: simpleec-channel-shopee-fast
     environment:
+      SPRING_PROFILES_ACTIVE: docker
       DB_HOST: postgres
       DB_PORT: '5432'
       DB_NAME: simpleec
@@ -167,6 +188,7 @@ services:
       dockerfile: docker/Dockerfile.channel-job
     container_name: simpleec-channel-shopee-slow
     environment:
+      SPRING_PROFILES_ACTIVE: docker
       DB_HOST: postgres
       DB_PORT: '5432'
       DB_NAME: simpleec
@@ -193,6 +215,7 @@ services:
       dockerfile: docker/Dockerfile.channel-job
     container_name: simpleec-channel-yahoo-fast
     environment:
+      SPRING_PROFILES_ACTIVE: docker
       DB_HOST: postgres
       DB_PORT: '5432'
       DB_NAME: simpleec
@@ -219,6 +242,7 @@ services:
       dockerfile: docker/Dockerfile.channel-job
     container_name: simpleec-channel-yahoo-slow
     environment:
+      SPRING_PROFILES_ACTIVE: docker
       DB_HOST: postgres
       DB_PORT: '5432'
       DB_NAME: simpleec
@@ -245,6 +269,7 @@ services:
       dockerfile: docker/Dockerfile.channel-job
     container_name: simpleec-channel-pchome-fast
     environment:
+      SPRING_PROFILES_ACTIVE: docker
       DB_HOST: postgres
       DB_PORT: '5432'
       DB_NAME: simpleec
@@ -271,6 +296,7 @@ services:
       dockerfile: docker/Dockerfile.channel-job
     container_name: simpleec-channel-pchome-slow
     environment:
+      SPRING_PROFILES_ACTIVE: docker
       DB_HOST: postgres
       DB_PORT: '5432'
       DB_NAME: simpleec
@@ -297,6 +323,7 @@ services:
       dockerfile: docker/Dockerfile.channel-job
     container_name: simpleec-channel-cyberbiz-fast
     environment:
+      SPRING_PROFILES_ACTIVE: docker
       DB_HOST: postgres
       DB_PORT: '5432'
       DB_NAME: simpleec
@@ -323,6 +350,7 @@ services:
       dockerfile: docker/Dockerfile.channel-job
     container_name: simpleec-channel-cyberbiz-slow
     environment:
+      SPRING_PROFILES_ACTIVE: docker
       DB_HOST: postgres
       DB_PORT: '5432'
       DB_NAME: simpleec
@@ -349,6 +377,7 @@ services:
       dockerfile: docker/Dockerfile.channel-job
     container_name: simpleec-channel-shopline-fast
     environment:
+      SPRING_PROFILES_ACTIVE: docker
       DB_HOST: postgres
       DB_PORT: '5432'
       DB_NAME: simpleec
@@ -375,6 +404,7 @@ services:
       dockerfile: docker/Dockerfile.channel-job
     container_name: simpleec-channel-shopline-slow
     environment:
+      SPRING_PROFILES_ACTIVE: docker
       DB_HOST: postgres
       DB_PORT: '5432'
       DB_NAME: simpleec
@@ -401,6 +431,7 @@ services:
       dockerfile: docker/Dockerfile.channel-job
     container_name: simpleec-channel-shopify-fast
     environment:
+      SPRING_PROFILES_ACTIVE: docker
       DB_HOST: postgres
       DB_PORT: '5432'
       DB_NAME: simpleec
@@ -427,6 +458,7 @@ services:
       dockerfile: docker/Dockerfile.channel-job
     container_name: simpleec-channel-shopify-slow
     environment:
+      SPRING_PROFILES_ACTIVE: docker
       DB_HOST: postgres
       DB_PORT: '5432'
       DB_NAME: simpleec
@@ -453,6 +485,7 @@ services:
       dockerfile: docker/Dockerfile.order-job
     container_name: simpleec-order-job
     environment:
+      SPRING_PROFILES_ACTIVE: docker
       DB_HOST: postgres
       DB_PORT: '5432'
       DB_NAME: simpleec
@@ -476,6 +509,7 @@ services:
       dockerfile: docker/Dockerfile.scheduler-job
     container_name: simpleec-scheduler-job
     environment:
+      SPRING_PROFILES_ACTIVE: docker
       DB_HOST: postgres
       DB_PORT: '5432'
       DB_NAME: simpleec
@@ -499,6 +533,7 @@ services:
       dockerfile: docker/Dockerfile.backend-job
     container_name: simpleec-backend-job
     environment:
+      SPRING_PROFILES_ACTIVE: docker
       DB_HOST: postgres
       DB_PORT: '5432'
       DB_NAME: simpleec
@@ -522,6 +557,7 @@ services:
       dockerfile: docker/Dockerfile.frontend-job
     container_name: simpleec-frontend-job
     environment:
+      SPRING_PROFILES_ACTIVE: docker
       DB_HOST: postgres
       DB_PORT: '5432'
       DB_NAME: simpleec
@@ -545,6 +581,7 @@ services:
       dockerfile: docker/Dockerfile.retry-job
     container_name: simpleec-retry-job
     environment:
+      SPRING_PROFILES_ACTIVE: docker
       DB_HOST: postgres
       DB_PORT: '5432'
       DB_NAME: simpleec
@@ -570,13 +607,14 @@ services:
     ports:
     - 8082:8080
     environment:
+      SPRING_PROFILES_ACTIVE: docker
       SERVER_PORT: '8080'
       SERVER_SERVLET_CONTEXT_PATH: /api
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/simpleec
-      SPRING_DATASOURCE_USERNAME: simpleec
-      SPRING_DATASOURCE_PASSWORD: simpleec123
-      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      OTEL_SDK_DISABLED: 'true'
+      DB_HOST: postgres
+      DB_PORT: '5432'
+      DB_NAME: simpleec
+      DB_USER: simpleec
+      DB_PASSWORD: simpleec123
     depends_on:
       postgres:
         condition: service_healthy
