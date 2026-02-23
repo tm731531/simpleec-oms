@@ -35,6 +35,8 @@ public class SecurityConfig {
                 .requestMatchers("/admin/**").permitAll()
                 .requestMatchers("/actuator/**").permitAll()
                 .requestMatchers("/health").permitAll()
+                .requestMatchers("/health/**").permitAll()
+                .requestMatchers("/version").permitAll()
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
