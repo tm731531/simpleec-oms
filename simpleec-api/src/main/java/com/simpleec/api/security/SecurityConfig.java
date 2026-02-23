@@ -33,6 +33,7 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/auth/**").permitAll()
                 .requestMatchers("/admin/**").permitAll()
+                .requestMatchers("/api/admin/**").permitAll()
                 .requestMatchers("/actuator/**").permitAll()
                 .requestMatchers("/health").permitAll()
                 .requestMatchers("/health/**").permitAll()

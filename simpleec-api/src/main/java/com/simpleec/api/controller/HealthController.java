@@ -48,13 +48,18 @@ public class HealthController {
      */
     @GetMapping("/health/summary")
     public ResponseEntity<Object> healthSummary() {
+        ObjectNode data = objectMapper.createObjectNode();
+        data.put("totalChecks", 245);
+        data.put("recentChecks", 47);
+        data.put("healthyCount", 42);
+        data.put("unhealthyCount", 5);
+        data.put("healthPercentage", 89.4);
+        data.put("timestamp", System.currentTimeMillis());
+
         ObjectNode response = objectMapper.createObjectNode();
-        response.put("totalChecks", 245);
-        response.put("recentChecks", 47);
-        response.put("healthyCount", 42);
-        response.put("unhealthyCount", 5);
-        response.put("healthPercentage", 89.4);
-        response.put("timestamp", System.currentTimeMillis());
+        response.put("code", 200);
+        response.set("data", data);
+        response.put("message", "success");
         return ResponseEntity.ok(response);
     }
 
@@ -63,13 +68,18 @@ public class HealthController {
      */
     @GetMapping("/health/channel/{channelId}")
     public ResponseEntity<Object> channelHealth(@PathVariable String channelId) {
+        ObjectNode data = objectMapper.createObjectNode();
+        data.put("channelId", channelId);
+        data.put("status", "HEALTHY");
+        data.put("lastCheckTime", System.currentTimeMillis());
+        data.put("httpStatus", 200);
+        data.put("responseTime", 45);
+        data.putNull("errorMessage");
+
         ObjectNode response = objectMapper.createObjectNode();
-        response.put("channelId", channelId);
-        response.put("status", "HEALTHY");
-        response.put("lastCheckTime", System.currentTimeMillis());
-        response.put("httpStatus", 200);
-        response.put("responseTime", 45);
-        response.putNull("errorMessage");
+        response.put("code", 200);
+        response.set("data", data);
+        response.put("message", "success");
         return ResponseEntity.ok(response);
     }
 
@@ -90,8 +100,13 @@ public class HealthController {
             historyArray.add(historyItem);
         }
 
+        ObjectNode data = objectMapper.createObjectNode();
+        data.set("history", historyArray);
+
         ObjectNode response = objectMapper.createObjectNode();
-        response.set("history", historyArray);
+        response.put("code", 200);
+        response.set("data", data);
+        response.put("message", "success");
         return ResponseEntity.ok(response);
     }
 
@@ -100,13 +115,18 @@ public class HealthController {
      */
     @GetMapping("/health/platform/{platform}")
     public ResponseEntity<Object> platformHealth(@PathVariable String platform) {
+        ObjectNode data = objectMapper.createObjectNode();
+        data.put("platform", platform);
+        data.put("status", "HEALTHY");
+        data.put("lastCheckTime", System.currentTimeMillis());
+        data.put("totalChannels", 1);
+        data.put("healthyChannels", 1);
+        data.put("unhealthyChannels", 0);
+
         ObjectNode response = objectMapper.createObjectNode();
-        response.put("platform", platform);
-        response.put("status", "HEALTHY");
-        response.put("lastCheckTime", System.currentTimeMillis());
-        response.put("totalChannels", 1);
-        response.put("healthyChannels", 1);
-        response.put("unhealthyChannels", 0);
+        response.put("code", 200);
+        response.set("data", data);
+        response.put("message", "success");
         return ResponseEntity.ok(response);
     }
 
@@ -128,8 +148,13 @@ public class HealthController {
             historyArray.add(historyItem);
         }
 
+        ObjectNode data = objectMapper.createObjectNode();
+        data.set("history", historyArray);
+
         ObjectNode response = objectMapper.createObjectNode();
-        response.set("history", historyArray);
+        response.put("code", 200);
+        response.set("data", data);
+        response.put("message", "success");
         return ResponseEntity.ok(response);
     }
 }
