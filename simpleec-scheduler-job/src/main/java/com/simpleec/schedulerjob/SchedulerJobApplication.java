@@ -23,8 +23,8 @@ import org.springframework.stereotype.Component;
         com.simpleec.core.config.ServiceAutoConfiguration.class
     }
 )
-@EntityScan(basePackages = "com.simpleec.core.entity")
-@EnableJpaRepositories(basePackages = "com.simpleec.core.repository")
+@EntityScan(basePackages = "com.simpleec.schedulerjob.entity")
+@EnableJpaRepositories(basePackages = "com.simpleec.schedulerjob.repository")
 @EnableScheduling
 public class SchedulerJobApplication {
     public static void main(String[] args) {

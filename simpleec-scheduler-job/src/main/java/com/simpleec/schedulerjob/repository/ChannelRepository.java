@@ -11,4 +11,7 @@ import java.util.List;
 public interface ChannelRepository extends JpaRepository<Channel, String> {
     @Query("SELECT c FROM Channel c WHERE c.enableSync = true")
     List<Channel> findAllEnabled();
+
+    @Query("SELECT c FROM Channel c WHERE c.actived = true AND c.enableSync = true")
+    List<Channel> findByActivedTrueAndEnableSyncTrue();
 }

@@ -7,8 +7,8 @@ import com.simpleec.common.constants.TopicConstants;
 import com.simpleec.common.enums.TaskTypeEnum;
 import com.simpleec.common.util.DateUtil;
 import com.simpleec.common.util.NanoIdUtil;
-import com.simpleec.core.entity.Channel;
-import com.simpleec.core.repository.ChannelRepository;
+import com.simpleec.schedulerjob.entity.Channel;
+import com.simpleec.schedulerjob.repository.ChannelRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -116,9 +116,9 @@ public class SchedulerEventHandler {
                     ObjectNode message = buildFetchOrdersMessage(TaskTypeEnum.FETCH_ORDERS, timestamp, channel);
 
                     kafkaTemplate.send(topic, message.get("header").get("requestId").asText(), message);
-                    log.debug("Sent FETCH_ORDERS to {} topic for channel {}", topic, channel.getChannelSn());
+                    log.debug("Sent FETCH_ORDERS to {} topic for channel {}", topic, channel.getId());
                 } catch (Exception e) {
-                    log.error("Error dispatching FETCH_ORDERS for channel {}", channel.getChannelSn(), e);
+                    log.error("Error dispatching FETCH_ORDERS for channel {}", channel.getId(), e);
                 }
             }
 
@@ -155,7 +155,7 @@ public class SchedulerEventHandler {
         header.put("taskType", taskType.getCode());
         header.put("merchantId", "MERCHANT_001");
         header.put("platformId", channel.getPlatformId());
-        header.put("channelId", channel.getChannelSn());
+        header.put("channelId", channel.getId());
         header.put("requestId", "sched-" + NanoIdUtil.generate());
         header.put("timestamp", DateUtil.toIsoString(timestamp));
         header.put("source", "scheduler");

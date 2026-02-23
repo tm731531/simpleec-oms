@@ -1,0 +1,96 @@
+# Kafka Topics Configuration
+# This YAML file documents the target topic configuration for SimpleEC OMS
+# Used by create-topics.sh to initialize topics on system startup
+
+# Broker Settings
+broker:
+  address: kafka:9092
+  retention_ms: 3600000    # 1 hour (360000 ms)
+  cleanup_policy: delete    # delete|compact
+  partitions_default: 3     # Number of partitions
+  replication_factor: 1     # 1 for dev/single-broker; 3+ for production
+
+# Platform Topics - Fast/Slow Processing Channels
+# These topics handle API polling and webhook operations per platform
+platforms:
+  fast:
+    description: "Fast channel operations (API polls, high-frequency updates)"
+    partitions: 3
+    retention_ms: 3600000
+    platforms:
+      - cyberbiz
+      - momo
+      - pchome
+      - shopee
+      - yahoo
+      - shopline
+      - shopify
+
+  slow:
+    description: "Slow channel operations (batch syncs, low-frequency updates)"
+    partitions: 3
+    retention_ms: 3600000
+    platforms:
+      - cyberbiz
+      - momo
+      - pchome
+      - shopee
+      - yahoo
+      - shopline
+      - shopify
+
+# Order Processing Topics
+order:
+  process:
+    description: "Order workflow events (create, update, ship, refund)"
+    partitions: 3
+    retention_ms: 3600000
+
+# System Topics - Low Volume Administrative Events
+system:
+  scheduler:
+    description: "Cron and scheduled task events"
+    partitions: 1
+    retention_ms: 3600000
+
+  task:
+    backend:
+      description: "Backend worker tasks and processing"
+      partitions: 1
+      retention_ms: 3600000
+
+    failed:
+      description: "Failed task events and retries"
+      partitions: 1
+      retention_ms: 3600000
+
+    frontend:
+      description: "Frontend notification and UI update tasks"
+      partitions: 1
+      retention_ms: 3600000
+
+  operations:
+    consumer_lag:
+      description: "Consumer lag and offset monitoring"
+      partitions: 1
+      retention_ms: 3600000
+
+# Notes
+notes: |
+  Platform Topics Summary:
+  - 14 platform topics (7 platforms × 2 channels)
+  - Each platform has fast (API polling) and slow (batch) channels
+  - 3 partitions enables parallel consumer processing
+
+  Production Considerations:
+  - Scale to 3+ Kafka brokers with replication_factor: 3
+  - Increase partitions to 5-10 for high-volume platforms
+  - Use compacted topics for state management (products, inventory)
+  - Monitor consumer lag with Kafka broker metrics
+  - Consider tiered storage for long-term event retention
+
+  Single-Broker Setup (Current):
+  - Adequate for development and testing
+  - No fault tolerance if broker fails
+  - All data lost if data volume is deleted
+  - Replication factor must be 1 (single broker)

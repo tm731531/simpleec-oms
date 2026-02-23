@@ -29,7 +29,7 @@ public class ChannelService {
      * Get all enabled channels
      */
     public List<Channel> findEnabledChannels() {
-        return channelRepository.findAllEnabled();
+        return channelRepository.findByActivedTrueAndEnableSyncTrue();
     }
 
     /**

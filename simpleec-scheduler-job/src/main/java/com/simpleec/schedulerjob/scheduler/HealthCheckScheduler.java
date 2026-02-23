@@ -58,13 +58,13 @@ public class HealthCheckScheduler {
         for (Channel channel : enabledChannels) {
             try {
                 // Publish CHECK_HEALTH task to platform.fast topic
-                String topic = channel.getPlatformCode() + ".fast";
+                String topic = channel.getPlatformId() + ".fast";
 
                 HealthCheckMessage message = new HealthCheckMessage();
                 message.setTaskType("CHECK_HEALTH");
                 message.setMerchantId(channel.getMerchantId());
                 message.setChannelId(channel.getId());
-                message.setPlatformCode(channel.getPlatformCode());
+                message.setPlatformCode(channel.getPlatformId());
                 message.setTimestamp(System.currentTimeMillis());
 
                 kafkaProducer.publishToTopic(topic, channel.getId(), message);

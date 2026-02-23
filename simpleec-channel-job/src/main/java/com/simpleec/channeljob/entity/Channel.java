@@ -4,7 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import javax.persistence.*;
+import jakarta.persistence.*;
 
 /**
  * Channel entity - represents merchant's channel configuration on a platform
@@ -22,7 +22,7 @@ public class Channel {
     private String merchantId;
 
     @Column(nullable = false)
-    private String platformId;
+    private String platformCode;
 
     @Column(nullable = false)
     private String token;
