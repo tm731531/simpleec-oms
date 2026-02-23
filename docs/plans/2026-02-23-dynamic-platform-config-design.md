@@ -222,9 +222,9 @@ updated_at      TIMESTAMPTZ
 
 ---
 
-### 4.2 Channel Table (Merchant-managed)
+### 4.2 Channel Table (Merchant-managed, Existing)
 
-**table: `channel`**
+**table: `channel`** (Already exists - no schema changes)
 
 ```sql
 id                    VARCHAR(20)   PRIMARY KEY
@@ -239,7 +239,7 @@ token2, token3, token4, token5  VARCHAR(4096)
 
 -- Control flags
 actived               BOOLEAN       DEFAULT true
-enable_sync           BOOLEAN       DEFAULT false   -- ← Key flag
+enable_sync           BOOLEAN       DEFAULT false   -- ← Key flag (ALREADY EXISTS)
 write_actived         BOOLEAN       DEFAULT false
 
 -- Timestamp tracking
@@ -252,11 +252,13 @@ updated_at            TIMESTAMPTZ
 
 **Semantics:**
 - `actived` = Channel exists (soft delete)
-- `enable_sync` = Whether to process this channel's messages
+- `enable_sync` = Whether to process this channel's messages (ALREADY PRESENT)
   - `false` → Channel-Job skips messages for this channel
   - `true` → Channel-Job processes; Scheduler includes in health checks
 - `write_actived` = Whether to allow write operations
 - `last_sync_time` = Timestamp of last successful sync (populated by channel-job)
+
+**Note:** The `enable_sync` field already exists in current schema - no changes needed.
 
 ---
 
