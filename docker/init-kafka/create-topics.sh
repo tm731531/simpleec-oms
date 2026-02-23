@@ -66,7 +66,7 @@ echo ""
 
 # Platform Topics (fast/slow channels) - 3 partitions each
 echo "[$(date '+%H:%M:%S')] Creating Platform Topics (fast/slow)..."
-for platform in cyberbiz momo pchome shopee yahoo shopline shopify; do
+for platform in cyberbiz easystore momo pchome shopee yahoo shopline shopify; do
     create_topic "${platform}.fast" "$PARTITIONS"
     create_topic "${platform}.slow" "$PARTITIONS"
 done
@@ -82,7 +82,29 @@ echo "[$(date '+%H:%M:%S')] Creating System Topics..."
 create_topic "scheduler" 1
 create_topic "task.backend" 1
 create_topic "task.failed" 1
+create_topic "task.dlt" 1
 create_topic "task.frontend" 1
+
+# Kafka Internal Topics (Coordinator offsets storage)
+echo ""
+echo "[$(date '+%H:%M:%S')] Creating Kafka Internal Topics..."
+# Create __consumer_offsets with 50 partitions for scalability
+/opt/kafka/bin/kafka-topics.sh --bootstrap-server "$KAFKA_BROKER" --list 2>/dev/null | grep -q "^__consumer_offsets$" || {
+    echo "[$(date '+%H:%M:%S')] Creating topic '__consumer_offsets' (critical for consumer group coordination)..."
+    /opt/kafka/bin/kafka-topics.sh \
+        --bootstrap-server "$KAFKA_BROKER" \
+        --create \
+        --topic "__consumer_offsets" \
+        --partitions 50 \
+        --replication-factor "$REPLICATION_FACTOR" \
+        --config cleanup.policy=compact \
+        --config compression.type=snappy \
+        --config segment.ms=86400000 \
+        --config min.cleanable.dirty.ratio=0.5 \
+        --config delete.retention.ms=86400000 \
+        2>&1 | grep -v "^Created topic\|already exists" || true
+    echo "[$(date '+%H:%M:%S')] ✓ Topic '__consumer_offsets' created"
+}
 
 # Operational Topics
 echo ""

@@ -150,12 +150,31 @@ http://localhost:9090
 
 ---
 
-## 🚨 已知问题
+## 🚨 已知问题（已解决）
 
-### Kafka （用户提到还有一点点问题）
-- 状态：🟡 需要诊断
-- 上次检查：Feb 24, 00:40
-- 需要执行：`docker logs simpleec-kafka 2>&1 | tail -50`
+### ✅ Kafka Consumer Coordinator Fix (Feb 24, 01:10 AM)
+**问题**：Consumer groups 无法连接 Kafka coordinator，导致无法跟踪消费offset
+- 错误：`TimeoutException: Call(callName=describeGroups(api=FIND_COORDINATOR), deadlineMs=...) timed out`
+- 根本原因：`__consumer_offsets` topic 不存在（内部Kafka系统topic，不是自动创建的）
+- **修复**：
+  1. 手动创建 `__consumer_offsets` topic（50分区，cleanup.policy=compact）
+  2. 更新 `docker/init-kafka/create-topics.sh` 确保自动创建此topic
+  3. 添加 `easystore.fast` topic（缺失的平台）
+  4. 添加 `task.dlt` topic（缺失的系统topic）
+- **验证结果**：
+  - ✅ 所有6个consumer groups 现在健康运行
+  - ✅ 所有 groups 的 LAG = 0（完全同步）
+  - ✅ Consumer offsets 正确跟踪
+
+**Consumer Group Status（Feb 24, 01:10）**：
+| Group | Status | Topics | Lag |
+|-------|--------|--------|-----|
+| frontend-job-group | ✅ 运行 | task.frontend | 0 |
+| channel-job-group | ✅ 运行 | cyberbiz/easystore/shopee/shopify (slow) | 0 |
+| scheduler-dispatcher-group-v4 | ✅ 运行 | scheduler | 0 |
+| backend-consumer-group | ✅ 运行 | task.backend | 0 |
+| dlt-consumer-group | ✅ 运行 | (DLT handling) | 0 |
+| retry-job-group | ✅ 运行 | (Retry handling) | 0 |
 
 ---
 
