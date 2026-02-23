@@ -47,6 +47,28 @@
   - Records HTTP status and sync status
   - Graceful error handling
 
+### Phase 4: Scheduler Health Checks (1 Task)
+
+#### Task 4.1: Implement Health Check Scheduler
+- **Status:** ✅ COMPLETED
+- **Commit:** 250bb52
+- **Summary:** Implemented 5-minute health check scheduler
+- **Files Created:**
+  - HealthCheckScheduler.java - Main scheduler with @Scheduled annotation
+  - HealthCheckMessage.java - DTO for channel health checks
+  - PlatformHealthCheckMessage.java - DTO for platform health checks
+  - Channel.java - Entity for channel configuration
+  - Platform.java - Entity for platform configuration
+  - ChannelRepository.java - JPA repository for channels
+  - PlatformRepository.java - JPA repository for platforms
+  - ChannelService.java - Service layer for queries
+  - KafkaProducer.java - Kafka message publisher
+- **Features:**
+  - Runs every 300000ms (5 minutes)
+  - Publishes CHECK_HEALTH for each enabled channel
+  - Publishes CHECK_HEALTH_PLATFORM for each active platform
+  - Messages include taskType, merchantId, channelId/platformCode, timestamp
+
 ---
 
 ## ⏳ In Progress
@@ -55,9 +77,7 @@ None currently
 
 ---
 
-## ⭕ Pending (20 tasks remaining)
-
-### Phase 4: Scheduler Health Checks (1 task)
+## ⭕ Pending (19 tasks remaining)
 ### Phase 5: Logging & Health Services (2 tasks)
 ### Phase 6: API Endpoints (1 task)
 ### Phase 7: Frontend Updates (1 task)
