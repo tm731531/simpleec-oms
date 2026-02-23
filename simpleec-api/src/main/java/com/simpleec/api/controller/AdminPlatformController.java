@@ -21,7 +21,7 @@ import java.util.Optional;
  */
 @Slf4j
 @RestController
-@RequestMapping("/admin/platform")
+@RequestMapping("/api/admin/platform")
 @RequiredArgsConstructor
 @CrossOrigin(origins = {"http://localhost:8080", "http://localhost:8081", "http://localhost:8082",
                         "http://192.168.0.48:8080", "https://oms.tomting.com", "http://oms.tomting.com"},

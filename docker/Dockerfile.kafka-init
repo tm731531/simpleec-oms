@@ -1,0 +1,12 @@
+# Kafka Init Container
+# Initializes all required Kafka topics on startup
+FROM apache/kafka:3.7.1
+
+# Copy topic creation script
+COPY docker/init-kafka/create-topics.sh /create-topics.sh
+
+# Set working directory
+WORKDIR /opt/kafka/bin
+
+# Run topic initialization
+CMD ["bash", "/create-topics.sh"]
