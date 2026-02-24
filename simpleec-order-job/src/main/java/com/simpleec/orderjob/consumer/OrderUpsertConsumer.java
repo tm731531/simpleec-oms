@@ -245,21 +245,20 @@ public class OrderUpsertConsumer {
             order.setShippingInfo(objectMapper.writeValueAsString(orderDataJson.get("shippingInfo")));
         }
 
-        // 通路訂單建立時間（ISO-8601，可能含 Z 後綴）
+        // 通路訂單建立時間（ISO-8601）
         if (orderDataJson.has("channelCreatedAt")) {
             String createdAtStr = orderDataJson.get("channelCreatedAt").asText();
             try {
-                // 使用 Instant.parse() 支援 ISO-8601 with Z suffix
                 LocalDateTime createdAt = Instant.parse(createdAtStr)
                     .atZone(ZoneId.of("UTC"))
                     .toLocalDateTime();
                 order.setChannelCreatedAt(createdAt);
             } catch (Exception e) {
-                log.warn("Failed to parse channelCreatedAt: {}", createdAtStr, e);
+                log.warn("Failed to parse channelCreatedAt (ISO-8601): {}", createdAtStr, e);
             }
         }
 
-        // 支付時間
+        // 支付時間（ISO-8601）
         if (orderDataJson.has("paidAt")) {
             String paidAtStr = orderDataJson.get("paidAt").asText();
             try {
@@ -268,11 +267,11 @@ public class OrderUpsertConsumer {
                     .toLocalDateTime();
                 order.setPaidAt(paidAt);
             } catch (Exception e) {
-                log.warn("Failed to parse paidAt: {}", paidAtStr, e);
+                log.warn("Failed to parse paidAt (ISO-8601): {}", paidAtStr, e);
             }
         }
 
-        // 配送時間
+        // 配送時間（ISO-8601）
         if (orderDataJson.has("shippedAt")) {
             String shippedAtStr = orderDataJson.get("shippedAt").asText();
             try {
@@ -281,7 +280,7 @@ public class OrderUpsertConsumer {
                     .toLocalDateTime();
                 order.setShippedAt(shippedAt);
             } catch (Exception e) {
-                log.warn("Failed to parse shippedAt: {}", shippedAtStr, e);
+                log.warn("Failed to parse shippedAt (ISO-8601): {}", shippedAtStr, e);
             }
         }
 

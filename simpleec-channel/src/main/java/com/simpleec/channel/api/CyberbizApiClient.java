@@ -335,6 +335,8 @@ public class CyberbizApiClient {
             if (root.isArray()) {
                 root.forEach(order -> {
                     Map<String, Object> orderMap = objectMapper.convertValue(order, Map.class);
+                    // 統一日期格式為 ISO-8601
+                    normalizeDateTime(orderMap);
                     orders.add(orderMap);
                 });
             }
@@ -344,6 +346,8 @@ public class CyberbizApiClient {
                 if (ordersNode.isArray()) {
                     ordersNode.forEach(order -> {
                         Map<String, Object> orderMap = objectMapper.convertValue(order, Map.class);
+                        // 統一日期格式為 ISO-8601
+                        normalizeDateTime(orderMap);
                         orders.add(orderMap);
                     });
                 }
@@ -366,5 +370,87 @@ public class CyberbizApiClient {
         java.time.ZonedDateTime zdt = instant.atZone(java.time.ZoneId.of("UTC"));
         java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
         return formatter.format(zdt);
+    }
+
+    /**
+     * 遞迴地標準化 Map 中的所有日期時間字段為 ISO-8601 格式
+     * Cyberbiz API 返回的日期格式為 "YYYY-MM-DD HH:MM:SS"，需要轉換為 ISO-8601
+     *
+     * @param map 要處理的 Map（原址修改）
+     */
+    @SuppressWarnings("unchecked")
+    private void normalizeDateTime(Map<String, Object> map) {
+        if (map == null) {
+            return;
+        }
+
+        for (String key : map.keySet()) {
+            Object value = map.get(key);
+
+            if (value == null) {
+                continue;
+            }
+
+            // 如果是日期相關的字段名，嘗試轉換
+            if (isDateTimeField(key) && value instanceof String) {
+                String dateStr = (String) value;
+                try {
+                    String isoStr = convertToISO8601(dateStr);
+                    map.put(key, isoStr);
+                    log.debug("Converted {} from '{}' to '{}'", key, dateStr, isoStr);
+                } catch (Exception e) {
+                    log.debug("Unable to convert {} field: {} - {}", key, dateStr, e.getMessage());
+                }
+            }
+            // 遞迴處理嵌套的 Map
+            else if (value instanceof Map) {
+                normalizeDateTime((Map<String, Object>) value);
+            }
+            // 遞迴處理 List（可能包含 Map）
+            else if (value instanceof List) {
+                for (Object item : (List<?>) value) {
+                    if (item instanceof Map) {
+                        normalizeDateTime((Map<String, Object>) item);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * 判斷是否為日期時間字段
+     */
+    private boolean isDateTimeField(String key) {
+        String lowerKey = key.toLowerCase();
+        return lowerKey.contains("date") || lowerKey.contains("time") || lowerKey.contains("at") ||
+               lowerKey.contains("created") || lowerKey.contains("updated") || lowerKey.contains("paid") ||
+               lowerKey.contains("shipped");
+    }
+
+    /**
+     * 將 Cyberbiz 格式日期 "YYYY-MM-DD HH:MM:SS" 轉換為 ISO-8601
+     * 輸出格式：YYYY-MM-DDTHH:MM:SSZ
+     */
+    private String convertToISO8601(String dateStr) {
+        if (dateStr == null || dateStr.isEmpty()) {
+            return dateStr;
+        }
+
+        try {
+            // 嘗試解析 "YYYY-MM-DD HH:MM:SS" 格式
+            java.time.format.DateTimeFormatter inputFormatter =
+                java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+            java.time.LocalDateTime ldt = java.time.LocalDateTime.parse(dateStr, inputFormatter);
+
+            // 轉換為 ISO-8601 格式（假設為 UTC）
+            java.time.ZonedDateTime zdt = ldt.atZone(java.time.ZoneId.of("UTC"));
+            return zdt.format(java.time.format.DateTimeFormatter.ISO_INSTANT);
+        } catch (Exception e) {
+            // 如果已經是 ISO-8601 格式，直接返回
+            if (dateStr.matches("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*")) {
+                return dateStr;
+            }
+            throw new IllegalArgumentException("Unable to parse date: " + dateStr, e);
+        }
     }
 }
