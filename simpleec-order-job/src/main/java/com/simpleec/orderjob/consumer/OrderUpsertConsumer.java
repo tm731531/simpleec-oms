@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.kafka.support.KafkaHeaders;
 import org.springframework.messaging.handler.annotation.Header;
@@ -37,6 +38,7 @@ public class OrderUpsertConsumer {
     private final OrderService orderService;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
+    private final KafkaTemplate<String, Object> kafkaTemplate;
 
     /**
      * 消費 order.process topic
@@ -78,8 +80,16 @@ public class OrderUpsertConsumer {
             log.info("Successfully processed ORDER_UPSERT: {}", channelOrderId);
 
         } catch (Exception e) {
-            log.error("Error processing ORDER_UPSERT", e);
-            // TODO: 發送到 task.failed 重試隊列
+            log.error("Error processing ORDER_UPSERT: {}", e.getMessage(), e);
+            try {
+                // 發送到失敗隊列供人工處理或異步重試
+                kafkaTemplate.send("task.failed", "OrderUpsert", message);
+                log.info("Message sent to task.failed topic");
+            } catch (Exception sendError) {
+                log.error("Failed to send message to task.failed", sendError);
+            }
+            // 確認消息 - 避免無限重複
+            acknowledgment.acknowledge();
         }
     }
 

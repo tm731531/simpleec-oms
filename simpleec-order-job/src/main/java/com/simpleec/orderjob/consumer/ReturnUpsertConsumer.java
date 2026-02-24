@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
@@ -25,6 +26,7 @@ public class ReturnUpsertConsumer {
 
     private final ReturnUpsertHandler returnUpsertHandler;
     private final ObjectMapper objectMapper;
+    private final KafkaTemplate<String, Object> kafkaTemplate;
 
     /**
      * 提取並驗證字串欄位 — 確保欄位存在、非空且非 null
@@ -105,7 +107,14 @@ public class ReturnUpsertConsumer {
 
         } catch (Exception e) {
             log.error("Error processing RETURN_UPSERT message: {}", e.getMessage(), e);
-            // Critical: acknowledge to prevent Kafka offset issues; error is logged
+            // 發送到失敗隊列供人工處理或異步重試
+            try {
+                kafkaTemplate.send("task.failed", "ReturnUpsert", message);
+                log.info("Message sent to task.failed topic");
+            } catch (Exception sendError) {
+                log.error("Failed to send message to task.failed", sendError);
+            }
+            // 確認消息 - 避免無限重複
             try {
                 acknowledgment.acknowledge();
             } catch (Exception ackError) {
