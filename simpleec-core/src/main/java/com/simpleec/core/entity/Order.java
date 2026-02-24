@@ -9,6 +9,8 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import jakarta.persistence.*;
+import org.hibernate.type.SqlTypes;
+import org.hibernate.annotations.JdbcTypeCode;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
@@ -84,6 +86,7 @@ public class Order {
      * 存儲 OrderItem 陣列的 JSON 字符串
      */
     @Column(name = "items", columnDefinition = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
     private String items;  // JSON array
 
     /**
@@ -127,6 +130,7 @@ public class Order {
      * 存儲買家相關的詳細資訊（如地址、特殊標籤等）
      */
     @Column(name = "buyer_info", columnDefinition = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
     private String buyerInfo;
 
     /**
@@ -134,6 +138,7 @@ public class Order {
      * 存儲配送相關的詳細資訊（如物流追蹤、估計送達時間等）
      */
     @Column(name = "shipping_info", columnDefinition = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
     private String shippingInfo;
 
     /**

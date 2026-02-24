@@ -230,19 +230,37 @@ public class OrderUpsertConsumer {
             );
         }
 
-        // 商品清單
+        // 商品清單（JSONB 格式 — 確保為有效的 JSON 字符串）
         if (orderDataJson.has("items")) {
-            order.setItems(objectMapper.writeValueAsString(orderDataJson.get("items")));
+            try {
+                JsonNode itemsNode = orderDataJson.get("items");
+                String itemsJson = objectMapper.writeValueAsString(itemsNode);
+                order.setItems(itemsJson);
+            } catch (Exception e) {
+                log.warn("Failed to serialize items: {}", e.getMessage());
+            }
         }
 
-        // 買家資訊（JSON）
+        // 買家資訊（JSONB 格式 — 確保為有效的 JSON 字符串）
         if (orderDataJson.has("buyerInfo")) {
-            order.setBuyerInfo(objectMapper.writeValueAsString(orderDataJson.get("buyerInfo")));
+            try {
+                JsonNode buyerNode = orderDataJson.get("buyerInfo");
+                String buyerJson = objectMapper.writeValueAsString(buyerNode);
+                order.setBuyerInfo(buyerJson);
+            } catch (Exception e) {
+                log.warn("Failed to serialize buyerInfo: {}", e.getMessage());
+            }
         }
 
-        // 配送資訊（JSON）
+        // 配送資訊（JSONB 格式 — 確保為有效的 JSON 字符串）
         if (orderDataJson.has("shippingInfo")) {
-            order.setShippingInfo(objectMapper.writeValueAsString(orderDataJson.get("shippingInfo")));
+            try {
+                JsonNode shippingNode = orderDataJson.get("shippingInfo");
+                String shippingJson = objectMapper.writeValueAsString(shippingNode);
+                order.setShippingInfo(shippingJson);
+            } catch (Exception e) {
+                log.warn("Failed to serialize shippingInfo: {}", e.getMessage());
+            }
         }
 
         // 通路訂單建立時間（ISO-8601）
