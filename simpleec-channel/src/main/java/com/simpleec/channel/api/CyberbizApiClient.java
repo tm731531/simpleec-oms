@@ -1,8 +1,16 @@
 package com.simpleec.channel.api;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.RestTemplate;
 
 import java.util.*;
 
@@ -13,12 +21,31 @@ import java.util.*;
  * - GET /api/order/get_orders（搭配時間範圍參數）
  * - GET /api/order/get_order（單筆訂單詳情）
  *
- * 生產環境需要實現實際 HTTP 呼叫（使用 RestTemplate 或 WebClient）
+ * 使用 OAuth Bearer Token 認證
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class CyberbizApiClient {
+
+    private final RestTemplate restTemplate;
+    private final ObjectMapper objectMapper;
+
+    @Value("${cyberbiz.api.base-url:https://api.cyberbiz.io}")
+    private String baseUrl;
+
+    @Value("${cyberbiz.api.token:}")
+    private String apiToken;
+
+    /**
+     * 建立 HTTP headers，包含 OAuth Bearer Token
+     */
+    private HttpHeaders buildHeaders() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Authorization", "Bearer " + apiToken);
+        headers.set("Content-Type", "application/json");
+        return headers;
+    }
 
     /**
      * 查詢該時段內建立的訂單
@@ -28,15 +55,41 @@ public class CyberbizApiClient {
      * @return 訂單 ID 列表
      */
     public List<String> getOrdersCreatedInTimeRange(long createTimeFrom, long createTimeTo) {
-        log.debug("Calling Cyberbiz API: get_orders with create_time_from={}, create_time_to={}",
-            createTimeFrom, createTimeTo);
+        try {
+            String url = String.format("%s/api/order/get_orders?create_time_from=%d&create_time_to=%d",
+                    baseUrl, createTimeFrom, createTimeTo);
 
-        // TODO: 實現實際 HTTP 呼叫：
-        // GET https://api.cyberbiz.io/api/order/get_orders?create_time_from=<>&create_time_to=<>
-        // 返回 JSON 格式：{"success":true,"data":{"orders":[{"order_id":"CBZ-001"}]}}
+            log.debug("Calling Cyberbiz API: GET {}", url);
 
-        // 模擬返回
-        return Arrays.asList("CBZ-CREATE-00001", "CBZ-CREATE-00002", "CBZ-CREATE-00003");
+            HttpEntity<?> entity = new HttpEntity<>(buildHeaders());
+            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
+
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                JsonNode root = objectMapper.readTree(response.getBody());
+                List<String> orderIds = new ArrayList<>();
+
+                if (root.has("data") && root.get("data").has("orders")) {
+                    JsonNode ordersNode = root.get("data").get("orders");
+                    if (ordersNode.isArray()) {
+                        ordersNode.forEach(order -> {
+                            if (order.has("order_id")) {
+                                orderIds.add(order.get("order_id").asText());
+                            }
+                        });
+                    }
+                }
+
+                log.debug("Retrieved {} orders from Cyberbiz (created)", orderIds.size());
+                return orderIds;
+            }
+
+            log.warn("Unexpected response status from Cyberbiz: {}", response.getStatusCode());
+            return Collections.emptyList();
+
+        } catch (Exception e) {
+            log.error("Error calling Cyberbiz API getOrdersCreatedInTimeRange", e);
+            return Collections.emptyList();
+        }
     }
 
     /**
@@ -47,14 +100,41 @@ public class CyberbizApiClient {
      * @return 訂單 ID 列表
      */
     public List<String> getOrdersUpdatedInTimeRange(long updateTimeFrom, long updateTimeTo) {
-        log.debug("Calling Cyberbiz API: get_orders with update_time_from={}, update_time_to={}",
-            updateTimeFrom, updateTimeTo);
+        try {
+            String url = String.format("%s/api/order/get_orders?update_time_from=%d&update_time_to=%d",
+                    baseUrl, updateTimeFrom, updateTimeTo);
 
-        // TODO: 實現實際 HTTP 呼叫：
-        // GET https://api.cyberbiz.io/api/order/get_orders?update_time_from=<>&update_time_to=<>
+            log.debug("Calling Cyberbiz API: GET {}", url);
 
-        // 模擬返回
-        return Arrays.asList("CBZ-UPDATE-00001", "CBZ-UPDATE-00002");
+            HttpEntity<?> entity = new HttpEntity<>(buildHeaders());
+            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
+
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                JsonNode root = objectMapper.readTree(response.getBody());
+                List<String> orderIds = new ArrayList<>();
+
+                if (root.has("data") && root.get("data").has("orders")) {
+                    JsonNode ordersNode = root.get("data").get("orders");
+                    if (ordersNode.isArray()) {
+                        ordersNode.forEach(order -> {
+                            if (order.has("order_id")) {
+                                orderIds.add(order.get("order_id").asText());
+                            }
+                        });
+                    }
+                }
+
+                log.debug("Retrieved {} orders from Cyberbiz (updated)", orderIds.size());
+                return orderIds;
+            }
+
+            log.warn("Unexpected response status from Cyberbiz: {}", response.getStatusCode());
+            return Collections.emptyList();
+
+        } catch (Exception e) {
+            log.error("Error calling Cyberbiz API getOrdersUpdatedInTimeRange", e);
+            return Collections.emptyList();
+        }
     }
 
     /**
@@ -64,21 +144,38 @@ public class CyberbizApiClient {
      * @return 訂單詳情 (Map 格式)
      */
     public Map<String, Object> getOrderDetail(String orderId) {
-        log.debug("Calling Cyberbiz API: get_order with order_id={}", orderId);
+        try {
+            String url = String.format("%s/api/order/get_order?order_id=%s", baseUrl, orderId);
 
-        // TODO: 實現實際 HTTP 呼叫：
-        // GET https://api.cyberbiz.io/api/order/get_order?order_id=<>
-        // 返回完整訂單結構
+            log.debug("Calling Cyberbiz API: GET {}", url);
 
-        // 模擬返回
-        Map<String, Object> order = new LinkedHashMap<>();
-        order.put("order_id", orderId);
-        order.put("order_sn", "CBZ" + System.currentTimeMillis());
-        order.put("status", "pending");
-        order.put("created_at", "2024-02-20T10:30:00Z");
-        order.put("updated_at", "2024-02-20T10:35:00Z");
-        order.put("amount_info", Map.of("total", 2500.0, "subtotal", 2300.0));
-        return order;
+            HttpEntity<?> entity = new HttpEntity<>(buildHeaders());
+            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
+
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                JsonNode root = objectMapper.readTree(response.getBody());
+
+                if (root.has("success") && root.get("success").asBoolean() && root.has("data")) {
+                    JsonNode dataNode = root.get("data");
+
+                    // Convert JsonNode to Map<String, Object>
+                    Map<String, Object> orderMap = objectMapper.convertValue(dataNode, Map.class);
+
+                    log.debug("Retrieved order detail from Cyberbiz: {}", orderId);
+                    return orderMap;
+                }
+
+                log.warn("Unexpected response format from Cyberbiz for order: {}", orderId);
+                return Collections.emptyMap();
+            }
+
+            log.warn("Unexpected response status from Cyberbiz: {}", response.getStatusCode());
+            return Collections.emptyMap();
+
+        } catch (Exception e) {
+            log.error("Error calling Cyberbiz API getOrderDetail for order: {}", orderId, e);
+            return Collections.emptyMap();
+        }
     }
 
     /**
@@ -89,13 +186,39 @@ public class CyberbizApiClient {
      * @return 訂單列表（帶退貨資訊）
      */
     public List<Map<String, Object>> getOrdersWithRefund(long refundTimeFrom, long refundTimeTo) {
-        log.debug("Calling Cyberbiz API: get_orders with refund_time_from={}, refund_time_to={}",
-            refundTimeFrom, refundTimeTo);
+        try {
+            String url = String.format("%s/api/order/get_orders?refund_time_from=%d&refund_time_to=%d",
+                    baseUrl, refundTimeFrom, refundTimeTo);
 
-        // TODO: 實現實際 HTTP 呼叫：
-        // GET https://api.cyberbiz.io/api/order/get_orders?refund_time_from=<>&refund_time_to=<>
+            log.debug("Calling Cyberbiz API: GET {}", url);
 
-        // 模擬返回
-        return new ArrayList<>();
+            HttpEntity<?> entity = new HttpEntity<>(buildHeaders());
+            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
+
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                JsonNode root = objectMapper.readTree(response.getBody());
+                List<Map<String, Object>> orders = new ArrayList<>();
+
+                if (root.has("data") && root.get("data").has("orders")) {
+                    JsonNode ordersNode = root.get("data").get("orders");
+                    if (ordersNode.isArray()) {
+                        ordersNode.forEach(order -> {
+                            Map<String, Object> orderMap = objectMapper.convertValue(order, Map.class);
+                            orders.add(orderMap);
+                        });
+                    }
+                }
+
+                log.debug("Retrieved {} orders with refunds from Cyberbiz", orders.size());
+                return orders;
+            }
+
+            log.warn("Unexpected response status from Cyberbiz: {}", response.getStatusCode());
+            return Collections.emptyList();
+
+        } catch (Exception e) {
+            log.error("Error calling Cyberbiz API getOrdersWithRefund", e);
+            return Collections.emptyList();
+        }
     }
 }

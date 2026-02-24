@@ -69,7 +69,7 @@
 | Yahoo | ? | 待確認 | ? |
 | PChome | ? | 待確認 | ? |
 | easystore | ? | 待確認 | ? |
-| Cyberbiz | ? | 待確認 | ? |
+| Cyberbiz | Mode B | 列表無商品、買家、物流詳情 | 需檢查：items, buyerInfo, shippingInfo |
 
 ---
 
@@ -390,11 +390,39 @@ REFUNDED: 已退款
 
 ---
 
-## 3.6 Cyberbiz Platform Mapping（SAMPLE - 待實現）
+## 3.6 Cyberbiz Platform Mapping
 
-🔴 **Cyberbiz API 映射規則待確認**
+### Order Mapping
 
-需要在看到 Cyberbiz 實際 API 文件後補充。
+| OMS 字段 | Cyberbiz API 字段 | 備註 |
+|---------|------------------|------|
+| orderId | 由 OMS 生成 | - |
+| channelOrderId | `order_id` | Cyberbiz 訂單 ID |
+| channelId | 商家設定 | Cyberbiz 商店標識 |
+| orderStatus | `status` | 見下表 |
+| channelCreatedAt | `created_at` | 訂單建立時間 (Unix timestamp) |
+| buyerName | `buyer_info.name` | 買家名稱 |
+| buyerPhone | `buyer_info.phone` | 買家電話 |
+| buyerEmail | `buyer_info.email` | 買家郵箱 |
+| shippingAddress | `shipping_info.address` | 收貨地址 |
+| totalAmount | `amount_info.total` | 訂單總金額 |
+| shippingFee | `amount_info.shipping_fee` | 運費 |
+| discountAmount | `amount_info.discount` | 折扣 |
+| items[].channelProductId | `items[].product_id` | 商品 ID |
+| items[].quantity | `items[].quantity` | 數量 |
+| items[].unitPrice | `items[].unit_price` | 單位售價 |
+
+### Cyberbiz Order Status → OMS Order Status
+
+| Cyberbiz Status | OMS Status | 備註 |
+|-----------------|-----------|------|
+| pending | PENDING | 待確認 |
+| confirmed | CONFIRMED | 已確認 |
+| shipped | SHIPPED | 已出貨 |
+| completed | COMPLETED | 已完成 |
+| cancelled | CANCELLED | 已取消 |
+
+**注意**：Cyberbiz 返回的狀態值為 lowercase，ModeBOrderDetailHandler.mapChannelStatusToOmsStatus() 會進行 toUpperCase() 轉換。
 
 ---
 
@@ -407,7 +435,7 @@ REFUNDED: 已退款
 | Yahoo | ✅ | ✅ SAMPLE | ⏳ TODO |
 | PChome | ✅ | ✅ SAMPLE | ⏳ TODO |
 | easystore | ✅ | ✅ SAMPLE | ⏳ TODO |
-| Cyberbiz | ✅ | ⏳ TODO | ⏳ TODO |
+| Cyberbiz | ✅ | ✅ 實裝完成 | ⏳ 待驗證 |
 
 ---
 

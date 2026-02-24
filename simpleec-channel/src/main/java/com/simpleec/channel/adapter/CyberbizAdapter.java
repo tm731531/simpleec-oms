@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.*;
 
@@ -87,25 +88,29 @@ public class CyberbizAdapter implements ChannelAdapter {
     /**
      * 輔助方法：查詢該時段內建立的訂單
      * 模擬 Cyberbiz API: GET /api/order/get_orders?create_time_from=<timestamp>&create_time_to=<timestamp>
+     *
+     * 預設時間窗口：過去 1 小時內建立的訂單（新訂單）
+     * timeRange 參數目前先記錄但不解析，預留未來擴充
      */
     private List<String> fetchOrdersCreatedInTimeRange(String timeRange) {
         log.debug("Fetching orders created in timeRange: {}", timeRange);
-        // Call the API client (timestamps should be computed from timeRange in real implementation)
-        long now = System.currentTimeMillis() / 1000;  // current time in seconds
-        long oneHourAgo = now - 3600;
+        long now = Instant.now().getEpochSecond();
+        long oneHourAgo = now - 3600;  // 1 hour window for new orders
         return cyberbizApiClient.getOrdersCreatedInTimeRange(oneHourAgo, now);
     }
 
     /**
      * 輔助方法：查詢該時段內更新的訂單
      * 模擬 Cyberbiz API: GET /api/order/get_orders?update_time_from=<timestamp>&update_time_to=<timestamp>
+     *
+     * 預設時間窗口：過去 24 小時內更新的訂單（確保不漏掉已出貨、已完成等狀態更新）
+     * timeRange 參數目前先記錄但不解析，預留未來擴充
      */
     private List<String> fetchOrdersUpdatedInTimeRange(String timeRange) {
         log.debug("Fetching orders updated in timeRange: {}", timeRange);
-        // Call the API client (timestamps should be computed from timeRange in real implementation)
-        long now = System.currentTimeMillis() / 1000;  // current time in seconds
-        long oneHourAgo = now - 3600;
-        return cyberbizApiClient.getOrdersUpdatedInTimeRange(oneHourAgo, now);
+        long now = Instant.now().getEpochSecond();
+        long oneDayAgo = now - 86400;  // 24 hour window for updated orders
+        return cyberbizApiClient.getOrdersUpdatedInTimeRange(oneDayAgo, now);
     }
 
     /**
@@ -161,16 +166,17 @@ public class CyberbizAdapter implements ChannelAdapter {
     /**
      * 拉取退貨列表
      *
-     * 模擬 Cyberbiz API: GET /api/order/get_orders?refund_time_from=<timestamp>&refund_time_to=<timestamp>
+     * Cyberbiz API: GET /api/order/get_orders?refund_time_from=<timestamp>&refund_time_to=<timestamp>
      * 回傳：該時段內有退貨的訂單列表
+     *
+     * 預設時間窗口：過去 1 小時內發生退貨的訂單
      */
     @Override
     public List<Map<String, Object>> fetchReturns(String timeRange) throws Exception {
         log.info("Fetching returns from Cyberbiz with timeRange: {}", timeRange);
 
-        // Call the API client (timestamps should be computed from timeRange in real implementation)
-        long now = System.currentTimeMillis() / 1000;  // current time in seconds
-        long oneHourAgo = now - 3600;
+        long now = Instant.now().getEpochSecond();
+        long oneHourAgo = now - 3600;  // 1 hour window for recent refunds
         return cyberbizApiClient.getOrdersWithRefund(oneHourAgo, now);
     }
 

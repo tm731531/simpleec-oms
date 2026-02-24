@@ -20,6 +20,12 @@ spring:
       - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
       - org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
 
+cyberbiz:
+  api:
+    base-url: ${CYBERBIZ_API_BASE_URL:https://api.cyberbiz.io}
+    token: ${CYBERBIZ_API_TOKEN}
+    timeout: 30000
+
 logging:
   level:
     com.simpleec: DEBUG
