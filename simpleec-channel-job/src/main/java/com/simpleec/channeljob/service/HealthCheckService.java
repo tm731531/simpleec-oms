@@ -48,18 +48,18 @@ public class HealthCheckService {
 
             // Call platform API with channel's token
             int httpStatus = platformApiClient.healthCheck(
-                channel.getPlatformCode(),
+                channel.getPlatformId(),
                 channel.getToken()
             );
 
             String errorMessage = httpStatus >= 400
-                ? getPlatformErrorMessage(httpStatus, channel.getPlatformCode())
+                ? getPlatformErrorMessage(httpStatus, channel.getPlatformId())
                 : null;
 
             recordHealthLog(
                 channelId,
                 channel.getMerchantId(),
-                channel.getPlatformCode(),
+                channel.getPlatformId(),
                 httpStatus,
                 errorMessage
             );

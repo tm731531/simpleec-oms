@@ -24,13 +24,17 @@ import java.util.*;
 public class CyberbizAdapter implements ChannelAdapter {
 
     private final CyberbizApiClient cyberbizApiClient;
-    private String token;  // 由 handler 設置
+    private String token;      // 由 handler 設置（作為 username）
+    private String secret;     // 由 handler 設置（Channel.token2）
 
     /**
-     * 設置 Cyberbiz API token（由 handler 調用）
+     * 設置 Cyberbiz API credentials（由 handler 調用）
+     * @param token  Channel.token（作為 username）
+     * @param secret Channel.token2（作為 secret key）
      */
-    public void setToken(String token) {
+    public void setCredentials(String token, String secret) {
         this.token = token;
+        this.secret = secret;
     }
 
     @Override
@@ -68,16 +72,16 @@ public class CyberbizAdapter implements ChannelAdapter {
     public List<String> fetchOrderList(String channelId, String timeRange) throws Exception {
         log.info("Fetching Cyberbiz order list for channel {} with timeRange: {}", channelId, timeRange);
 
-        if (token == null || token.isEmpty()) {
-            log.error("Token not set for channel {}", channelId);
-            throw new IllegalArgumentException("Token not set - call setToken() first");
+        if (token == null || token.isEmpty() || secret == null || secret.isEmpty()) {
+            log.error("Credentials not set for channel {}", channelId);
+            throw new IllegalArgumentException("Credentials not set - call setCredentials() first");
         }
 
         Set<String> orderIds = new LinkedHashSet<>();
 
         // 第一次呼叫：查詢該時段內建立的訂單
         try {
-            List<String> createdOrders = fetchOrdersCreatedInTimeRange(token, timeRange);
+            List<String> createdOrders = fetchOrdersCreatedInTimeRange(timeRange);
             orderIds.addAll(createdOrders);
             log.debug("Fetched {} orders created in timeRange from Cyberbiz", createdOrders.size());
         } catch (Exception e) {
@@ -87,7 +91,7 @@ public class CyberbizAdapter implements ChannelAdapter {
 
         // 第二次呼叫：查詢該時段內更新的訂單
         try {
-            List<String> updatedOrders = fetchOrdersUpdatedInTimeRange(token, timeRange);
+            List<String> updatedOrders = fetchOrdersUpdatedInTimeRange(timeRange);
             orderIds.addAll(updatedOrders);
             log.debug("Fetched {} orders updated in timeRange from Cyberbiz", updatedOrders.size());
         } catch (Exception e) {
@@ -103,14 +107,14 @@ public class CyberbizAdapter implements ChannelAdapter {
      * 輔助方法：查詢該時段內建立的訂單
      * 模擬 Cyberbiz API: GET /api/order/get_orders?create_time_from=<timestamp>&create_time_to=<timestamp>
      *
-     * 預設時間窗口：過去 1 小時內建立的訂單（新訂單）
+     * 預設時間窗口：過去 7 天內建立的訂單（測試環境用於拉取歷史數據）
      * timeRange 參數目前先記錄但不解析，預留未來擴充
      */
-    private List<String> fetchOrdersCreatedInTimeRange(String token, String timeRange) {
+    private List<String> fetchOrdersCreatedInTimeRange(String timeRange) {
         log.debug("Fetching orders created in timeRange: {}", timeRange);
         long now = Instant.now().getEpochSecond();
-        long oneHourAgo = now - 3600;  // 1 hour window for new orders
-        return cyberbizApiClient.getOrdersCreatedInTimeRange(token, oneHourAgo, now);
+        long sevenDaysAgo = now - (7 * 86400);  // 7 days window for testing
+        return cyberbizApiClient.getOrdersCreatedInTimeRange(token, secret, sevenDaysAgo, now);
     }
 
     /**
@@ -120,11 +124,11 @@ public class CyberbizAdapter implements ChannelAdapter {
      * 預設時間窗口：過去 24 小時內更新的訂單（確保不漏掉已出貨、已完成等狀態更新）
      * timeRange 參數目前先記錄但不解析，預留未來擴充
      */
-    private List<String> fetchOrdersUpdatedInTimeRange(String token, String timeRange) {
+    private List<String> fetchOrdersUpdatedInTimeRange(String timeRange) {
         log.debug("Fetching orders updated in timeRange: {}", timeRange);
         long now = Instant.now().getEpochSecond();
         long oneDayAgo = now - 86400;  // 24 hour window for updated orders
-        return cyberbizApiClient.getOrdersUpdatedInTimeRange(token, oneDayAgo, now);
+        return cyberbizApiClient.getOrdersUpdatedInTimeRange(token, secret, oneDayAgo, now);
     }
 
     /**
@@ -140,13 +144,13 @@ public class CyberbizAdapter implements ChannelAdapter {
     public Map<String, Object> fetchOrderDetail(String channelId, String orderId) throws Exception {
         log.info("Fetching order detail from Cyberbiz for channelId: {}, orderId: {}", channelId, orderId);
 
-        if (token == null || token.isEmpty()) {
-            log.error("Token not set for channel {}", channelId);
-            throw new IllegalArgumentException("Token not set - call setToken() first");
+        if (token == null || token.isEmpty() || secret == null || secret.isEmpty()) {
+            log.error("Credentials not set for channel {}", channelId);
+            throw new IllegalArgumentException("Credentials not set - call setCredentials() first");
         }
 
         // Call the API client to get order detail
-        Map<String, Object> orderDetail = cyberbizApiClient.getOrderDetail(token, orderId);
+        Map<String, Object> orderDetail = cyberbizApiClient.getOrderDetail(token, secret, orderId);
 
         // Ensure required fields are present (with defaults if missing)
         if (!orderDetail.containsKey("items")) {
@@ -200,14 +204,14 @@ public class CyberbizAdapter implements ChannelAdapter {
     public List<Map<String, Object>> fetchReturns(String channelId, String timeRange) throws Exception {
         log.info("Fetching returns from Cyberbiz for channel {} with timeRange: {}", channelId, timeRange);
 
-        if (token == null || token.isEmpty()) {
-            log.error("Token not set for channel {}", channelId);
-            throw new IllegalArgumentException("Token not set - call setToken() first");
+        if (token == null || token.isEmpty() || secret == null || secret.isEmpty()) {
+            log.error("Credentials not set for channel {}", channelId);
+            throw new IllegalArgumentException("Credentials not set - call setCredentials() first");
         }
 
         long now = Instant.now().getEpochSecond();
         long oneHourAgo = now - 3600;  // 1 hour window for recent refunds
-        return cyberbizApiClient.getOrdersWithRefund(token, oneHourAgo, now);
+        return cyberbizApiClient.getOrdersWithRefund(token, secret, oneHourAgo, now);
     }
 
     @Override

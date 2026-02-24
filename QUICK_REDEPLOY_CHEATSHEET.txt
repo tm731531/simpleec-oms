@@ -1,0 +1,163 @@
+╔═══════════════════════════════════════════════════════════════════════════╗
+║                      快速重啟腳本 - 速查表                                 ║
+║                     quick-redeploy.sh CHEATSHEET                            ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+
+📍 位置
+  /home/tom/ONEEC/simpleec-oms/quick-redeploy.sh
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚡ 快速重啟單個服務（推薦用於開發）
+
+修改 Channel Job 代碼 → 快速重啟：
+  $ ./quick-redeploy.sh simpleec-channel-job      # 30-40 秒
+  $ ./quick-redeploy.sh simpleec-channel-shopee-fast
+  $ ./quick-redeploy.sh simpleec-channel-momo-slow
+
+修改 API 代碼 → 快速重啟：
+  $ ./quick-redeploy.sh simpleec-api              # 30-40 秒
+
+修改 Scheduler/Order/Backend Job → 快速重啟：
+  $ ./quick-redeploy.sh simpleec-scheduler-job
+  $ ./quick-redeploy.sh simpleec-order-job
+  $ ./quick-redeploy.sh simpleec-backend-job
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔄 完整重啟所有服務
+
+修改了 docker-compose.yml 或需要完全重啟：
+  $ ./quick-redeploy.sh --all                     # 3-5 分鐘
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📋 查詢信息
+
+列出所有可用的服務：
+  $ ./quick-redeploy.sh --list
+
+查看某個服務的依賴：
+  $ ./quick-redeploy.sh --deps simpleec-channel-job
+
+顯示幫助：
+  $ ./quick-redeploy.sh --help
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔧 完整開發工作流
+
+  1. 修改代碼（編輯 Java 文件）
+
+  2. 本地編譯：
+     $ ./gradlew clean build -x test
+
+  3. 快速重啟（只需 30-60 秒！）：
+     $ ./quick-redeploy.sh simpleec-channel-job
+
+  4. 查看日誌：
+     $ docker logs simpleec-channel-job -f
+
+  5. 測試驗證（API 測試、手動檢查等）
+
+  6. 重複 1-5 快速迭代
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📊 服務分類參考
+
+基礎架構層（9 個）：
+  postgres, redis, kafka, kafka-init, simpleec-kafka-ui
+  simpleec-prometheus, simpleec-grafana, simpleec-loki, simpleec-otel-collector
+  simpleec-tempo
+
+Channel Jobs（14 個 = 7 平台 × fast/slow）：
+  simpleec-channel-momo-{fast,slow}
+  simpleec-channel-shopee-{fast,slow}
+  simpleec-channel-yahoo-{fast,slow}
+  simpleec-channel-pchome-{fast,slow}
+  simpleec-channel-cyberbiz-{fast,slow}
+  simpleec-channel-shopline-{fast,slow}
+  simpleec-channel-shopify-{fast,slow}
+
+System Jobs（5 個）：
+  simpleec-order-job
+  simpleec-scheduler-job
+  simpleec-backend-job
+  simpleec-frontend-job
+  simpleec-retry-job
+
+API & Frontend（4 個）：
+  simpleec-api
+  simpleec-user-app
+  simpleec-admin-app
+  simpleec-nginx
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⏱️ 耗時對比
+
+操作                               耗時           何時使用
+─────────────────────────────────────────────────────────────
+./quick-redeploy.sh <service>     30-60 秒       開發迭代（推薦）
+docker compose up -d --build       3-5 分鐘       完整部署、修改 infrastructure
+docker compose restart <service>   10-15 秒       只重啟容器（不重建鏡像）
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💡 常用組合
+
+修改 Channel Job + 快速迭代：
+  ./gradlew clean build -x test
+  ./quick-redeploy.sh simpleec-channel-job
+  docker logs simpleec-channel-job -f
+
+修改 API + 測試：
+  ./gradlew clean build -x test
+  ./quick-redeploy.sh simpleec-api
+  curl http://localhost:8082/api/health
+
+修改多個服務（逐個重啟）：
+  ./quick-redeploy.sh simpleec-channel-job
+  ./quick-redeploy.sh simpleec-order-job
+
+修改 core 庫（所有服務依賴）：
+  ./gradlew clean build -x test
+  ./quick-redeploy.sh --all
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+❓ 常見問題
+
+Q: 腳本找不到 docker-compose.yml？
+A: 確保在 /home/tom/ONEEC/simpleec-oms 目錄執行
+
+Q: Docker 命令失敗？
+A: 檢查 docker daemon 是否運行：docker ps
+
+Q: 如何只重建而不啟動？
+A: docker compose build --no-cache <service>
+
+Q: 如何查看容器日誌？
+A: docker logs <container-name> -f   # -f 表示 follow（持續顯示）
+
+Q: 如何查看執行中的容器？
+A: docker ps | grep simpleec
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📖 詳細文檔
+
+完整使用指南：
+  docs/0-START/QUICK_REDEPLOY_GUIDE.md
+
+常用命令參考：
+  docs/0-START/QUICK_COMMANDS.md
+
+系統當前狀態：
+  docs/6-OPERATIONS/OPERATIONS_CURRENT_STATUS.md
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+版本：v1.0 (2026-02-24)
+最後更新：Feb 24, 2026

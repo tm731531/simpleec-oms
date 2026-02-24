@@ -18,14 +18,17 @@ public class Channel {
     @Id
     private String id;
 
-    @Column(nullable = false)
+    @Column(name = "merchant_id", nullable = false)
     private String merchantId;
 
-    @Column(nullable = false)
-    private String platformCode;
+    @Column(name = "platform_id", nullable = false)
+    private String platformId;
 
     @Column(nullable = false)
     private String token;
+
+    @Column(name = "token2")
+    private String token2;
 
     @Column(name = "enable_sync", nullable = false)
     private Boolean enableSync;

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.simpleec.channel.adapter.ChannelAdapter;
 import com.simpleec.channel.adapter.CyberbizAdapter;
+import com.simpleec.channeljob.entity.Channel;
 import com.simpleec.channeljob.service.ChannelService;
 import com.simpleec.common.enums.TaskTypeEnum;
 import com.simpleec.common.util.NanoIdUtil;
@@ -54,13 +55,18 @@ public class ModeBOrderListHandler {
         log.info("Processing Mode B order list for {} from {}", merchantId, channelId);
 
         try {
-            // 若是 CyberbizAdapter，設置 token
+            // 若是 CyberbizAdapter，設置 token 和 token2
             if (adapter instanceof CyberbizAdapter) {
-                String token = channelService.getChannelToken(channelId);
-                if (token == null || token.isEmpty()) {
-                    throw new IllegalArgumentException("Channel token not found for: " + channelId);
+                Channel channel = channelService.getChannel(channelId);
+                if (channel == null) {
+                    throw new IllegalArgumentException("Channel not found for: " + channelId);
                 }
-                ((CyberbizAdapter) adapter).setToken(token);
+                String token = channel.getToken();
+                String token2 = channel.getToken2();
+                if (token == null || token.isEmpty() || token2 == null || token2.isEmpty()) {
+                    throw new IllegalArgumentException("Channel credentials not fully configured for: " + channelId);
+                }
+                ((CyberbizAdapter) adapter).setCredentials(token, token2);
             }
 
             // 第 1 步：從 API 拉取訂單 ID 列表（不含詳情）

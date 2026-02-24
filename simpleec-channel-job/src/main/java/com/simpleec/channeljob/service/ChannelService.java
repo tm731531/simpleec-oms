@@ -60,4 +60,12 @@ public class ChannelService {
 
         return channel.getToken();
     }
+
+    /**
+     * Get channel by ID (returns full Channel object with token and token2)
+     */
+    public Channel getChannel(String channelId) {
+        return channelRepository.findById(channelId)
+            .orElse(null);
+    }
 }
