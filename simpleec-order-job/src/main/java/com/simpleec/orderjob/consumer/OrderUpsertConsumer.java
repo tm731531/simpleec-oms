@@ -157,7 +157,19 @@ public class OrderUpsertConsumer {
         }
 
         // 第 3 步：儲存訂單到資料庫
+        log.info("Before saving order - ID: {}, Status: {}, Amount: {}",
+            order.getId(), order.getOrderStatus(), order.getTotalAmount());
         Order savedOrder = orderService.updateOrder(order);
+        log.info("After updateOrder() returned - ID: {}, Status: {}, Amount: {}",
+            savedOrder.getId(), savedOrder.getOrderStatus(), savedOrder.getTotalAmount());
+
+        // ★ 立即驗證訂單是否真的被保存到資料庫
+        Optional<Order> verifyOrder = orderService.findById(savedOrder.getId());
+        if (verifyOrder.isPresent()) {
+            log.info("✓ VERIFIED: Order {} successfully persisted to database", savedOrder.getId());
+        } else {
+            log.error("✗ FAILED: Order {} was NOT persisted to database after updateOrder()!", savedOrder.getId());
+        }
 
         // 第 4 步：更新 Redis hash 快取 — 容錯模式
         try {
