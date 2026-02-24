@@ -214,9 +214,12 @@ public class CyberbizApiClient {
                                         String xDate, String digest) throws Exception {
         StringBuilder headersToSign = new StringBuilder("x-date request-line");
 
-        // 構建簽名基準字符串：包含 x-date 和 request-line
+        // 構建簽名基準字符串：根據 HTTP Signature RFC，request-line 是特殊的偽頭
+        // 格式應該是：
+        // x-date: {value}
+        // {method} {path} HTTP/1.1
         String requestLine = String.format("%s %s HTTP/1.1", method, path);
-        String stringToSign = String.format("x-date: %s\nrequest-line: %s", xDate, requestLine);
+        String stringToSign = String.format("x-date: %s\n%s", xDate, requestLine);
 
         if (digest != null) {
             headersToSign.append(" digest");

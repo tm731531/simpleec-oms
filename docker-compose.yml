@@ -367,7 +367,7 @@ services:
       JOB_CHANNEL_TOPICS: cyberbiz.fast
       JOB_CHANNEL_GROUP_ID: channel-job-cyberbiz
       JOB_CHANNEL_CONCURRENCY: '3'
-      CYBERBIZ_API_BASE_URL: https://api.cyberbiz.io
+      CYBERBIZ_API_BASE_URL: https://api.cyberbiz.co
       CYBERBIZ_API_TOKEN: ${CYBERBIZ_API_TOKEN}
     depends_on:
       postgres:
@@ -396,7 +396,7 @@ services:
       JOB_CHANNEL_TOPICS: cyberbiz.slow
       JOB_CHANNEL_GROUP_ID: channel-job-cyberbiz
       JOB_CHANNEL_CONCURRENCY: '3'
-      CYBERBIZ_API_BASE_URL: https://api.cyberbiz.io
+      CYBERBIZ_API_BASE_URL: https://api.cyberbiz.co
       CYBERBIZ_API_TOKEN: ${CYBERBIZ_API_TOKEN}
     depends_on:
       postgres:
