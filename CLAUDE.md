@@ -24,15 +24,15 @@
 
 | 文檔 | 用途 |
 |------|------|
-| **[OPERATIONS_CURRENT_STATUS.md](OPERATIONS_CURRENT_STATUS.md)** ⭐ | 當前系統狀態、最新修復、故障排除 |
-| **[DOCUMENTATION_INDEX.md](DOCUMENTATION_INDEX.md)** | 30+個文檔的完整導航指南 |
-| **[QUICK_COMMANDS.md](QUICK_COMMANDS.md)** | 可複製貼上的常用命令 |
+| **[OPERATIONS_CURRENT_STATUS.md](docs/6-OPERATIONS/OPERATIONS_CURRENT_STATUS.md)** ⭐ | 當前系統狀態、最新修復、故障排除 |
+| **[DOCUMENTATION_INDEX.md](docs/0-START/DOCUMENTATION_INDEX.md)** | 30+個文檔的完整導航指南 |
+| **[QUICK_COMMANDS.md](docs/0-START/QUICK_COMMANDS.md)** | 可複製貼上的常用命令 |
 
 ### 協作建議
 與Claude合作時：
-1. 查看 **[OPERATIONS_CURRENT_STATUS.md](OPERATIONS_CURRENT_STATUS.md)** 了解當前系統狀態
-2. 用 **[QUICK_COMMANDS.md](QUICK_COMMANDS.md)** 中的命令快速診斷問題
-3. 查看 **[DOCUMENTATION_INDEX.md](DOCUMENTATION_INDEX.md)** 找相關設計文檔
+1. 查看 **[OPERATIONS_CURRENT_STATUS.md](docs/6-OPERATIONS/OPERATIONS_CURRENT_STATUS.md)** 了解當前系統狀態
+2. 用 **[QUICK_COMMANDS.md](docs/0-START/QUICK_COMMANDS.md)** 中的命令快速診斷問題
+3. 查看 **[DOCUMENTATION_INDEX.md](docs/0-START/DOCUMENTATION_INDEX.md)** 找相關設計文檔
 4. 重大修復後更新 OPERATIONS_CURRENT_STATUS.md 中的狀態
 
 ---
@@ -40,7 +40,7 @@
 ## 🔥 最新架構更新 (2026-02-19)
 
 ### 統一訊息結構 (Header/Body)
-所有 Kafka 訊息採用統一結構，詳見 `docs/CORE_CONTRACTS.md`：
+所有 Kafka 訊息採用統一結構，詳見 `docs/3-EVENT-FLOW/CORE_CONTRACTS.md`：
 ```json
 {
   "header": {
@@ -67,7 +67,7 @@
   - 時間窗口（1h, 3d, 5d, 7d 等）是 Channel Job 內部邏輯，不在 Queue 裡
   - 是否需要 detail/return API（根據通路能力和 rate limit）
   - 分頁策略（Shopee cursor, Momo offset 等）
-- **詳見** `docs/CORE_CONTRACTS.md` §4.0 和 `docs/CHANNEL_IMPLEMENTATION_GUIDE.md`
+- **詳見** `docs/3-EVENT-FLOW/CORE_CONTRACTS.md` §4.0 和 `docs/7-IMPLEMENTATION/CHANNEL_IMPLEMENTATION_GUIDE.md`
 
 ### 核心設計：Scheduler 只傳時間戳，Queue 不含 Range
 ```
@@ -91,34 +91,34 @@ Channel Job 內部決策:
 ### 🆕 新人必讀（Feb 24開始）
 | 你要做什麼 | 讀哪份文件 |
 |-----------|-----------|
-| **⭐ 系統當前狀態** | [OPERATIONS_CURRENT_STATUS.md](OPERATIONS_CURRENT_STATUS.md) — 最新修復、API狀態、故障排除 |
-| **⭐ 找文檔導航** | [DOCUMENTATION_INDEX.md](DOCUMENTATION_INDEX.md) — 30+文檔的完整指南 |
-| **⭐ 快速複製命令** | [QUICK_COMMANDS.md](QUICK_COMMANDS.md) — Docker、API測試、Kafka操作 |
+| **⭐ 系統當前狀態** | [OPERATIONS_CURRENT_STATUS.md](docs/6-OPERATIONS/OPERATIONS_CURRENT_STATUS.md) — 最新修復、API狀態、故障排除 |
+| **⭐ 找文檔導航** | [DOCUMENTATION_INDEX.md](docs/0-START/DOCUMENTATION_INDEX.md) — 30+文檔的完整指南 |
+| **⭐ 快速複製命令** | [QUICK_COMMANDS.md](docs/0-START/QUICK_COMMANDS.md) — Docker、API測試、Kafka操作 |
 
 ### 📖 架構和設計
 | 你要做什麼 | 讀哪份文件 |
 |-----------|-----------|
-| **⭐ 理解事件流架構** | `docs/CORE_CONTRACTS.md` — 核心契約定義 |
-| **⭐ 看資料流對應** | `docs/DATA_FLOW_MAPPING.md` — API→Message→Entity |
-| **⭐ 實作新 Channel** | `docs/CHANNEL_IMPLEMENTATION_GUIDE.md` |
-| **⭐ 查 TaskType Handler** | `docs/HANDLER_REGISTRY.md` |
-| 看訊息範例 | `docs/EVENT_SAMPLES.md` — 所有 Topic 訊息範例 |
-| 理解系統全貌 | `DESIGN_v2.md` §0（現狀）→ §1-§15（完整設計） |
-| 看 DB Schema | `docs/SCHEMA.md`（19 張表 DDL） |
-| 看詳細修改歷史 | `REWRITE_PLAN.md`（16 輪演進） |
-| 看事件流設計 | `docs/event-flows/FETCH_ORDERS.md`, `FETCH_PRODUCTS.md` |
-| 看各平台抓取策略 | `docs/event-flows/FETCH_STRATEGY.md` |
-| 看 Entity↔Schema 差異 | `docs/event-flows/DB_ENTITY_GAPS.md` |
-| 看統計設計 | `docs/STATISTICS_DESIGN.md`（多角色統計 + 退貨流程） |
+| **⭐ 理解事件流架構** | `docs/3-EVENT-FLOW/CORE_CONTRACTS.md` — 核心契約定義 |
+| **⭐ 看資料流對應** | `docs/3-EVENT-FLOW/DATA_FLOW_MAPPING.md` — API→Message→Entity |
+| **⭐ 實作新 Channel** | `docs/7-IMPLEMENTATION/CHANNEL_IMPLEMENTATION_GUIDE.md` |
+| **⭐ 查 TaskType Handler** | `docs/3-EVENT-FLOW/HANDLER_REGISTRY.md` |
+| 看訊息範例 | `docs/3-EVENT-FLOW/EVENT_SAMPLES.md` — 所有 Topic 訊息範例 |
+| 理解系統全貌 | `docs/1-ARCHITECTURE/DESIGN_v2.md` §0（現狀）→ §1-§15（完整設計） |
+| 看 DB Schema | `docs/4-SCHEMA/SCHEMA.md`（19 張表 DDL） |
+| 看詳細修改歷史 | 見 `docs/archive/` 中的歷史文檔 |
+| 看事件流設計 | `docs/3-EVENT-FLOW/event-flows/FETCH_ORDERS.md`, `FETCH_PRODUCTS.md` |
+| 看各平台抓取策略 | `docs/3-EVENT-FLOW/event-flows/FETCH_STRATEGY.md` |
+| 看 Entity↔Schema 差異 | `docs/3-EVENT-FLOW/event-flows/DB_ENTITY_GAPS.md` |
+| 看統計設計 | `docs/archive/STATISTICS_DESIGN.md`（多角色統計 + 退貨流程） |
 
 ### 🛠️ 操作和維運
 | 你要做什麼 | 讀哪份文件 |
 |-----------|-----------|
-| 系統啟動和重啟 | [QUICK_COMMANDS.md](QUICK_COMMANDS.md) — 複製貼上命令 |
-| API 測試 | [QUICK_COMMANDS.md](QUICK_COMMANDS.md) 的 "API 測試" 部分 |
-| Kafka 操作 | [QUICK_COMMANDS.md](QUICK_COMMANDS.md) 的 "Kafka 操作" 部分 |
-| systemd 服務修復 | `docker/SYSTEMD_SERVICE_FIX.md` |
-| Docker 操作 | [QUICK_COMMANDS.md](QUICK_COMMANDS.md) 或 `docs/DOCKER_GUIDE.md` |
+| 系統啟動和重啟 | [QUICK_COMMANDS.md](docs/0-START/QUICK_COMMANDS.md) — 複製貼上命令 |
+| API 測試 | [QUICK_COMMANDS.md](docs/0-START/QUICK_COMMANDS.md) 的 "API 測試" 部分 |
+| Kafka 操作 | [QUICK_COMMANDS.md](docs/0-START/QUICK_COMMANDS.md) 的 "Kafka 操作" 部分 |
+| systemd 服務修復 | `docs/6-OPERATIONS/SYSTEMD_SERVICE_FIX.md` |
+| Docker 操作 | [QUICK_COMMANDS.md](docs/0-START/QUICK_COMMANDS.md) 或 `docs/6-OPERATIONS/DOCKER_GUIDE.md` |
 
 ---
 
@@ -300,7 +300,7 @@ isRollback=true (回補訂單)：
 - 任何讀取加密欄位的程式碼必須包在 `EncryptionContext.setMerchantId()` / `clear()` 之間
 
 ### Kafka 訊息
-- **統一 Header/Body 結構**（見 `docs/CORE_CONTRACTS.md`）
+- **統一 Header/Body 結構**（見 `docs/3-EVENT-FLOW/CORE_CONTRACTS.md`）
 - `SchemaVersionHandler.normalize()` 版本驗證；不支援版本 → `task.dlt`
 - `TaskMdcHelper.set(msg)` / `clear()` 在所有 JOB handle() 方法中使用
 
@@ -321,7 +321,7 @@ isRollback=true (回補訂單)：
 ### ★ 抓取策略：Channel 自主
 - **Channel 內部決定**：時間欄位、狀態過濾、分頁策略
 - **外部只給時間範圍**：不指定細節
-- 詳見 `docs/DATA_FLOW_MAPPING.md` §1.3
+- 詳見 `docs/3-EVENT-FLOW/DATA_FLOW_MAPPING.md` §1.3
 
 ---
 
@@ -340,7 +340,7 @@ public class ShopeeOrderHandler {
 }
 ```
 
-完整對應表見 `docs/HANDLER_REGISTRY.md`
+完整對應表見 `docs/3-EVENT-FLOW/HANDLER_REGISTRY.md`
 
 ---
 
@@ -359,7 +359,7 @@ public class ShopeeOrderHandler {
 - 加入 Momo, Yahoo Channel
 - 加入 Return, Shipping 流程
 
-詳見 `docs/STATUS.md`
+詳見相關文檔在 `docs/3-EVENT-FLOW/` 和 `docs/archive/`
 
 ---
 
@@ -367,8 +367,8 @@ public class ShopeeOrderHandler {
 
 ### 工作流程
 1. **描述問題或需求**
-   - 參考 [OPERATIONS_CURRENT_STATUS.md](OPERATIONS_CURRENT_STATUS.md) 了解當前狀態
-   - 用 [QUICK_COMMANDS.md](QUICK_COMMANDS.md) 中的命令快速診斷
+   - 參考 [OPERATIONS_CURRENT_STATUS.md](docs/6-OPERATIONS/OPERATIONS_CURRENT_STATUS.md) 了解當前狀態
+   - 用 [QUICK_COMMANDS.md](docs/0-START/QUICK_COMMANDS.md) 中的命令快速診斷
 
 2. **規劃修復**
    - Claude 會查看相關代碼和文檔
@@ -376,11 +376,11 @@ public class ShopeeOrderHandler {
 
 3. **實施和測試**
    - 修改代碼
-   - 本地測試（使用 QUICK_COMMANDS.md）
+   - 本地測試（使用 [QUICK_COMMANDS.md](docs/0-START/QUICK_COMMANDS.md)）
    - 查看日誌驗證
 
 4. **更新文檔**
-   - 修復完成後，更新 OPERATIONS_CURRENT_STATUS.md
+   - 修復完成後，更新 [OPERATIONS_CURRENT_STATUS.md](docs/6-OPERATIONS/OPERATIONS_CURRENT_STATUS.md)
    - 提交時使用清晰的 commit 訊息
 
 ### 提交規範
