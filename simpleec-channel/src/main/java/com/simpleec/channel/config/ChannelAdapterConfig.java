@@ -7,34 +7,21 @@ import com.simpleec.channel.adapter.ShopifyAdapter;
 import com.simpleec.channel.adapter.ShopeeAdapter;
 import com.simpleec.channel.api.CyberbizApiClient;
 import lombok.RequiredArgsConstructor;
-import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.web.client.RestTemplate;
-
-import java.time.Duration;
 
 /**
  * Channel Adapter 配置類
  * 統一管理所有通路適配器為 Spring Bean
+ *
+ * Note: RestTemplate bean is defined in RestTemplateConfig (channel-job module)
+ * to avoid duplicate bean definitions across modules
  */
 @Configuration
 @RequiredArgsConstructor
 public class ChannelAdapterConfig {
 
     private final CyberbizApiClient cyberbizApiClient;
-    private final RestTemplateBuilder restTemplateBuilder;
-
-    /**
-     * 建立 RestTemplate bean 用於 HTTP 呼叫
-     */
-    @Bean
-    public RestTemplate restTemplate() {
-        return restTemplateBuilder
-                .setConnectTimeout(Duration.ofSeconds(10))
-                .setReadTimeout(Duration.ofSeconds(30))
-                .build();
-    }
 
     /**
      * 註冊 Cyberbiz 適配器

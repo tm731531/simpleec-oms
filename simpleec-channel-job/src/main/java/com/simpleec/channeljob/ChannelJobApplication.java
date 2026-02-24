@@ -16,12 +16,13 @@ import org.springframework.stereotype.Component;
         "com.simpleec.common"
     },
     exclude = {
-        org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration.class,
-        org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration.class,
         com.simpleec.core.config.ServiceAutoConfiguration.class
     }
 )
 @Import(KafkaConfig.class)
+@org.springframework.data.jpa.repository.config.EnableJpaRepositories(
+    basePackages = "com.simpleec.channeljob.repository"
+)
 public class ChannelJobApplication {
     public static void main(String[] args) {
         SpringApplication.run(ChannelJobApplication.class, args);
