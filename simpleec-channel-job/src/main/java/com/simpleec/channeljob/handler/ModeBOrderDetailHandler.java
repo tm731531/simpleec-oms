@@ -84,7 +84,7 @@ public class ModeBOrderDetailHandler {
             log.debug("Calculated order hash: {}", orderHash.substring(0, 8) + "...");
 
             // 第 4 步：發送 ORDER_UPSERT 消息
-            sendOrderUpsertMessage(merchantId, channelId, channelOrderId, orderHash, orderData);
+            sendOrderUpsertMessage(merchantId, channelId, channelOrderId, orderHash, orderData, adapter.getPlatformCode());
 
             log.info("Successfully processed Mode B order detail: {}", channelOrderId);
 
@@ -99,12 +99,22 @@ public class ModeBOrderDetailHandler {
      *
      * OMS Schema:
      * {
-     *   "status": "PENDING|CONFIRMED|READY_TO_SHIP|SHIPPED|COMPLETED|CANCELLED",
+     *   "orderStatus": "PENDING|CONFIRMED|READY_TO_SHIP|SHIPPED|COMPLETED|CANCELLED",
      *   "totalAmount": 3200.0,
+     *   "shippingFee": 60.0,
+     *   "discountAmount": 0.0,
      *   "items": [...],
      *   "buyerInfo": {...},
+     *   "buyerName": "王小明",
+     *   "buyerPhone": "0912345678",
+     *   "buyerEmail": "wang@example.com",
      *   "shippingInfo": {...},
-     *   "createdAt": "2024-02-20T10:30:00Z"
+     *   "shippingAddress": "台北市信義區",
+     *   "shippingMethod": "HOME_DELIVERY",
+     *   "paymentMethod": "CREDIT_CARD",
+     *   "channelCreatedAt": "2024-02-20T10:30:00Z",
+     *   "paidAt": "2024-02-20T10:31:00Z",
+     *   "shippedAt": null
      * }
      */
     private ObjectNode buildOmsOrderData(Map<String, Object> channelData) {
@@ -113,7 +123,7 @@ public class ModeBOrderDetailHandler {
         // 1. 轉換訂單狀態
         String channelStatus = extractString(channelData, "status", "");
         String omsStatus = mapChannelStatusToOMS(channelStatus);
-        omsData.put("status", omsStatus);
+        omsData.put("orderStatus", omsStatus);
 
         // 2. 金額資訊（支援多層結構）
         Object amountObj = channelData.get("amount_info");
@@ -128,14 +138,25 @@ public class ModeBOrderDetailHandler {
                 channelData.get("total_amount").toString() : "0");
         }
 
-        // 3. 商品清單（轉換為 JSON 字符串）
+        // 2.5 Shipping Fee
+        Object shippingFeeObj = channelData.get("shipping_fee");
+        if (shippingFeeObj != null) {
+            omsData.put("shippingFee", shippingFeeObj.toString());
+        }
+
+        // 2.7 Discount Amount
+        Object discountObj = channelData.get("discount_amount");
+        if (discountObj != null) {
+            omsData.put("discountAmount", discountObj.toString());
+        }
+
+        // 3. 商品清單（使用 JSON 數組，不轉字符串，與 Mode A 一致）
         List<?> itemsList = (List<?>) channelData.get("items");
         if (itemsList != null) {
             try {
-                omsData.put("items", objectMapper.writeValueAsString(itemsList));
+                omsData.set("items", objectMapper.valueToTree(itemsList));
             } catch (Exception e) {
-                log.warn("Failed to serialize items", e);
-                omsData.put("items", "[]");
+                log.warn("Failed to set items", e);
             }
         }
 
@@ -143,9 +164,23 @@ public class ModeBOrderDetailHandler {
         Map<String, Object> buyerInfo = (Map<String, Object>) channelData.get("buyer_info");
         if (buyerInfo != null) {
             try {
-                omsData.put("buyerInfo", objectMapper.writeValueAsString(buyerInfo));
+                omsData.set("buyerInfo", objectMapper.valueToTree(buyerInfo));
+
+                // 提取買家標量字段
+                Object nameObj = buyerInfo.get("name");
+                if (nameObj != null) {
+                    omsData.put("buyerName", nameObj.toString());
+                }
+                Object phoneObj = buyerInfo.get("mobile") != null ? buyerInfo.get("mobile") : buyerInfo.get("phone");
+                if (phoneObj != null) {
+                    omsData.put("buyerPhone", phoneObj.toString());
+                }
+                Object emailObj = buyerInfo.get("email");
+                if (emailObj != null) {
+                    omsData.put("buyerEmail", emailObj.toString());
+                }
             } catch (Exception e) {
-                log.warn("Failed to serialize buyer info", e);
+                log.warn("Failed to set buyer info", e);
             }
         }
 
@@ -153,15 +188,47 @@ public class ModeBOrderDetailHandler {
         Map<String, Object> shippingInfo = (Map<String, Object>) channelData.get("shipping_info");
         if (shippingInfo != null) {
             try {
-                omsData.put("shippingInfo", objectMapper.writeValueAsString(shippingInfo));
+                omsData.set("shippingInfo", objectMapper.valueToTree(shippingInfo));
+
+                // 提取配送標量字段
+                Object addressObj = shippingInfo.get("address");
+                if (addressObj != null) {
+                    omsData.put("shippingAddress", addressObj.toString());
+                }
             } catch (Exception e) {
-                log.warn("Failed to serialize shipping info", e);
+                log.warn("Failed to set shipping info", e);
             }
         }
 
-        // 6. 建立時間（ISO-8601 格式）
+        // 5.5 Shipping Method
+        Object shippingMethodObj = channelData.get("shipping_method");
+        if (shippingMethodObj == null) shippingMethodObj = channelData.get("delivery_method");
+        if (shippingMethodObj != null) {
+            omsData.put("shippingMethod", shippingMethodObj.toString());
+        }
+
+        // 5.7 Payment Method
+        Object paymentMethodObj = channelData.get("payment_method");
+        if (paymentMethodObj == null) paymentMethodObj = channelData.get("payment_type");
+        if (paymentMethodObj != null) {
+            omsData.put("paymentMethod", paymentMethodObj.toString());
+        }
+
+        // 6. 建立時間（通路訂單建立時間，ISO-8601 格式）
         String createdAt = extractString(channelData, "created_at", Instant.now().toString());
-        omsData.put("createdAt", createdAt);
+        omsData.put("channelCreatedAt", createdAt);
+
+        // 6.5 Paid At
+        Object paidObj = channelData.get("paid_at");
+        if (paidObj != null) {
+            omsData.put("paidAt", paidObj.toString());
+        }
+
+        // 6.7 Shipped At
+        Object shippedObj = channelData.get("shipped_at");
+        if (shippedObj != null) {
+            omsData.put("shippedAt", shippedObj.toString());
+        }
 
         return omsData;
     }
@@ -187,7 +254,7 @@ public class ModeBOrderDetailHandler {
      * 計算訂單 Hash（與 Mode A 相同邏輯）
      *
      * Hash 只包含會變動的業務欄位：
-     * - status
+     * - orderStatus
      * - totalAmount
      * - items
      * - buyerInfo
@@ -199,20 +266,20 @@ public class ModeBOrderDetailHandler {
         try {
             TreeMap<String, Object> sortedData = new TreeMap<>();
 
-            if (omsData.has("status") && !omsData.get("status").isNull()) {
-                sortedData.put("status", omsData.get("status").asText());
+            if (omsData.has("orderStatus") && !omsData.get("orderStatus").isNull()) {
+                sortedData.put("status", omsData.get("orderStatus").asText());
             }
             if (omsData.has("totalAmount") && !omsData.get("totalAmount").isNull()) {
                 sortedData.put("totalAmount", omsData.get("totalAmount").asText());
             }
             if (omsData.has("items") && !omsData.get("items").isNull()) {
-                sortedData.put("items", omsData.get("items").asText());
+                sortedData.put("items", omsData.get("items").toString());
             }
             if (omsData.has("buyerInfo") && !omsData.get("buyerInfo").isNull()) {
-                sortedData.put("buyerInfo", omsData.get("buyerInfo").asText());
+                sortedData.put("buyerInfo", omsData.get("buyerInfo").toString());
             }
             if (omsData.has("shippingInfo") && !omsData.get("shippingInfo").isNull()) {
-                sortedData.put("shippingInfo", omsData.get("shippingInfo").asText());
+                sortedData.put("shippingInfo", omsData.get("shippingInfo").toString());
             }
 
             String json = objectMapper.writeValueAsString(sortedData);
@@ -227,18 +294,22 @@ public class ModeBOrderDetailHandler {
      * 發送 ORDER_UPSERT 消息到 order.process topic
      */
     private void sendOrderUpsertMessage(String merchantId, String channelId, String channelOrderId,
-                                        String orderHash, ObjectNode orderData) throws Exception {
+                                        String orderHash, ObjectNode orderData, String platformCode) throws Exception {
 
         ObjectNode message = objectMapper.createObjectNode();
 
         // 構建 header
         ObjectNode header = objectMapper.createObjectNode();
         header.put("messageId", "msg_" + NanoIdUtil.generate());
+        header.put("requestId", "req_" + NanoIdUtil.generate());
         header.put("taskType", TaskTypeEnum.ORDER_UPSERT.getCode());
+        header.put("platformId", platformCode);
         header.put("channelId", channelId);
         header.put("merchantId", merchantId);
         header.put("timestamp", Instant.now().toString());
-        header.put("version", "1.0");
+        header.put("source", "channel_job");
+        header.put("version", 1);
+        header.put("isRollback", false);
         message.set("header", header);
 
         // 構建 body

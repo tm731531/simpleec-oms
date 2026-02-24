@@ -19,7 +19,9 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Optional;
 
 /**
@@ -45,11 +47,10 @@ public class OrderUpsertConsumer {
      */
     @KafkaListener(topics = "order.process", groupId = "order-job-group", concurrency = "3")
     @Transactional
-    public void consumeOrderUpsert(@Payload String message,
+    public void consumeOrderUpsert(@Payload JsonNode json,
                                    @Header(name = "kafka_receivedPartitionId") int partition,
                                    Acknowledgment acknowledgment) {
         try {
-            JsonNode json = objectMapper.readTree(message);
             JsonNode header = json.get("header");
             JsonNode body = json.get("body");
 
@@ -67,12 +68,13 @@ public class OrderUpsertConsumer {
             String channelOrderId = body.get("channelOrderId").asText();
             String orderHash = body.get("orderHash").asText();
             JsonNode orderDataJson = body.get("orderData");
+            boolean isRollback = header.has("isRollback") ? header.get("isRollback").asBoolean() : false;
 
-            log.info("Processing ORDER_UPSERT: {} from {} (hash: {})",
-                channelOrderId, channelId, orderHash.substring(0, 8) + "...");
+            log.info("Processing ORDER_UPSERT: {} from {} (hash: {}, isRollback: {})",
+                channelOrderId, channelId, orderHash.substring(0, 8) + "...", isRollback);
 
             // 執行訂單入庫邏輯
-            handleOrderUpsert(merchantId, channelId, channelOrderId, orderHash, orderDataJson);
+            handleOrderUpsert(merchantId, channelId, channelOrderId, orderHash, orderDataJson, isRollback);
 
             // 手動提交 offset（確保訂單已入庫）
             acknowledgment.acknowledge();
@@ -83,7 +85,7 @@ public class OrderUpsertConsumer {
             log.error("Error processing ORDER_UPSERT: {}", e.getMessage(), e);
             try {
                 // 發送到失敗隊列供人工處理或異步重試
-                kafkaTemplate.send("task.failed", "OrderUpsert", message);
+                kafkaTemplate.send("task.failed", "OrderUpsert", json);
                 log.info("Message sent to task.failed topic");
             } catch (Exception sendError) {
                 log.error("Failed to send message to task.failed", sendError);
@@ -103,7 +105,7 @@ public class OrderUpsertConsumer {
      * 4. 更新 Redis hash 快取
      */
     private void handleOrderUpsert(String merchantId, String channelId, String channelOrderId,
-                                    String orderHash, JsonNode orderDataJson) throws Exception {
+                                    String orderHash, JsonNode orderDataJson, boolean isRollback) throws Exception {
 
         // 第 0 步：構建 Redis Key
         String redisKey = RedisKeyUtil.orderHashKey(merchantId, channelId, channelOrderId);
@@ -128,7 +130,7 @@ public class OrderUpsertConsumer {
 
             if (!orderHash.equals(dbOrderHash)) {
                 // Hash 不同 → 有實質變化 → 執行 UPDATE
-                order = updateOrderFromData(order, orderDataJson);
+                order = updateOrderFromData(order, orderDataJson, isRollback);
                 log.info("Updated order: {} from channel {} (hash changed)",
                     order.getId(), channelId);
             } else {
@@ -140,7 +142,7 @@ public class OrderUpsertConsumer {
             }
         } else {
             // INSERT 新訂單
-            order = createOrderFromData(merchantId, channelId, channelOrderId, orderDataJson);
+            order = createOrderFromData(merchantId, channelId, channelOrderId, orderDataJson, isRollback);
             log.info("Created new order: {} from channel {}", order.getId(), channelId);
         }
 
@@ -160,7 +162,7 @@ public class OrderUpsertConsumer {
      * 從 API 數據創建 Order 實體
      */
     private Order createOrderFromData(String merchantId, String channelId, String channelOrderId,
-                                      JsonNode orderDataJson) throws Exception {
+                                      JsonNode orderDataJson, boolean isRollback) throws Exception {
 
         Order order = new Order();
         order.setMerchantId(merchantId);
@@ -168,7 +170,7 @@ public class OrderUpsertConsumer {
         order.setChannelOrderId(channelOrderId);
 
         // 填充訂單數據
-        populateOrderFromData(order, orderDataJson);
+        populateOrderFromData(order, orderDataJson, isRollback);
 
         return order;
     }
@@ -176,50 +178,130 @@ public class OrderUpsertConsumer {
     /**
      * 更新現有 Order 實體
      */
-    private Order updateOrderFromData(Order order, JsonNode orderDataJson) throws Exception {
-        populateOrderFromData(order, orderDataJson);
+    private Order updateOrderFromData(Order order, JsonNode orderDataJson, boolean isRollback) throws Exception {
+        populateOrderFromData(order, orderDataJson, isRollback);
         return order;
     }
 
     /**
      * 從 API 數據填充 Order 實體
      */
-    private void populateOrderFromData(Order order, JsonNode orderDataJson) throws Exception {
-        if (orderDataJson.has("status")) {
-            String status = orderDataJson.get("status").asText();
+    private void populateOrderFromData(Order order, JsonNode orderDataJson, boolean isRollback) throws Exception {
+        // 訂單狀態
+        if (orderDataJson.has("orderStatus")) {
+            String status = orderDataJson.get("orderStatus").asText();
             order.setOrderStatus(OrderStatusEnum.fromCode(status));
         }
 
+        // 總金額
         if (orderDataJson.has("totalAmount")) {
             order.setTotalAmount(
                 new java.math.BigDecimal(orderDataJson.get("totalAmount").asText())
             );
         }
 
+        // 運費
+        if (orderDataJson.has("shippingFee")) {
+            order.setShippingFee(
+                new java.math.BigDecimal(orderDataJson.get("shippingFee").asText())
+            );
+        }
+
+        // 折扣金額
+        if (orderDataJson.has("discountAmount")) {
+            order.setDiscountAmount(
+                new java.math.BigDecimal(orderDataJson.get("discountAmount").asText())
+            );
+        }
+
+        // 商品清單
         if (orderDataJson.has("items")) {
             order.setItems(objectMapper.writeValueAsString(orderDataJson.get("items")));
         }
 
+        // 買家資訊（JSON）
         if (orderDataJson.has("buyerInfo")) {
             order.setBuyerInfo(objectMapper.writeValueAsString(orderDataJson.get("buyerInfo")));
         }
 
+        // 配送資訊（JSON）
         if (orderDataJson.has("shippingInfo")) {
             order.setShippingInfo(objectMapper.writeValueAsString(orderDataJson.get("shippingInfo")));
         }
 
-        if (orderDataJson.has("createdAt")) {
-            order.setChannelCreatedAt(
-                LocalDateTime.parse(orderDataJson.get("createdAt").asText())
-            );
+        // 通路訂單建立時間（ISO-8601，可能含 Z 後綴）
+        if (orderDataJson.has("channelCreatedAt")) {
+            String createdAtStr = orderDataJson.get("channelCreatedAt").asText();
+            try {
+                // 使用 Instant.parse() 支援 ISO-8601 with Z suffix
+                LocalDateTime createdAt = Instant.parse(createdAtStr)
+                    .atZone(ZoneId.of("UTC"))
+                    .toLocalDateTime();
+                order.setChannelCreatedAt(createdAt);
+            } catch (Exception e) {
+                log.warn("Failed to parse channelCreatedAt: {}", createdAtStr, e);
+            }
         }
 
-        // 設置為非回補訂單
-        order.setIsRollback(false);
+        // 支付時間
+        if (orderDataJson.has("paidAt")) {
+            String paidAtStr = orderDataJson.get("paidAt").asText();
+            try {
+                LocalDateTime paidAt = Instant.parse(paidAtStr)
+                    .atZone(ZoneId.of("UTC"))
+                    .toLocalDateTime();
+                order.setPaidAt(paidAt);
+            } catch (Exception e) {
+                log.warn("Failed to parse paidAt: {}", paidAtStr, e);
+            }
+        }
+
+        // 配送時間
+        if (orderDataJson.has("shippedAt")) {
+            String shippedAtStr = orderDataJson.get("shippedAt").asText();
+            try {
+                LocalDateTime shippedAt = Instant.parse(shippedAtStr)
+                    .atZone(ZoneId.of("UTC"))
+                    .toLocalDateTime();
+                order.setShippedAt(shippedAt);
+            } catch (Exception e) {
+                log.warn("Failed to parse shippedAt: {}", shippedAtStr, e);
+            }
+        }
+
+        // 提取買家標量字段
+        if (orderDataJson.has("buyerName")) {
+            order.setBuyerName(orderDataJson.get("buyerName").asText());
+        }
+
+        if (orderDataJson.has("buyerPhone")) {
+            order.setBuyerPhone(orderDataJson.get("buyerPhone").asText());
+        }
+
+        if (orderDataJson.has("buyerEmail")) {
+            order.setBuyerEmail(orderDataJson.get("buyerEmail").asText());
+        }
+
+        // 配送相關標量字段
+        if (orderDataJson.has("shippingAddress")) {
+            order.setShippingAddress(orderDataJson.get("shippingAddress").asText());
+        }
+
+        if (orderDataJson.has("paymentMethod")) {
+            order.setPaymentMethod(orderDataJson.get("paymentMethod").asText());
+        }
+
+        if (orderDataJson.has("shippingMethod")) {
+            order.setShippingMethod(orderDataJson.get("shippingMethod").asText());
+        }
+
+        // 設置回補訂單標籤（從 header 讀取）
+        order.setIsRollback(isRollback);
     }
 
     /**
      * 計算訂單 Hash（比對用）
+     * 只包含會變動的業務欄位，與 Handler 邏輯保持一致
      */
     private String calculateOrderHash(Order order, JsonNode orderDataJson) {
         try {
