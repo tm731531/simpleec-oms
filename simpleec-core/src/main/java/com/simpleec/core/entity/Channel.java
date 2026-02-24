@@ -32,6 +32,24 @@ public class Channel {
     @Column(name = "channel_name", length = 256)
     private String channelName;
 
+    @Column(name = "multi_spec", nullable = false)
+    private Boolean multiSpec = false;
+
+    @Column(name = "token", nullable = false)
+    private String token;
+
+    @Column(name = "token2", length = 4096)
+    private String token2;
+
+    @Column(name = "token3", length = 4096)
+    private String token3;
+
+    @Column(name = "token4", length = 4096)
+    private String token4;
+
+    @Column(name = "token5", length = 4096)
+    private String token5;
+
     @Column(name = "actived", nullable = false)
     private Boolean actived = true;
 
@@ -40,6 +58,12 @@ public class Channel {
 
     @Column(name = "enable_sync", nullable = false)
     private Boolean enableSync = false;
+
+    @Column(name = "first_sync_start_time")
+    private LocalDateTime firstSyncStartTime;
+
+    @Column(name = "first_sync_end_time")
+    private LocalDateTime firstSyncEndTime;
 
     @Column(name = "last_sync_time")
     private LocalDateTime lastSyncTime;

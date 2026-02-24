@@ -57,26 +57,51 @@ class HealthCheckIntegrationTest {
 
     @Test
     void testHealthCheckSchedulerFlow_WithEnabledChannels() {
-        // Setup: Create test data
+        // Setup: Create test platforms first
+        Platform platform1 = new Platform();
+        platform1.setId("shopee");
+        platform1.setPlatformName("Shopee");
+        platform1.setQueueTopic("task.channel.shopee");
+        platform1.setActived(true);
+        platformRepository.save(platform1);
+
+        Platform platform2 = new Platform();
+        platform2.setId("momo");
+        platform2.setPlatformName("MOMO");
+        platform2.setQueueTopic("task.channel.momo");
+        platform2.setActived(true);
+        platformRepository.save(platform2);
+
+        Platform platform3 = new Platform();
+        platform3.setId("yahoo");
+        platform3.setPlatformName("Yahoo");
+        platform3.setQueueTopic("task.channel.yahoo");
+        platform3.setActived(true);
+        platformRepository.save(platform3);
+
+        // Setup: Create test channels
         Channel channel1 = new Channel();
         channel1.setId("channel-001");
         channel1.setMerchantId("merchant-001");
-        channel1.setPlatformCode("shopee");
-        channel1.setEnabledSync(true);
+        channel1.setPlatformId("shopee");
+        channel1.setEnableSync(true);
+        channel1.setActived(true);
         channelRepository.save(channel1);
 
         Channel channel2 = new Channel();
         channel2.setId("channel-002");
         channel2.setMerchantId("merchant-002");
-        channel2.setPlatformCode("momo");
-        channel2.setEnabledSync(true);
+        channel2.setPlatformId("momo");
+        channel2.setEnableSync(true);
+        channel2.setActived(true);
         channelRepository.save(channel2);
 
         Channel disabledChannel = new Channel();
         disabledChannel.setId("channel-003");
         disabledChannel.setMerchantId("merchant-003");
-        disabledChannel.setPlatformCode("yahoo");
-        disabledChannel.setEnabledSync(false);
+        disabledChannel.setPlatformId("yahoo");
+        disabledChannel.setEnableSync(false);
+        disabledChannel.setActived(true);
         channelRepository.save(disabledChannel);
 
         // Act: Trigger health check
@@ -94,20 +119,23 @@ class HealthCheckIntegrationTest {
     void testHealthCheckSchedulerFlow_WithActivePlatforms() {
         // Setup: Create test platforms
         Platform platform1 = new Platform();
-        platform1.setCode("shopee");
-        platform1.setName("Shopee");
+        platform1.setId("shopee");
+        platform1.setPlatformName("Shopee");
+        platform1.setQueueTopic("task.channel.shopee");
         platform1.setActived(true);
         platformRepository.save(platform1);
 
         Platform platform2 = new Platform();
-        platform2.setCode("momo");
-        platform2.setName("MOMO");
+        platform2.setId("momo");
+        platform2.setPlatformName("MOMO");
+        platform2.setQueueTopic("task.channel.momo");
         platform2.setActived(true);
         platformRepository.save(platform2);
 
         Platform inactivePlatform = new Platform();
-        inactivePlatform.setCode("inactive");
-        inactivePlatform.setName("Inactive Platform");
+        inactivePlatform.setId("inactive");
+        inactivePlatform.setPlatformName("Inactive Platform");
+        inactivePlatform.setQueueTopic("task.channel.inactive");
         inactivePlatform.setActived(false);
         platformRepository.save(inactivePlatform);
 
@@ -117,19 +145,27 @@ class HealthCheckIntegrationTest {
         // Assert: Verify active platforms were queried
         List<Platform> activePlatforms = channelService.findActivePlatforms();
         assertEquals(2, activePlatforms.size());
-        assertTrue(activePlatforms.stream().anyMatch(p -> p.getCode().equals("shopee")));
-        assertTrue(activePlatforms.stream().anyMatch(p -> p.getCode().equals("momo")));
-        assertFalse(activePlatforms.stream().anyMatch(p -> p.getCode().equals("inactive")));
+        assertTrue(activePlatforms.stream().anyMatch(p -> p.getId().equals("shopee")));
+        assertTrue(activePlatforms.stream().anyMatch(p -> p.getId().equals("momo")));
+        assertFalse(activePlatforms.stream().anyMatch(p -> p.getId().equals("inactive")));
     }
 
     @Test
     void testHealthCheckMessagePublishing() {
-        // Setup: Create a test channel
+        // Setup: Create a test platform and channel
+        Platform platform = new Platform();
+        platform.setId("shopee");
+        platform.setPlatformName("Shopee");
+        platform.setQueueTopic("task.channel.shopee");
+        platform.setActived(true);
+        platformRepository.save(platform);
+
         Channel channel = new Channel();
         channel.setId("test-channel");
         channel.setMerchantId("test-merchant");
-        channel.setPlatformCode("shopee");
-        channel.setEnabledSync(true);
+        channel.setPlatformId("shopee");
+        channel.setEnableSync(true);
+        channel.setActived(true);
         channelRepository.save(channel);
 
         // Act: Create and publish health check message
@@ -141,7 +177,7 @@ class HealthCheckIntegrationTest {
         message.setTimestamp(System.currentTimeMillis());
 
         assertDoesNotThrow(() -> {
-            kafkaProducer.publishToTopic("shopee.fast", "test-channel", message);
+            kafkaProducer.publishToTopic("task.channel.shopee.fast", "test-channel", message);
         });
     }
 
@@ -149,8 +185,9 @@ class HealthCheckIntegrationTest {
     void testPlatformHealthCheckMessagePublishing() {
         // Setup: Create a test platform
         Platform platform = new Platform();
-        platform.setCode("shopee");
-        platform.setName("Shopee");
+        platform.setId("shopee");
+        platform.setPlatformName("Shopee");
+        platform.setQueueTopic("task.channel.shopee");
         platform.setActived(true);
         platformRepository.save(platform);
 
@@ -161,18 +198,26 @@ class HealthCheckIntegrationTest {
         message.setTimestamp(System.currentTimeMillis());
 
         assertDoesNotThrow(() -> {
-            kafkaProducer.publishToTopic("shopee.fast", "shopee-platform", message);
+            kafkaProducer.publishToTopic("task.channel.shopee.fast", "shopee-platform", message);
         });
     }
 
     @Test
     void testSchedulerDoesNotPublishForDisabledChannels() {
-        // Setup: Create only disabled channels
+        // Setup: Create platform and disabled channel
+        Platform platform = new Platform();
+        platform.setId("shopee");
+        platform.setPlatformName("Shopee");
+        platform.setQueueTopic("task.channel.shopee");
+        platform.setActived(true);
+        platformRepository.save(platform);
+
         Channel disabledChannel = new Channel();
         disabledChannel.setId("disabled-001");
         disabledChannel.setMerchantId("merchant-001");
-        disabledChannel.setPlatformCode("shopee");
-        disabledChannel.setEnabledSync(false);
+        disabledChannel.setPlatformId("shopee");
+        disabledChannel.setEnableSync(false);
+        disabledChannel.setActived(true);
         channelRepository.save(disabledChannel);
 
         // Act: Trigger health check
@@ -187,8 +232,9 @@ class HealthCheckIntegrationTest {
     void testSchedulerDoesNotPublishForInactivePlatforms() {
         // Setup: Create only inactive platforms
         Platform inactivePlatform = new Platform();
-        inactivePlatform.setCode("inactive");
-        inactivePlatform.setName("Inactive");
+        inactivePlatform.setId("inactive");
+        inactivePlatform.setPlatformName("Inactive");
+        inactivePlatform.setQueueTopic("task.channel.inactive");
         inactivePlatform.setActived(false);
         platformRepository.save(inactivePlatform);
 
@@ -202,12 +248,20 @@ class HealthCheckIntegrationTest {
 
     @Test
     void testHealthCheckSchedulerMessageFormat() {
-        // Setup
+        // Setup: Create platform and channel
+        Platform platform = new Platform();
+        platform.setId("shopee");
+        platform.setPlatformName("Shopee");
+        platform.setQueueTopic("task.channel.shopee");
+        platform.setActived(true);
+        platformRepository.save(platform);
+
         Channel channel = new Channel();
         channel.setId("format-test");
         channel.setMerchantId("merchant-001");
-        channel.setPlatformCode("shopee");
-        channel.setEnabledSync(true);
+        channel.setPlatformId("shopee");
+        channel.setEnableSync(true);
+        channel.setActived(true);
         channelRepository.save(channel);
 
         // Create message
@@ -229,12 +283,13 @@ class HealthCheckIntegrationTest {
     @Test
     void testMultiplePlatformsHealthCheck() {
         // Setup: Create multiple platforms
-        String[] platforms = {"shopee", "momo", "yahoo", "pchome", "cyberbiz", "shopline", "shopify"};
+        String[] platformIds = {"shopee", "momo", "yahoo", "pchome", "cyberbiz", "shopline", "shopify"};
 
-        for (String platformCode : platforms) {
+        for (String platformId : platformIds) {
             Platform platform = new Platform();
-            platform.setCode(platformCode);
-            platform.setName(platformCode.toUpperCase());
+            platform.setId(platformId);
+            platform.setPlatformName(platformId.toUpperCase());
+            platform.setQueueTopic("task.channel." + platformId);
             platform.setActived(true);
             platformRepository.save(platform);
         }

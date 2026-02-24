@@ -19,7 +19,7 @@ public class Platform {
     private String id;
 
     @Column(name = "platform_name")
-    private String name;
+    private String platformName;
 
     @Column(name = "queue_topic")
     private String queueTopic;
