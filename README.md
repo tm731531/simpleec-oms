@@ -24,7 +24,7 @@ git clone https://github.com/tm731531/simpleec-oms.git
 cd simpleec-oms
 
 # 方式一：使用啟動腳本（推薦）
-bash start-all.sh
+bash scripts/start-all.sh
 
 # 方式二：使用 Docker Compose
 docker compose up -d

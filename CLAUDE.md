@@ -114,9 +114,10 @@ Channel Job 內部決策:
 ### 🛠️ 操作和維運
 | 你要做什麼 | 讀哪份文件 |
 |-----------|-----------|
-| 系統啟動和重啟 | [QUICK_COMMANDS.md](docs/0-START/QUICK_COMMANDS.md) — 複製貼上命令 |
+| 系統啟動和重啟 | [QUICK_COMMANDS.md](docs/0-START/QUICK_COMMANDS.md) 或 [SCRIPTS_GUIDE.md](docs/0-START/SCRIPTS_GUIDE.md) |
+| 腳本使用指南 | [SCRIPTS_GUIDE.md](docs/0-START/SCRIPTS_GUIDE.md) — 所有腳本說明與用法 |
 | API 測試 | [QUICK_COMMANDS.md](docs/0-START/QUICK_COMMANDS.md) 的 "API 測試" 部分 |
-| Kafka 操作 | [QUICK_COMMANDS.md](docs/0-START/QUICK_COMMANDS.md) 的 "Kafka 操作" 部分 |
+| Kafka 操作 | [QUICK_COMMANDS.md](docs/0-START/QUICK_COMMANDS.md) 或執行 `bash kafka-topic-manager.sh` |
 | systemd 服務修復 | `docs/6-OPERATIONS/SYSTEMD_SERVICE_FIX.md` |
 | Docker 操作 | [QUICK_COMMANDS.md](docs/0-START/QUICK_COMMANDS.md) 或 `docs/6-OPERATIONS/DOCKER_GUIDE.md` |
 
