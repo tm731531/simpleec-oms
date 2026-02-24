@@ -26,3 +26,5 @@ server:
 logging:
   level:
     com.simpleec: DEBUG
+    org.springframework.kafka: DEBUG
+    org.apache.kafka: INFO

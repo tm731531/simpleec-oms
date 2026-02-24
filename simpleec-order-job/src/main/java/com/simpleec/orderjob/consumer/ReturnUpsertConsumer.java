@@ -6,9 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.Acknowledgment;
-import org.springframework.kafka.support.KafkaHeaders;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Component;
@@ -27,7 +25,6 @@ public class ReturnUpsertConsumer {
 
     private final ReturnUpsertHandler returnUpsertHandler;
     private final ObjectMapper objectMapper;
-    private final KafkaTemplate<String, String> kafkaTemplate;
 
     /**
      * 提取並驗證字串欄位 — 確保欄位存在、非空且非 null
