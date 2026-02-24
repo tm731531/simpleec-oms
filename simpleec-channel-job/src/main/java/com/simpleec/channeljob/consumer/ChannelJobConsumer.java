@@ -184,7 +184,8 @@ public class ChannelJobConsumer {
      */
     private void handleFetchOrders(String platformCode, String channelId, String merchantId, JsonNode body) {
         try {
-            String timeRange = body.get("timeRange").asText("last_5_minutes");
+            // Use path() instead of get() to handle missing fields safely
+            String timeRange = body.path("timeRange").asText("last_5_minutes");
             ChannelAdapter adapter = getAdapter(platformCode);
 
             if (adapter == null) {
