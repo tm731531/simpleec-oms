@@ -5,7 +5,7 @@
 
 **Status**: ✅ **完全操作中 (FULLY OPERATIONAL)** - All systems running, API fixed, User event flow working (Feb 24, 2026)
 
-> 📍 **最新信息**：[OPERATIONS_CURRENT_STATUS.md](OPERATIONS_CURRENT_STATUS.md) | 文档索引 [DOCUMENTATION_INDEX.md](DOCUMENTATION_INDEX.md) | 工作指示 [CLAUDE.md](CLAUDE.md)
+> 📍 **最新信息**：[OPERATIONS_CURRENT_STATUS.md](docs/6-OPERATIONS/OPERATIONS_CURRENT_STATUS.md) | 文档索引 [DOCUMENTATION_INDEX.md](docs/0-START/DOCUMENTATION_INDEX.md) | 工作指示 [CLAUDE.md](CLAUDE.md)
 
 ---
 
@@ -157,14 +157,14 @@ docker-compose logs simpleec-order-job
 ## 📁 文檔索引
 
 ### 快速參考
-- **[ARCHITECTURE_OVERVIEW.md](./docs/ARCHITECTURE_OVERVIEW.md)** - 系統全景圖
-- **[CORE_CONTRACTS.md](./docs/CORE_CONTRACTS.md)** - 16 個 Kafka Topic 定義
-- **[CHANNEL_IMPLEMENTATION_GUIDE.md](./docs/CHANNEL_IMPLEMENTATION_GUIDE.md)** - 通路實作細節
+- **[ARCHITECTURE_OVERVIEW.md](docs/1-ARCHITECTURE/ARCHITECTURE_OVERVIEW.md)** - 系統全景圖
+- **[CORE_CONTRACTS.md](docs/3-EVENT-FLOW/CORE_CONTRACTS.md)** - 16 個 Kafka Topic 定義
+- **[CHANNEL_IMPLEMENTATION_GUIDE.md](docs/7-IMPLEMENTATION/CHANNEL_IMPLEMENTATION_GUIDE.md)** - 通路實作細節
 
 ### 深度學習
-- **[DATA_FLOW_MAPPING.md](./docs/DATA_FLOW_MAPPING.md)** - Kafka 訊息流與 DB 映射
-- **[PLATFORM_MAPPING.md](./docs/PLATFORM_MAPPING.md)** - 7 個通路 API 狀態轉換
-- **[OPERATIONS_RUNBOOK.md](./docs/OPERATIONS_RUNBOOK.md)** - 營運手冊
+- **[DATA_FLOW_MAPPING.md](docs/3-EVENT-FLOW/DATA_FLOW_MAPPING.md)** - Kafka 訊息流與 DB 映射
+- **[PLATFORM_MAPPING.md](docs/4-SCHEMA/PLATFORM_MAPPING.md)** - 7 個通路 API 狀態轉換
+- **[OPERATIONS_RUNBOOK.md](docs/6-OPERATIONS/OPERATIONS_RUNBOOK.md)** - 營運手冊
 
 ---
 
@@ -303,11 +303,11 @@ docker compose exec redis redis-cli
 
 | 文件 | 說明 |
 |------|------|
-| [DESIGN_v2.md](DESIGN_v2.md) | 完整系統設計 |
-| [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) | 部署指南 |
-| [CODE_STRUCTURE.md](CODE_STRUCTURE.md) | 代碼結構 |
-| [docs/SCHEMA.md](docs/SCHEMA.md) | 資料庫 Schema |
-| [docs/DOCKER_GUIDE.md](docs/DOCKER_GUIDE.md) | Docker 使用手冊 |
+| [docs/1-ARCHITECTURE/DESIGN_v2.md](docs/1-ARCHITECTURE/DESIGN_v2.md) | 完整系統設計 |
+| [docs/6-OPERATIONS/DEPLOYMENT_GUIDE.md](docs/6-OPERATIONS/DEPLOYMENT_GUIDE.md) | 部署指南 |
+| [docs/1-ARCHITECTURE/CODE_STRUCTURE.md](docs/1-ARCHITECTURE/CODE_STRUCTURE.md) | 代碼結構 |
+| [docs/4-SCHEMA/SCHEMA.md](docs/4-SCHEMA/SCHEMA.md) | 資料庫 Schema |
+| [docs/6-OPERATIONS/DOCKER_GUIDE.md](docs/6-OPERATIONS/DOCKER_GUIDE.md) | Docker 使用手冊 |
 | [docs/](docs/) | 其他設計文件 |
 
 ---
@@ -315,21 +315,21 @@ docker compose exec redis redis-cli
 ## 📖 詳細文檔
 
 ### 快速參考
-- **[DEPLOYMENT.md](docs/DEPLOYMENT.md)** ⭐ - 部署指南 (Feb 23 已更新)
-- **[ARCHITECTURE_OVERVIEW.md](docs/ARCHITECTURE_OVERVIEW.md)** - 系統架構詳解
-- **[CORE_CONTRACTS.md](docs/CORE_CONTRACTS.md)** - Kafka Topics 定義
-- **[PLATFORM_MAPPING.md](docs/PLATFORM_MAPPING.md)** - 7 個通路映射
+- **[docs/6-OPERATIONS/DEPLOYMENT.md](docs/6-OPERATIONS/DEPLOYMENT.md)** ⭐ - 部署指南 (Feb 23 已更新)
+- **[docs/1-ARCHITECTURE/ARCHITECTURE_OVERVIEW.md](docs/1-ARCHITECTURE/ARCHITECTURE_OVERVIEW.md)** - 系統架構詳解
+- **[docs/3-EVENT-FLOW/CORE_CONTRACTS.md](docs/3-EVENT-FLOW/CORE_CONTRACTS.md)** - Kafka Topics 定義
+- **[docs/4-SCHEMA/PLATFORM_MAPPING.md](docs/4-SCHEMA/PLATFORM_MAPPING.md)** - 7 個通路映射
 
 ### 深度學習
-- **[DATA_FLOW_MAPPING.md](docs/DATA_FLOW_MAPPING.md)** - 消息流與 DB 映射
-- **[CHANNEL_IMPLEMENTATION_GUIDE.md](docs/CHANNEL_IMPLEMENTATION_GUIDE.md)** - 通路實作
-- **[EVENT_SAMPLES.md](docs/EVENT_SAMPLES.md)** - 事件範例
-- **[docs/](docs/)** - 完整技術文檔（30+ 個檔案）
+- **[docs/3-EVENT-FLOW/DATA_FLOW_MAPPING.md](docs/3-EVENT-FLOW/DATA_FLOW_MAPPING.md)** - 消息流與 DB 映射
+- **[docs/7-IMPLEMENTATION/CHANNEL_IMPLEMENTATION_GUIDE.md](docs/7-IMPLEMENTATION/CHANNEL_IMPLEMENTATION_GUIDE.md)** - 通路實作
+- **[docs/3-EVENT-FLOW/EVENT_SAMPLES.md](docs/3-EVENT-FLOW/EVENT_SAMPLES.md)** - 事件範例
+- **[docs/](docs/)** - 完整技術文檔（9 大類別）
 
 ### 最新修復（Feb 23）
-- **[User App 登入修復](docs/DEPLOYMENT.md#user-app-login-fails)** - API 端點、Response 格式、Docker 網路
-- **[Kafka 消費者組修復](docs/DEPLOYMENT.md#kafka-consumer-groups-not-created)** - Bean 配置、掃描範圍調整
-- **[系統保留策略](docs/RETENTION_CLEANUP_RUNBOOK.md)** - Kafka 1h, Prometheus 7d, Loki 7d
+- **[User App 登入修復](docs/6-OPERATIONS/DEPLOYMENT.md#user-app-login-fails)** - API 端點、Response 格式、Docker 網路
+- **[Kafka 消費者組修復](docs/6-OPERATIONS/DEPLOYMENT.md#kafka-consumer-groups-not-created)** - Bean 配置、掃描範圍調整
+- **[系統保留策略](docs/6-OPERATIONS/RETENTION_CLEANUP_RUNBOOK.md)** - Kafka 1h, Prometheus 7d, Loki 7d
 
 ---
 
