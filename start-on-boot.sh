@@ -18,6 +18,5 @@ for i in {1..30}; do
   sleep 1
 done
 
-# Start sync monitor in background to keep user-app and nginx in sync
-nohup /home/tom/ONEEC/simpleec-oms/docker/ensure-user-app-nginx-sync.sh >> /tmp/simpleec-sync.log 2>&1 &
-echo "[$(date)] Started user-app/nginx sync monitor (PID: $!)" >> /tmp/simpleec-startup.log
+# Note: docker compose up -d handles service dependencies automatically via depends_on
+# No manual sync monitor needed
