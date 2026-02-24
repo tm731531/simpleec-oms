@@ -13,18 +13,21 @@ spring:
     port: ${REDIS_PORT:6379}
     database: 0
     timeout: 2000
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:simpleec_oms}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
   jpa:
-    enabled: false
-  autoconfigure:
-    exclude:
-      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
-      - org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
-
-cyberbiz:
-  api:
-    base-url: ${CYBERBIZ_API_BASE_URL:https://api.cyberbiz.io}
-    token: ${CYBERBIZ_API_TOKEN}
-    timeout: 30000
+    enabled: true
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
 
 logging:
   level:

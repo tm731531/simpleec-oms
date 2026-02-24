@@ -33,7 +33,7 @@ public class ShopeeAdapter implements ChannelAdapter {
      * Mode A 不支援（Shopee 使用 Mode B）
      */
     @Override
-    public List<Map<String, Object>> fetchOrders(String timeRange) throws Exception {
+    public List<Map<String, Object>> fetchOrders(String channelId, String timeRange) throws Exception {
         throw new UnsupportedOperationException("Shopee 使用 Mode B，需分兩步：先 fetchOrderList，再 fetchOrderDetail");
     }
 
@@ -44,8 +44,8 @@ public class ShopeeAdapter implements ChannelAdapter {
      * 回傳：訂單 ID 列表（無詳情）
      */
     @Override
-    public List<String> fetchOrderList(String timeRange) throws Exception {
-        log.info("Fetching Shopee order list with timeRange: {}", timeRange);
+    public List<String> fetchOrderList(String channelId, String timeRange) throws Exception {
+        log.info("Fetching Shopee order list for channel {} with timeRange: {}", channelId, timeRange);
 
         // 模擬 Shopee API 回傳的訂單 ID 列表
         // 實際 Shopee API 只返回 order_id 和 status，詳情需分開查詢
@@ -66,8 +66,8 @@ public class ShopeeAdapter implements ChannelAdapter {
      * 回傳：完整訂單詳情（商品、收貨人、運費等）
      */
     @Override
-    public Map<String, Object> fetchOrderDetail(String orderId) throws Exception {
-        log.info("Fetching order detail from Shopee for orderId: {}", orderId);
+    public Map<String, Object> fetchOrderDetail(String channelId, String orderId) throws Exception {
+        log.info("Fetching order detail from Shopee for channel {} with orderId: {}", channelId, orderId);
 
         Map<String, Object> orderDetail = new LinkedHashMap<>();
         orderDetail.put("order_id", orderId);
@@ -124,8 +124,8 @@ public class ShopeeAdapter implements ChannelAdapter {
     }
 
     @Override
-    public List<Map<String, Object>> fetchReturns(String timeRange) throws Exception {
-        log.info("Fetching returns from Shopee with timeRange: {}", timeRange);
+    public List<Map<String, Object>> fetchReturns(String channelId, String timeRange) throws Exception {
+        log.info("Fetching returns from Shopee for channel {} with timeRange: {}", channelId, timeRange);
         // TODO: 實現 Shopee 退貨列表邏輯
         return new ArrayList<>();
     }

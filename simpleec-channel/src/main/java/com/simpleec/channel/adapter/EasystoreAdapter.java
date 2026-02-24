@@ -33,8 +33,8 @@ public class EasystoreAdapter implements ChannelAdapter {
      * 模擬 Easystore API: GET /api/orders?status=all&since=<timestamp>
      */
     @Override
-    public List<Map<String, Object>> fetchOrders(String timeRange) throws Exception {
-        log.info("Fetching orders from Easystore with timeRange: {}", timeRange);
+    public List<Map<String, Object>> fetchOrders(String channelId, String timeRange) throws Exception {
+        log.info("Fetching orders from Easystore for channel {} with timeRange: {}", channelId, timeRange);
 
         // 模擬 API 回傳的訂單列表（包含完整詳情）
         List<Map<String, Object>> orders = new ArrayList<>();
@@ -121,7 +121,7 @@ public class EasystoreAdapter implements ChannelAdapter {
      * Mode A 不支援單獨的訂單列表（無詳情）
      */
     @Override
-    public List<String> fetchOrderList(String timeRange) throws Exception {
+    public List<String> fetchOrderList(String channelId, String timeRange) throws Exception {
         throw new UnsupportedOperationException("Easystore 使用 Mode A，不支援分離的訂單列表");
     }
 
@@ -129,13 +129,13 @@ public class EasystoreAdapter implements ChannelAdapter {
      * Mode A 不支援單獨的訂單詳情
      */
     @Override
-    public Map<String, Object> fetchOrderDetail(String orderId) throws Exception {
+    public Map<String, Object> fetchOrderDetail(String channelId, String orderId) throws Exception {
         throw new UnsupportedOperationException("Easystore 使用 Mode A，不支援分離的訂單詳情查詢");
     }
 
     @Override
-    public List<Map<String, Object>> fetchReturns(String timeRange) throws Exception {
-        log.info("Fetching returns from Easystore with timeRange: {}", timeRange);
+    public List<Map<String, Object>> fetchReturns(String channelId, String timeRange) throws Exception {
+        log.info("Fetching returns from Easystore for channel {} with timeRange: {}", channelId, timeRange);
         // TODO: 實現 Easystore 退貨列表邏輯
         return new ArrayList<>();
     }

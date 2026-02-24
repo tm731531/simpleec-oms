@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.simpleec.channel.adapter.ChannelAdapter;
+import com.simpleec.channel.adapter.CyberbizAdapter;
+import com.simpleec.channeljob.service.ChannelService;
 import com.simpleec.common.enums.TaskTypeEnum;
 import com.simpleec.common.util.NanoIdUtil;
 import com.simpleec.common.constants.TopicConstants;
@@ -36,6 +38,7 @@ public class ModeBOrderListHandler {
 
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final ObjectMapper objectMapper;
+    private final ChannelService channelService;
 
     /**
      * 處理 Mode B 訂單列表
@@ -51,8 +54,17 @@ public class ModeBOrderListHandler {
         log.info("Processing Mode B order list for {} from {}", merchantId, channelId);
 
         try {
+            // 若是 CyberbizAdapter，設置 token
+            if (adapter instanceof CyberbizAdapter) {
+                String token = channelService.getChannelToken(channelId);
+                if (token == null || token.isEmpty()) {
+                    throw new IllegalArgumentException("Channel token not found for: " + channelId);
+                }
+                ((CyberbizAdapter) adapter).setToken(token);
+            }
+
             // 第 1 步：從 API 拉取訂單 ID 列表（不含詳情）
-            List<String> orderIds = adapter.fetchOrderList(timeRange);
+            List<String> orderIds = adapter.fetchOrderList(channelId, timeRange);
             log.info("Fetched {} order IDs from {} for {}", orderIds.size(), channelId, merchantId);
 
             if (orderIds.isEmpty()) {

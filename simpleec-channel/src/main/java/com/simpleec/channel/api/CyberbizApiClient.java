@@ -34,15 +34,14 @@ public class CyberbizApiClient {
     @Value("${cyberbiz.api.base-url:https://api.cyberbiz.io}")
     private String baseUrl;
 
-    @Value("${cyberbiz.api.token:}")
-    private String apiToken;
-
     /**
      * 建立 HTTP headers，包含 OAuth Bearer Token
+     *
+     * @param token Cyberbiz API token (from channel configuration)
      */
-    private HttpHeaders buildHeaders() {
+    private HttpHeaders buildHeaders(String token) {
         HttpHeaders headers = new HttpHeaders();
-        headers.set("Authorization", "Bearer " + apiToken);
+        headers.set("Authorization", "Bearer " + token);
         headers.set("Content-Type", "application/json");
         return headers;
     }
@@ -50,18 +49,19 @@ public class CyberbizApiClient {
     /**
      * 查詢該時段內建立的訂單
      *
+     * @param token          Cyberbiz API token
      * @param createTimeFrom 建立時間開始 (Unix timestamp)
      * @param createTimeTo   建立時間結束 (Unix timestamp)
      * @return 訂單 ID 列表
      */
-    public List<String> getOrdersCreatedInTimeRange(long createTimeFrom, long createTimeTo) {
+    public List<String> getOrdersCreatedInTimeRange(String token, long createTimeFrom, long createTimeTo) {
         try {
             String url = String.format("%s/api/order/get_orders?create_time_from=%d&create_time_to=%d",
                     baseUrl, createTimeFrom, createTimeTo);
 
             log.debug("Calling Cyberbiz API: GET {}", url);
 
-            HttpEntity<?> entity = new HttpEntity<>(buildHeaders());
+            HttpEntity<?> entity = new HttpEntity<>(buildHeaders(token));
             ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
@@ -95,18 +95,19 @@ public class CyberbizApiClient {
     /**
      * 查詢該時段內更新的訂單
      *
+     * @param token          Cyberbiz API token
      * @param updateTimeFrom 更新時間開始 (Unix timestamp)
      * @param updateTimeTo   更新時間結束 (Unix timestamp)
      * @return 訂單 ID 列表
      */
-    public List<String> getOrdersUpdatedInTimeRange(long updateTimeFrom, long updateTimeTo) {
+    public List<String> getOrdersUpdatedInTimeRange(String token, long updateTimeFrom, long updateTimeTo) {
         try {
             String url = String.format("%s/api/order/get_orders?update_time_from=%d&update_time_to=%d",
                     baseUrl, updateTimeFrom, updateTimeTo);
 
             log.debug("Calling Cyberbiz API: GET {}", url);
 
-            HttpEntity<?> entity = new HttpEntity<>(buildHeaders());
+            HttpEntity<?> entity = new HttpEntity<>(buildHeaders(token));
             ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
@@ -140,16 +141,17 @@ public class CyberbizApiClient {
     /**
      * 查詢單筆訂單詳情
      *
+     * @param token   Cyberbiz API token
      * @param orderId Cyberbiz 訂單 ID
      * @return 訂單詳情 (Map 格式)
      */
-    public Map<String, Object> getOrderDetail(String orderId) {
+    public Map<String, Object> getOrderDetail(String token, String orderId) {
         try {
             String url = String.format("%s/api/order/get_order?order_id=%s", baseUrl, orderId);
 
             log.debug("Calling Cyberbiz API: GET {}", url);
 
-            HttpEntity<?> entity = new HttpEntity<>(buildHeaders());
+            HttpEntity<?> entity = new HttpEntity<>(buildHeaders(token));
             ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
@@ -181,18 +183,19 @@ public class CyberbizApiClient {
     /**
      * 查詢該時段內有退貨的訂單
      *
+     * @param token          Cyberbiz API token
      * @param refundTimeFrom 退貨時間開始 (Unix timestamp)
      * @param refundTimeTo   退貨時間結束 (Unix timestamp)
      * @return 訂單列表（帶退貨資訊）
      */
-    public List<Map<String, Object>> getOrdersWithRefund(long refundTimeFrom, long refundTimeTo) {
+    public List<Map<String, Object>> getOrdersWithRefund(String token, long refundTimeFrom, long refundTimeTo) {
         try {
             String url = String.format("%s/api/order/get_orders?refund_time_from=%d&refund_time_to=%d",
                     baseUrl, refundTimeFrom, refundTimeTo);
 
             log.debug("Calling Cyberbiz API: GET {}", url);
 
-            HttpEntity<?> entity = new HttpEntity<>(buildHeaders());
+            HttpEntity<?> entity = new HttpEntity<>(buildHeaders(token));
             ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {

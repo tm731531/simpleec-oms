@@ -25,31 +25,37 @@ public interface ChannelAdapter {
      * Mode A: 拉取完整訂單列表
      * 返回格式：List of Map，每個 Map 代表一筆訂單的完整數據
      *
+     * @param channelId 通路 ID（用於獲取 channel 配置如 token）
      * @param timeRange 時間範圍 (e.g., "last_5_minutes")
      * @return 訂單列表
      */
-    List<Map<String, Object>> fetchOrders(String timeRange) throws Exception;
+    List<Map<String, Object>> fetchOrders(String channelId, String timeRange) throws Exception;
 
     /**
      * Mode B: 拉取訂單列表（概要，不含詳情）
      *
+     * @param channelId 通路 ID（用於獲取 channel 配置如 token）
      * @param timeRange 時間範圍
      * @return 訂單 ID 或概要列表
      */
-    List<String> fetchOrderList(String timeRange) throws Exception;
+    List<String> fetchOrderList(String channelId, String timeRange) throws Exception;
 
     /**
      * Mode B: 拉取單筆訂單詳情
      *
-     * @param orderId 通路訂單 ID
+     * @param channelId 通路 ID（用於獲取 channel 配置如 token）
+     * @param orderId   通路訂單 ID
      * @return 訂單完整數據
      */
-    Map<String, Object> fetchOrderDetail(String orderId) throws Exception;
+    Map<String, Object> fetchOrderDetail(String channelId, String orderId) throws Exception;
 
     /**
      * 拉取退貨列表
+     *
+     * @param channelId 通路 ID（用於獲取 channel 配置如 token）
+     * @param timeRange 時間範圍
      */
-    List<Map<String, Object>> fetchReturns(String timeRange) throws Exception;
+    List<Map<String, Object>> fetchReturns(String channelId, String timeRange) throws Exception;
 
     /**
      * 執行出貨

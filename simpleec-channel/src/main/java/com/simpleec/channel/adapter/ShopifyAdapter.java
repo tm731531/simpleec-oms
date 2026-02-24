@@ -33,8 +33,8 @@ public class ShopifyAdapter implements ChannelAdapter {
      * Mode A: 直接拉取完整訂單
      */
     @Override
-    public List<Map<String, Object>> fetchOrders(String timeRange) throws Exception {
-        log.info("Fetching Shopify orders for time range: {}", timeRange);
+    public List<Map<String, Object>> fetchOrders(String channelId, String timeRange) throws Exception {
+        log.info("Fetching Shopify orders for channel {} with time range: {}", channelId, timeRange);
 
         // TODO: 實際調用 Shopify API
         // return shopifyApiClient.getOrders(timeRange);
@@ -89,20 +89,20 @@ public class ShopifyAdapter implements ChannelAdapter {
     }
 
     @Override
-    public List<String> fetchOrderList(String timeRange) throws Exception {
+    public List<String> fetchOrderList(String channelId, String timeRange) throws Exception {
         // Mode A 不需要此方法
         throw new UnsupportedOperationException("Shopify is Mode A, no need for fetchOrderList");
     }
 
     @Override
-    public Map<String, Object> fetchOrderDetail(String orderId) throws Exception {
+    public Map<String, Object> fetchOrderDetail(String channelId, String orderId) throws Exception {
         // Mode A 不需要此方法
         throw new UnsupportedOperationException("Shopify is Mode A, no need for fetchOrderDetail");
     }
 
     @Override
-    public List<Map<String, Object>> fetchReturns(String timeRange) throws Exception {
-        log.info("Fetching Shopify returns for time range: {}", timeRange);
+    public List<Map<String, Object>> fetchReturns(String channelId, String timeRange) throws Exception {
+        log.info("Fetching Shopify returns for channel {} with time range: {}", channelId, timeRange);
         // TODO: 實際調用 Shopify API
         return new ArrayList<>();
     }

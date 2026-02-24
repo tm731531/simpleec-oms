@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.simpleec.channel.adapter.ChannelAdapter;
+import com.simpleec.channel.adapter.CyberbizAdapter;
+import com.simpleec.channeljob.service.ChannelService;
 import com.simpleec.common.enums.TaskTypeEnum;
 import com.simpleec.common.util.NanoIdUtil;
 import com.simpleec.common.constants.TopicConstants;
@@ -39,6 +41,7 @@ public class ModeBOrderDetailHandler {
 
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final ObjectMapper objectMapper;
+    private final ChannelService channelService;
 
     /**
      * 處理 Mode B 訂單詳情
@@ -54,8 +57,17 @@ public class ModeBOrderDetailHandler {
         log.info("Processing Mode B order detail: {} from {}", channelOrderId, channelId);
 
         try {
+            // 若是 CyberbizAdapter，設置 token
+            if (adapter instanceof CyberbizAdapter) {
+                String token = channelService.getChannelToken(channelId);
+                if (token == null || token.isEmpty()) {
+                    throw new IllegalArgumentException("Channel token not found for: " + channelId);
+                }
+                ((CyberbizAdapter) adapter).setToken(token);
+            }
+
             // 第 1 步：從 API 拉取完整訂單詳情
-            Map<String, Object> orderDetail = adapter.fetchOrderDetail(channelOrderId);
+            Map<String, Object> orderDetail = adapter.fetchOrderDetail(channelId, channelOrderId);
             log.info("Fetched order detail from {}: {}", channelId, channelOrderId);
 
             // 第 2 步：轉換為 OMS 標準 schema

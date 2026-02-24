@@ -52,7 +52,7 @@ public class ModeAOrderListHandler {
             }
 
             // 第一步：呼叫列表 API（已含完整資訊）
-            List<Map<String, Object>> orders = adapter.fetchOrders(timeRange);
+            List<Map<String, Object>> orders = adapter.fetchOrders(channelId, timeRange);
 
             log.info("Fetched {} orders from {} API", orders.size(), adapter.getPlatformCode());
 

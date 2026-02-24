@@ -8,10 +8,10 @@ import org.springframework.stereotype.Service;
 
 /**
  * Service for channel operations
- * NOTE: Disabled - requires JPA which is disabled in Kafka consumer job
+ * Provides methods to query channel data from the database
  */
 @Slf4j
-//@Service
+@Service
 public class ChannelService {
 
     private final ChannelRepository channelRepository;
@@ -44,5 +44,20 @@ public class ChannelService {
 
         // Placeholder - actual implementation would call platform API
         return true;
+    }
+
+    /**
+     * Get channel token by ID
+     */
+    public String getChannelToken(String channelId) {
+        Channel channel = channelRepository.findById(channelId)
+            .orElse(null);
+
+        if (channel == null) {
+            log.warn("Channel {} not found", channelId);
+            return null;
+        }
+
+        return channel.getToken();
     }
 }
