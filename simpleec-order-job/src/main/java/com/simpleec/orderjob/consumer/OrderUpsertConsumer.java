@@ -41,7 +41,7 @@ public class OrderUpsertConsumer {
     /**
      * 消費 order.process topic
      */
-    @KafkaListener(topics = "order.process", groupId = "order-job-group", concurrency = "8")
+    @KafkaListener(topics = "order.process", groupId = "order-job-group", concurrency = "3")
     @Transactional
     public void consumeOrderUpsert(@Payload String message,
                                    @Header(name = "kafka_receivedPartitionId") int partition,

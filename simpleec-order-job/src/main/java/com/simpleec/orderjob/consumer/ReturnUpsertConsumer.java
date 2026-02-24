@@ -43,7 +43,7 @@ public class ReturnUpsertConsumer {
     /**
      * 消費 return.process topic
      */
-    @KafkaListener(topics = "return.process", groupId = "return-job-group", concurrency = "4")
+    @KafkaListener(topics = "return.process", groupId = "return-job-group", concurrency = "3")
     @Transactional
     public void consumeReturnUpsert(@Payload String message,
                                     @Header(name = "kafka_receivedPartitionId") int partition,
