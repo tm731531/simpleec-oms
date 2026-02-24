@@ -57,8 +57,15 @@ public class HealthCheckScheduler {
 
         for (Channel channel : enabledChannels) {
             try {
-                // Publish CHECK_HEALTH task to platform.fast topic
-                String topic = channel.getPlatformId() + ".fast";
+                // Query Platform to get the correct kafka topic
+                Platform platform = channelService.findPlatformById(channel.getPlatformId());
+                if (platform == null || platform.getQueueTopic() == null) {
+                    log.warn("Platform {} not found or has no queue_topic configured", channel.getPlatformId());
+                    continue;
+                }
+
+                // Publish CHECK_HEALTH task to {queueTopic}.fast topic
+                String topic = platform.getQueueTopic() + ".fast";
 
                 HealthCheckMessage message = new HealthCheckMessage();
                 message.setTaskType("CHECK_HEALTH");
@@ -68,7 +75,7 @@ public class HealthCheckScheduler {
                 message.setTimestamp(System.currentTimeMillis());
 
                 kafkaProducer.publishToTopic(topic, channel.getId(), message);
-                log.debug("Published health check for channel {}", channel.getId());
+                log.debug("Published health check for channel {} to topic {}", channel.getId(), topic);
 
             } catch (Exception e) {
                 log.error("Error publishing health check for channel {}", channel.getId(), e);
@@ -87,19 +94,25 @@ public class HealthCheckScheduler {
 
         for (Platform platform : activePlatforms) {
             try {
-                // Publish CHECK_HEALTH_PLATFORM task to platform.fast topic
-                String topic = platform.getCode() + ".fast";
+                // Check if platform has queue_topic configured
+                if (platform.getQueueTopic() == null) {
+                    log.warn("Platform {} has no queue_topic configured", platform.getId());
+                    continue;
+                }
+
+                // Publish CHECK_HEALTH_PLATFORM task to {queueTopic}.fast topic
+                String topic = platform.getQueueTopic() + ".fast";
 
                 PlatformHealthCheckMessage message = new PlatformHealthCheckMessage();
                 message.setTaskType("CHECK_HEALTH_PLATFORM");
-                message.setPlatformCode(platform.getCode());
+                message.setPlatformCode(platform.getId());
                 message.setTimestamp(System.currentTimeMillis());
 
-                kafkaProducer.publishToTopic(topic, platform.getCode(), message);
-                log.debug("Published platform health check for {}", platform.getCode());
+                kafkaProducer.publishToTopic(topic, platform.getId(), message);
+                log.debug("Published platform health check for {} to topic {}", platform.getId(), topic);
 
             } catch (Exception e) {
-                log.error("Error publishing platform health check for {}", platform.getCode(), e);
+                log.error("Error publishing platform health check for {}", platform.getId(), e);
             }
         }
     }

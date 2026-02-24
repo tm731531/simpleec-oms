@@ -21,13 +21,9 @@ public class Platform {
     @Column(name = "platform_name")
     private String name;
 
-    @Column(nullable = false)
-    private String code;
+    @Column(name = "queue_topic")
+    private String queueTopic;
 
     @Column(nullable = false)
     private Boolean actived;
-
-    public String getCode() {
-        return code;
-    }
 }

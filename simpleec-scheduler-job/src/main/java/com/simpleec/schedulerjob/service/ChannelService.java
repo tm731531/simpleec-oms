@@ -38,4 +38,11 @@ public class ChannelService {
     public List<Platform> findActivePlatforms() {
         return platformRepository.findAllActive();
     }
+
+    /**
+     * Find platform by ID
+     */
+    public Platform findPlatformById(String platformId) {
+        return platformRepository.findById(platformId).orElse(null);
+    }
 }

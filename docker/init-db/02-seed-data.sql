@@ -76,10 +76,10 @@ INSERT INTO public.merchant_options (id, merchant_id, name, type, status) VALUES
 -- platform
 -- ---------------------------------------------------------------------------
 INSERT INTO public.platform (id, platform_name, actived, queue_topic, currency) VALUES
-('momo',    'momo購物',     true,  'task.channel.momo',    'TWD'),
-('shopee',  'Shopee蝦皮',   true,  'task.channel.shopee',  'TWD'),
-('yahoo',   'Yahoo奇摩',    true,  'task.channel.yahoo',   'TWD'),
-('pchome',  'PChome商店街', false, 'task.channel.pchome',  'TWD');
+('momo',    'momo購物',     true,  'momo',    'TWD'),
+('shopee',  'Shopee蝦皮',   true,  'shopee',  'TWD'),
+('yahoo',   'Yahoo奇摩',    true,  'yahoo',   'TWD'),
+('pchome',  'PChome商店街', false, 'pchome',  'TWD');
 
 -- ---------------------------------------------------------------------------
 -- channel_api_versions
