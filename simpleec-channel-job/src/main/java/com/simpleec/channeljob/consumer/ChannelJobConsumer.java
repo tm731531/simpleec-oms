@@ -96,8 +96,8 @@ public class ChannelJobConsumer {
         }
 
         try {
-            // Get the consume method
-            Method consumeMethod = this.getClass().getDeclaredMethod("consumeChannelMessage", String.class);
+            // Get the consume method (accepts JsonNode instead of String)
+            Method consumeMethod = this.getClass().getDeclaredMethod("consumeChannelMessage", JsonNode.class);
 
             // Create endpoint
             MethodKafkaListenerEndpoint<String, String> endpoint = new MethodKafkaListenerEndpoint<>();
@@ -145,9 +145,9 @@ public class ChannelJobConsumer {
     /**
      * 消費 Channel 消息 (動態註冊，支援所有配置的 topics)
      */
-    public void consumeChannelMessage(String message) {
+    public void consumeChannelMessage(JsonNode json) {
         try {
-            JsonNode json = objectMapper.readTree(message);
+            // message is already a JsonNode, no need to parse
             JsonNode header = json.get("header");
             JsonNode body = json.get("body");
 
