@@ -7,6 +7,14 @@
 
 ## 🚀 最近修復和文檔整理 (Feb 24, 2026)
 
+### ✅⚡ 快速重啟腳本 (新增 - v1.1)
+- **`./quick-redeploy.sh`** — 快速重啟單個或多個 Docker 服務
+  - 單個服務：30-60 秒（vs 5 分鐘的完整重啟）
+  - 多個服務：1-2 分鐘（解決連帶修改的問題）
+- **用法**：`./quick-redeploy.sh simpleec-channel-job` 或 `./quick-redeploy.sh svc1 svc2 svc3`
+- **文件**：`quick-redeploy.sh`, `QUICK_REDEPLOY_GUIDE.md`, `QUICK_REDEPLOY_CHEATSHEET.txt`
+- **特色**：自動依賴分析、自動去重、彩色輸出、清晰摘要
+
 ### ✅ API 路由完全修復
 - 所有11個Spring控制器的`@RequestMapping`已修正（添加`/api`前綴）
 - **13/13 API端點全部運行** ✅
@@ -114,6 +122,8 @@ Channel Job 內部決策:
 ### 🛠️ 操作和維運
 | 你要做什麼 | 讀哪份文件 |
 |-----------|-----------|
+| **⭐ 快速重啟服務（開發用）** | **[QUICK_REDEPLOY_GUIDE.md](docs/0-START/QUICK_REDEPLOY_GUIDE.md)** — 只需 30-60 秒！支持多服務 |
+| 快速命令速查表 | [QUICK_REDEPLOY_CHEATSHEET.txt](QUICK_REDEPLOY_CHEATSHEET.txt) — 常用命令速查 |
 | 系統啟動和重啟 | [QUICK_COMMANDS.md](docs/0-START/QUICK_COMMANDS.md) 或 [SCRIPTS_GUIDE.md](docs/0-START/SCRIPTS_GUIDE.md) |
 | 腳本使用指南 | [SCRIPTS_GUIDE.md](docs/0-START/SCRIPTS_GUIDE.md) — 所有腳本說明與用法 |
 | API 測試 | [QUICK_COMMANDS.md](docs/0-START/QUICK_COMMANDS.md) 的 "API 測試" 部分 |
@@ -125,13 +135,44 @@ Channel Job 內部決策:
 
 ## 建構與部署
 
+### 快速部署（推薦用於開發）⭐ NEW
+
+```bash
+cd /home/tom/ONEEC/simpleec-oms
+
+# 編譯
+./gradlew clean build -x test
+
+# 快速重啟單個服務（只需 30-60 秒！）
+./quick-redeploy.sh simpleec-channel-job
+./quick-redeploy.sh simpleec-api
+
+# 一次性重啟多個服務（連帶修改時使用）
+./quick-redeploy.sh simpleec-channel-job simpleec-order-job simpleec-api
+
+# 查看所有可用服務
+./quick-redeploy.sh --list
+
+# 查看幫助
+./quick-redeploy.sh --help
+```
+
+**使用場景**：
+- 修改單個 JOB 後快速測試
+- 修改了多個相關服務的代碼
+- 避免每次都重啟整個系統（原本需要 5 分鐘）
+
+詳見 `docs/0-START/QUICK_REDEPLOY_GUIDE.md` 和 `QUICK_REDEPLOY_CHEATSHEET.txt`
+
+### 完整部署
+
 ```bash
 cd /home/tom/ONEEC/simpleec-oms
 
 # 編譯（跳過測試，目前 0 測試檔）
 ./gradlew clean build -x test
 
-# 啟動全部 26 個容器
+# 啟動全部 26 個容器（3-5 分鐘）
 docker compose up -d --build
 
 # 只啟動基礎設施（開發用）

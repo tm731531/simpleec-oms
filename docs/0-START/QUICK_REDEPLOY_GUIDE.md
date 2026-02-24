@@ -35,6 +35,30 @@
 
 **耗時**：30-60 秒（遠快於 `docker compose up -d --build`）
 
+### 一次重啟多個服務（連帶修改時使用）⭐ NEW
+
+```bash
+# 修改了多個服務的代碼
+./quick-redeploy.sh simpleec-channel-job simpleec-order-job
+
+# 同時重啟 API 和前端應用
+./quick-redeploy.sh simpleec-api simpleec-user-app
+
+# 修改涉及多個平台的 Channel Job
+./quick-redeploy.sh simpleec-channel-momo-fast simpleec-channel-shopee-fast
+```
+
+腳本會：
+1. 驗證所有指定的服務都存在
+2. 自動去重（如果服務出現多次）
+3. 一次性重建所有指定服務的 Docker 鏡像
+4. 停止舊容器，啟動新容器
+5. 顯示每個服務的日誌查看命令
+
+**耗時**：1-2 分鐘（取決於服務數量）
+
+**優勢**：比逐個重啟快，避免多次重啟同一個依賴
+
 ### 全量重啟（需要完整部署）
 
 ```bash
@@ -141,6 +165,60 @@ curl http://localhost:8082/api/health
 
 ⚠️ **注意**：修改 core 依賴時，考慮是否需要 `--all`
 
+### 場景 3.5：連帶修改多個服務（新功能！）
+
+```bash
+# 修改了 Order 和 Channel Job 的邏輯
+# 同時修改了 API 和 User App
+
+./gradlew clean build -x test
+
+# 一次性重啟所有相關的服務（比逐個重啟快！）
+./quick-redeploy.sh simpleec-channel-job simpleec-order-job simpleec-api simpleec-user-app
+```
+
+輸出示例：
+```
+╔════════════════════════════════════════╗
+║  快速重啟多個服務（4 個）
+╚════════════════════════════════════════╝
+
+指定的服務：
+  • simpleec-channel-job
+  • simpleec-order-job
+  • simpleec-api
+  • simpleec-user-app
+
+將要重啟的服務（共 4 個）：
+  ► simpleec-channel-job
+  ► simpleec-order-job
+  ► simpleec-api
+  ► simpleec-user-app
+
+[1/3] 正在重建 Docker 映像...
+✓ 映像重建完成
+
+[2/3] 正在停止舊服務...
+✓ 舊服務已停止
+
+[3/3] 正在啟動新服務...
+✓ 新服務已啟動
+
+═══════════════════════════════════════
+✓ 部署完成！
+
+查看日誌：
+  docker logs simpleec-channel-job -f
+  docker logs simpleec-order-job -f
+  docker logs simpleec-api -f
+  docker logs simpleec-user-app -f
+```
+
+✅ **優勢**：
+- 只需 1-2 分鐘，比逐個重啟快
+- 自動避免重複構建共用依賴
+- 清晰的部署摘要
+
 ### 場景 4：Kafka 或數據庫配置變化
 
 ```bash
@@ -227,13 +305,27 @@ A：使用 `--deps` 參數查看
 
 ### Q：是否可以同時重啟多個服務？
 
-A：目前腳本一次只支持一個服務。如果需要多個，可以：
+A：可以！這是新功能（v1.1）。使用空格分隔多個服務名稱：
 ```bash
-./quick-redeploy.sh simpleec-channel-job
-./quick-redeploy.sh simpleec-order-job
+# 一次性重啟多個服務（比逐個重啟快！）
+./quick-redeploy.sh simpleec-channel-job simpleec-order-job simpleec-api
+
+# 修改多個平台的 Channel Job
+./quick-redeploy.sh simpleec-channel-momo-fast simpleec-channel-shopee-fast
+
+# 修改 API 和前端
+./quick-redeploy.sh simpleec-api simpleec-user-app simpleec-admin-app
 ```
 
-或使用 `--all` 進行全量重啟。
+**優勢**：
+- 比逐個重啟快（1-2 分鐘 vs 3-4 分鐘）
+- 自動去重（同一個服務不會重複構建）
+- 清晰的部署摘要
+
+**何時使用**：
+- 修改連帶多個服務的代碼時
+- 需要同時更新多個 Channel Job 時
+- 修改了跨服務的共用邏輯時
 
 ### Q：如果部署失敗了怎麼辦？
 
@@ -310,13 +402,19 @@ docker compose up -d <service-name>
 
 | 腳本 | 用途 | 速度 | 用於 |
 |------|------|------|------|
-| **quick-redeploy.sh** | 快速重啟單個服務 | 30-60 秒 | 開發迭代 |
+| **quick-redeploy.sh** | 快速重啟單個或多個服務 | 30-120 秒 | 開發迭代 |
 | **docker compose up -d --build** | 完整重啟所有服務 | 3-5 分鐘 | 生產部署 |
 | **QUICK_COMMANDS.md** | 常用命令參考 | - | 快速查詢 |
 
 ---
 
 ## 更新日誌
+
+### v1.1 (2026-02-24 - 新增多服務支持)
+- ✅ **支持一次性重啟多個服務** — 完全解決連帶修改的問題！
+- ✅ 自動去重（避免同一服務構建多次）
+- ✅ 清晰的部署摘要（為每個服務顯示日誌查看命令）
+- ✅ 更新文檔和速查表
 
 ### v1.0 (2026-02-24)
 - ✅ 初版發布
@@ -330,8 +428,8 @@ docker compose up -d <service-name>
 ## 後續改進
 
 計劃中的功能（歡迎提建議）：
-- [ ] 支持同時重啟多個服務
 - [ ] 服務健康檢查（等待容器就緒）
 - [ ] 自動日誌追蹤（啟動後自動 tail logs）
 - [ ] 回滾功能（快速恢復到上一個版本）
 - [ ] 性能統計（顯示重啟耗時）
+- [ ] 交互式模式（選擇要重啟的服務）

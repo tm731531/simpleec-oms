@@ -23,6 +23,20 @@
   $ ./quick-redeploy.sh simpleec-order-job
   $ ./quick-redeploy.sh simpleec-backend-job
 
+⚡⚡ 一次重啟多個服務（連帶修改時使用）
+
+修改 Channel Job 和 Order Job：
+  $ ./quick-redeploy.sh simpleec-channel-job simpleec-order-job    # 1-2 分鐘
+
+修改 API 和前端應用：
+  $ ./quick-redeploy.sh simpleec-api simpleec-user-app             # 1-2 分鐘
+
+修改多個 Channel Jobs（不同平台）：
+  $ ./quick-redeploy.sh simpleec-channel-momo-fast simpleec-channel-shopee-fast
+
+修改核心邏輯涉及多個服務：
+  $ ./quick-redeploy.sh simpleec-channel-job simpleec-order-job simpleec-backend-job
+
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 🔄 完整重啟所有服務
@@ -159,5 +173,5 @@ A: docker ps | grep simpleec
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-版本：v1.0 (2026-02-24)
-最後更新：Feb 24, 2026
+版本：v1.1 (2026-02-24 - 已支援多服務重啟！)
+最後更新：Feb 24, 2026 22:00

@@ -196,11 +196,11 @@ show_dependencies() {
     fi
 }
 
-# 快速重启单个服务
+# 快速重启单个或多个服务
 quick_restart() {
-    local service=$1
+    local services=("$@")
 
-    if [[ -z "$service" ]]; then
+    if [[ ${#services[@]} -eq 0 ]]; then
         echo -e "${RED}錯誤：需要指定服務名稱${NC}"
         show_usage
         exit 1
@@ -208,64 +208,107 @@ quick_restart() {
 
     local all_services=($(get_all_services))
 
-    if [[ ! " ${all_services[@]} " =~ " ${service} " ]]; then
-        echo -e "${RED}錯誤：服務 '$service' 不存在${NC}"
-        echo -e "\n用 ${GREEN}./quick-redeploy.sh --list${NC} 查看所有可用服務"
-        exit 1
-    fi
+    # 验证所有指定的服务都存在
+    for service in "${services[@]}"; do
+        if [[ ! " ${all_services[@]} " =~ " ${service} " ]]; then
+            echo -e "${RED}錯誤：服務 '$service' 不存在${NC}"
+            echo -e "\n用 ${GREEN}./quick-redeploy.sh --list${NC} 查看所有可用服務"
+            exit 1
+        fi
+    done
 
-    echo -e "${BLUE}╔════════════════════════════════════════╗${NC}"
-    echo -e "${BLUE}║  快速重啟服務: $service${NC}"
-    echo -e "${BLUE}╚════════════════════════════════════════╝${NC}\n"
+    # 收集所有要重启的服务（包括依赖）
+    local services_to_restart=()
+    local services_with_deps=()
 
-    # 获取依赖关系
-    local depends=($(extract_depends_on "$service"))
+    for service in "${services[@]}"; do
+        services_with_deps+=("$service")
+        services_to_restart+=("$service")
 
-    # 要重启的服务列表（包括自己）
-    local services_to_restart=("$service")
-
-    # 显示依赖信息
-    if [[ ${#depends[@]} -gt 0 ]]; then
-        echo -e "${YELLOW}此服務依賴：${NC}"
+        # 获取依赖关系
+        local depends=($(extract_depends_on "$service"))
         for dep in "${depends[@]}"; do
-            echo "  • $dep"
+            services_with_deps+=("$dep")
             services_to_restart+=("$dep")
+        done
+    done
+
+    # 去重（保持顺序）
+    local unique_services=()
+    local seen=""
+    for svc in "${services_to_restart[@]}"; do
+        if [[ ! "$seen" =~ "$svc" ]]; then
+            unique_services+=("$svc")
+            seen="$seen $svc"
+        fi
+    done
+
+    # 显示标题
+    if [[ ${#services[@]} -eq 1 ]]; then
+        echo -e "${BLUE}╔════════════════════════════════════════╗${NC}"
+        echo -e "${BLUE}║  快速重啟服務: ${services[0]}${NC}"
+        echo -e "${BLUE}╚════════════════════════════════════════╝${NC}\n"
+    else
+        echo -e "${BLUE}╔════════════════════════════════════════╗${NC}"
+        echo -e "${BLUE}║  快速重啟多個服務（${#services[@]} 個）${NC}"
+        echo -e "${BLUE}╚════════════════════════════════════════╝${NC}\n"
+
+        echo -e "${YELLOW}指定的服務：${NC}"
+        for svc in "${services[@]}"; do
+            echo "  • $svc"
         done
         echo ""
     fi
 
     # 显示将要重启的服务
-    echo -e "${YELLOW}將要重啟的服務（共 ${#services_to_restart[@]} 個）：${NC}"
-    for svc in "${services_to_restart[@]}"; do
+    echo -e "${YELLOW}將要重啟的服務（共 ${#unique_services[@]} 個）：${NC}"
+    for svc in "${unique_services[@]}"; do
         echo "  ► $svc"
     done
     echo ""
 
     # 重建镜像
     echo -e "${BLUE}[1/3] 正在重建 Docker 映像...${NC}"
-    if $DOCKER_CMD build --no-cache "$service" 2>&1 | tail -5; then
-        echo -e "${GREEN}✓ 映像重建完成${NC}\n"
-    else
-        echo -e "${RED}✗ 映像重建失敗${NC}"
+    local build_failed=0
+    for service in "${services[@]}"; do
+        if ! $DOCKER_CMD build --no-cache "$service" 2>&1 | tail -3; then
+            echo -e "${RED}✗ 映像重建失敗: $service${NC}"
+            build_failed=1
+        fi
+    done
+
+    if [[ $build_failed -eq 1 ]]; then
+        echo -e "${RED}✗ 部分映像重建失敗${NC}"
         exit 1
     fi
+    echo -e "${GREEN}✓ 映像重建完成${NC}\n"
 
     # 停止旧服务
     echo -e "${BLUE}[2/3] 正在停止舊服務...${NC}"
-    $DOCKER_CMD stop "${services_to_restart[@]}" 2>/dev/null || true
-    $DOCKER_CMD rm "${services_to_restart[@]}" 2>/dev/null || true
+    $DOCKER_CMD stop "${unique_services[@]}" 2>/dev/null || true
+    $DOCKER_CMD rm "${unique_services[@]}" 2>/dev/null || true
     echo -e "${GREEN}✓ 舊服務已停止${NC}\n"
 
     # 启动新服务
     echo -e "${BLUE}[3/3] 正在啟動新服務...${NC}"
-    if $DOCKER_CMD up -d "${services_to_restart[@]}"; then
+    if $DOCKER_CMD up -d "${unique_services[@]}"; then
         echo -e "${GREEN}✓ 新服務已啟動${NC}\n"
 
         # 显示部署摘要
         echo -e "${BLUE}═══════════════════════════════════════${NC}"
         echo -e "${GREEN}✓ 部署完成！${NC}\n"
-        echo -e "${YELLOW}查看日誌：${NC}"
-        echo -e "  ${GREEN}docker logs $service -f${NC}\n"
+
+        if [[ ${#services[@]} -eq 1 ]]; then
+            echo -e "${YELLOW}查看日誌：${NC}"
+            echo -e "  ${GREEN}docker logs ${services[0]} -f${NC}\n"
+        else
+            echo -e "${YELLOW}查看日誌：${NC}"
+            for svc in "${services[@]}"; do
+                echo -e "  ${GREEN}docker logs $svc -f${NC}"
+            done
+            echo ""
+        fi
+
         echo -e "${YELLOW}查看運行狀態：${NC}"
         echo -e "  ${GREEN}docker ps | grep simpleec${NC}\n"
         echo -e "${BLUE}═══════════════════════════════════════${NC}"
@@ -342,7 +385,8 @@ case "${1:-}" in
             show_usage
             exit 0
         else
-            quick_restart "$1"
+            # 支持多个服务参数
+            quick_restart "$@"
         fi
         ;;
 esac
