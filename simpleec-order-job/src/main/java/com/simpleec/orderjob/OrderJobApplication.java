@@ -19,7 +19,7 @@ import org.springframework.stereotype.Component;
 )
 @EntityScan(basePackages = "com.simpleec.core.entity")
 @EnableJpaRepositories(basePackages = "com.simpleec.core.repository")
-@ComponentScan(basePackages = "com.simpleec.core.service")
+@ComponentScan(basePackages = {"com.simpleec.core.config", "com.simpleec.core.service"})
 @org.springframework.kafka.annotation.EnableKafka
 public class OrderJobApplication {
     public static void main(String[] args) {
