@@ -11,6 +11,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -49,16 +50,18 @@ public class CyberbizApiClient {
             // 格式：YYYY-MM-DD HH:MM:SS
             String startTime = formatTimestamp(createTimeFrom);
             String endTime = formatTimestamp(createTimeTo);
+            // 使用 %20 而不是 + 來編碼空格（HTTP 簽名規範要求）
+            String encodedStart = java.net.URLEncoder.encode(startTime, "UTF-8").replace("+", "%20");
+            String encodedEnd = java.net.URLEncoder.encode(endTime, "UTF-8").replace("+", "%20");
             String queryString = String.format("start_time=%s&end_time=%s&page=1&per_page=50&offset=0",
-                java.net.URLEncoder.encode(startTime, "UTF-8"),
-                java.net.URLEncoder.encode(endTime, "UTF-8"));
-            String fullPath = path + "?" + queryString;
-            String url = baseUrl + fullPath;
+                encodedStart, encodedEnd);
+            String url = baseUrl + path + "?" + queryString;
 
             log.debug("Calling Cyberbiz API: GET {}", url);
             log.debug("Credentials - username: {}, secret: {}", username != null ? "***" : "null", secret != null ? "***" : "null");
 
-            HttpHeaders headers = buildHmacHeaders(username, secret, "GET", fullPath, null);
+            // 重要：HTTP 簽名中的 request-line 只包含路徑，不包含查詢參數
+            HttpHeaders headers = buildHmacHeaders(username, secret, "GET", path, null);
             log.debug("HMAC headers built successfully");
             HttpEntity<?> entity = new HttpEntity<>(headers);
             ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
@@ -80,15 +83,17 @@ public class CyberbizApiClient {
             // 更新時間使用 updated_at_start_time 和 updated_at_end_time 參數
             String startTime = formatTimestamp(updateTimeFrom);
             String endTime = formatTimestamp(updateTimeTo);
+            // 使用 %20 而不是 + 來編碼空格（HTTP 簽名規範要求）
+            String encodedStart = java.net.URLEncoder.encode(startTime, "UTF-8").replace("+", "%20");
+            String encodedEnd = java.net.URLEncoder.encode(endTime, "UTF-8").replace("+", "%20");
             String queryString = String.format("updated_at_start_time=%s&updated_at_end_time=%s&page=1&per_page=50&offset=0",
-                java.net.URLEncoder.encode(startTime, "UTF-8"),
-                java.net.URLEncoder.encode(endTime, "UTF-8"));
-            String fullPath = path + "?" + queryString;
-            String url = baseUrl + fullPath;
+                encodedStart, encodedEnd);
+            String url = baseUrl + path + "?" + queryString;
 
             log.debug("Calling Cyberbiz API: GET {}", url);
 
-            HttpHeaders headers = buildHmacHeaders(username, secret, "GET", fullPath, null);
+            // 重要：HTTP 簽名中的 request-line 只包含路徑，不包含查詢參數
+            HttpHeaders headers = buildHmacHeaders(username, secret, "GET", path, null);
             HttpEntity<?> entity = new HttpEntity<>(headers);
             ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
 
@@ -106,12 +111,11 @@ public class CyberbizApiClient {
     public Map<String, Object> getOrderDetail(String username, String secret, String orderId) {
         try {
             String path = "/v1/orders/" + orderId;
-            String fullPath = path;
-            String url = baseUrl + fullPath;
+            String url = baseUrl + path;
 
             log.debug("Calling Cyberbiz API: GET {}", url);
 
-            HttpHeaders headers = buildHmacHeaders(username, secret, "GET", fullPath, null);
+            HttpHeaders headers = buildHmacHeaders(username, secret, "GET", path, null);
             HttpEntity<?> entity = new HttpEntity<>(headers);
             ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
 
@@ -140,12 +144,12 @@ public class CyberbizApiClient {
         try {
             String path = "/v1/orders";
             String queryString = String.format("refund_time_from=%d&refund_time_to=%d", refundTimeFrom, refundTimeTo);
-            String fullPath = path + "?" + queryString;
-            String url = baseUrl + fullPath;
+            String url = baseUrl + path + "?" + queryString;
 
             log.debug("Calling Cyberbiz API: GET {}", url);
 
-            HttpHeaders headers = buildHmacHeaders(username, secret, "GET", fullPath, null);
+            // 重要：HTTP 簽名中的 request-line 只包含路徑，不包含查詢參數
+            HttpHeaders headers = buildHmacHeaders(username, secret, "GET", path, null);
             HttpEntity<?> entity = new HttpEntity<>(headers);
             ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
 
