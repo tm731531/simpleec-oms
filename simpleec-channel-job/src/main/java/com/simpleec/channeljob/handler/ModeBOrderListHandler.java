@@ -47,12 +47,12 @@ public class ModeBOrderListHandler {
      * @param merchantId 商戶 ID
      * @param channelId  通路 ID (e.g., "shopee")
      * @param adapter    通路適配器 (Mode B)
-     * @param timeRange  時間範圍 (e.g., "last_30_minutes")
+     * @param baseTimestamp  消息的心跳時間戳（秒），作為時間窗口的基礎
      */
     public void handleModeBOrderList(String merchantId, String channelId, ChannelAdapter adapter,
-                                     String timeRange) throws Exception {
+                                     long baseTimestamp) throws Exception {
 
-        log.info("Processing Mode B order list for {} from {}", merchantId, channelId);
+        log.info("Processing Mode B order list for {} from {} (baseTimestamp: {})", merchantId, channelId, baseTimestamp);
 
         try {
             // 若是 CyberbizAdapter，設置 token 和 token2
@@ -70,7 +70,8 @@ public class ModeBOrderListHandler {
             }
 
             // 第 1 步：從 API 拉取訂單 ID 列表（不含詳情）
-            List<String> orderIds = adapter.fetchOrderList(channelId, timeRange);
+            // 傳遞 baseTimestamp 作為時間窗口的基礎（心跳時間戳）
+            List<String> orderIds = adapter.fetchOrderListByTimestamp(channelId, baseTimestamp);
             log.info("Fetched {} order IDs from {} for {}", orderIds.size(), channelId, merchantId);
 
             if (orderIds.isEmpty()) {

@@ -45,7 +45,13 @@ public class CyberbizApiClient {
     public List<String> getOrdersCreatedInTimeRange(String username, String secret, long createTimeFrom, long createTimeTo) {
         try {
             String path = "/v1/orders";
-            String queryString = String.format("create_time_from=%d&create_time_to=%d", createTimeFrom, createTimeTo);
+            // 根據 Cyberbiz API 文檔，時間參數應為日期時間字符串
+            // 格式：YYYY-MM-DD HH:MM:SS
+            String startTime = formatTimestamp(createTimeFrom);
+            String endTime = formatTimestamp(createTimeTo);
+            String queryString = String.format("start_time=%s&end_time=%s&page=1&per_page=50&offset=0",
+                java.net.URLEncoder.encode(startTime, "UTF-8"),
+                java.net.URLEncoder.encode(endTime, "UTF-8"));
             String fullPath = path + "?" + queryString;
             String url = baseUrl + fullPath;
 
@@ -71,7 +77,12 @@ public class CyberbizApiClient {
     public List<String> getOrdersUpdatedInTimeRange(String username, String secret, long updateTimeFrom, long updateTimeTo) {
         try {
             String path = "/v1/orders";
-            String queryString = String.format("update_time_from=%d&update_time_to=%d", updateTimeFrom, updateTimeTo);
+            // 更新時間使用 updated_at_start_time 和 updated_at_end_time 參數
+            String startTime = formatTimestamp(updateTimeFrom);
+            String endTime = formatTimestamp(updateTimeTo);
+            String queryString = String.format("updated_at_start_time=%s&updated_at_end_time=%s&page=1&per_page=50&offset=0",
+                java.net.URLEncoder.encode(startTime, "UTF-8"),
+                java.net.URLEncoder.encode(endTime, "UTF-8"));
             String fullPath = path + "?" + queryString;
             String url = baseUrl + fullPath;
 
@@ -263,5 +274,16 @@ public class CyberbizApiClient {
 
         log.warn("Unexpected response status from Cyberbiz: {}", response.getStatusCode());
         return Collections.emptyList();
+    }
+
+    /**
+     * 將 Unix timestamp 轉換為 Cyberbiz API 所需的日期時間字符串格式
+     * 格式：YYYY-MM-DD HH:MM:SS
+     */
+    private String formatTimestamp(long timestamp) {
+        java.time.Instant instant = java.time.Instant.ofEpochSecond(timestamp);
+        java.time.ZonedDateTime zdt = instant.atZone(java.time.ZoneId.of("UTC"));
+        java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+        return formatter.format(zdt);
     }
 }

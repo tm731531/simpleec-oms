@@ -95,6 +95,12 @@ public class ShopifyAdapter implements ChannelAdapter {
     }
 
     @Override
+    public List<String> fetchOrderListByTimestamp(String channelId, long baseTimestamp) throws Exception {
+        // Mode A 不需要此方法
+        throw new UnsupportedOperationException("Shopify is Mode A, no need for fetchOrderListByTimestamp");
+    }
+
+    @Override
     public Map<String, Object> fetchOrderDetail(String channelId, String orderId) throws Exception {
         // Mode A 不需要此方法
         throw new UnsupportedOperationException("Shopify is Mode A, no need for fetchOrderDetail");

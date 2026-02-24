@@ -126,6 +126,14 @@ public class EasystoreAdapter implements ChannelAdapter {
     }
 
     /**
+     * Mode A 不支援單獨的訂單列表（無詳情）
+     */
+    @Override
+    public List<String> fetchOrderListByTimestamp(String channelId, long baseTimestamp) throws Exception {
+        throw new UnsupportedOperationException("Easystore 使用 Mode A，不支援分離的訂單列表");
+    }
+
+    /**
      * Mode A 不支援單獨的訂單詳情
      */
     @Override

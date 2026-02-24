@@ -60,6 +60,32 @@ public class ShopeeAdapter implements ChannelAdapter {
     }
 
     /**
+     * Mode B: 拉取訂單 ID 列表（使用 baseTimestamp 作為時間窗口基準）
+     *
+     * 根據心跳時間戳（heartbeat timestamp）計算時間窗口：
+     * - Shopee: 按訂單狀態分批查詢（新訂單 1h, 待出貨 3d, 已出貨 5d, 已完成 7d）
+     *
+     * @param channelId     通路 ID
+     * @param baseTimestamp 心跳時間戳（秒），來自 Kafka 消息 header.timestamp
+     * @return 訂單 ID 列表
+     */
+    @Override
+    public List<String> fetchOrderListByTimestamp(String channelId, long baseTimestamp) throws Exception {
+        log.info("Fetching Shopee order list for channel {} using baseTimestamp: {}", channelId, baseTimestamp);
+
+        // 模擬 Shopee API 回傳的訂單 ID 列表
+        // 實際實裝時應根據 baseTimestamp 計算多個時間窗口
+        List<String> orderIds = Arrays.asList(
+            "SHP-202402-00001",
+            "SHP-202402-00002",
+            "SHP-202402-00003"
+        );
+
+        log.info("Fetched {} order IDs from Shopee", orderIds.size());
+        return orderIds;
+    }
+
+    /**
      * Mode B: 拉取單筆訂單詳情
      *
      * 模擬 Shopee API: GET /api/v2/orders/{order_id}/details

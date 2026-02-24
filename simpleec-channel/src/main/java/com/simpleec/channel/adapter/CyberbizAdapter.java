@@ -104,28 +104,100 @@ public class CyberbizAdapter implements ChannelAdapter {
     }
 
     /**
-     * 輔助方法：查詢該時段內建立的訂單
+     * Mode B: 拉取訂單 ID 列表（使用 baseTimestamp 作為時間窗口基準）
+     *
+     * 根據心跳時間戳（heartbeat timestamp）計算時間窗口：
+     * - 建立訂單：baseTimestamp - 7 天 ～ baseTimestamp
+     * - 更新訂單：baseTimestamp - 1 天 ～ baseTimestamp
+     *
+     * @param channelId     通路 ID
+     * @param baseTimestamp 心跳時間戳（秒），來自 Kafka 消息 header.timestamp
+     * @return 訂單 ID 列表（去重後）
+     */
+    @Override
+    public List<String> fetchOrderListByTimestamp(String channelId, long baseTimestamp) throws Exception {
+        log.info("Fetching Cyberbiz order list for channel {} using baseTimestamp: {}", channelId, baseTimestamp);
+
+        if (token == null || token.isEmpty() || secret == null || secret.isEmpty()) {
+            log.error("Credentials not set for channel {}", channelId);
+            throw new IllegalArgumentException("Credentials not set - call setCredentials() first");
+        }
+
+        Set<String> orderIds = new LinkedHashSet<>();
+
+        // 第一次呼叫：查詢該時段內建立的訂單（7 天窗口）
+        try {
+            List<String> createdOrders = fetchOrdersCreatedInTimeRangeByTimestamp(baseTimestamp);
+            orderIds.addAll(createdOrders);
+            log.debug("Fetched {} orders created in timeRange from Cyberbiz", createdOrders.size());
+        } catch (Exception e) {
+            log.error("Error fetching created orders from Cyberbiz", e);
+            throw e;
+        }
+
+        // 第二次呼叫：查詢該時段內更新的訂單（1 天窗口）
+        try {
+            List<String> updatedOrders = fetchOrdersUpdatedInTimeRangeByTimestamp(baseTimestamp);
+            orderIds.addAll(updatedOrders);
+            log.debug("Fetched {} orders updated in timeRange from Cyberbiz", updatedOrders.size());
+        } catch (Exception e) {
+            log.error("Error fetching updated orders from Cyberbiz", e);
+            throw e;
+        }
+
+        log.info("Fetched {} unique order IDs from Cyberbiz (after dedup)", orderIds.size());
+        return new ArrayList<>(orderIds);
+    }
+
+    /**
+     * 輔助方法：查詢該時段內建立的訂單（使用 baseTimestamp）
+     *
+     * 時間窗口：baseTimestamp - 7 天 ～ baseTimestamp
+     */
+    private List<String> fetchOrdersCreatedInTimeRangeByTimestamp(long baseTimestamp) {
+        log.debug("Fetching orders created relative to baseTimestamp: {}", baseTimestamp);
+        long sevenDaysAgo = baseTimestamp - (7 * 86400);  // 7 days before baseTimestamp
+        return cyberbizApiClient.getOrdersCreatedInTimeRange(token, secret, sevenDaysAgo, baseTimestamp);
+    }
+
+    /**
+     * 輔助方法：查詢該時段內更新的訂單（使用 baseTimestamp）
+     *
+     * 時間窗口：baseTimestamp - 1 天 ～ baseTimestamp
+     */
+    private List<String> fetchOrdersUpdatedInTimeRangeByTimestamp(long baseTimestamp) {
+        log.debug("Fetching orders updated relative to baseTimestamp: {}", baseTimestamp);
+        long oneDayAgo = baseTimestamp - 86400;  // 1 day before baseTimestamp
+        return cyberbizApiClient.getOrdersUpdatedInTimeRange(token, secret, oneDayAgo, baseTimestamp);
+    }
+
+    /**
+     * 輔助方法：查詢該時段內建立的訂單（已過時，保留為向後相容）
      * 模擬 Cyberbiz API: GET /api/order/get_orders?create_time_from=<timestamp>&create_time_to=<timestamp>
      *
      * 預設時間窗口：過去 7 天內建立的訂單（測試環境用於拉取歷史數據）
      * timeRange 參數目前先記錄但不解析，預留未來擴充
+     *
+     * @deprecated 使用 {@link #fetchOrderListByTimestamp(String, long)} 代替
      */
     private List<String> fetchOrdersCreatedInTimeRange(String timeRange) {
-        log.debug("Fetching orders created in timeRange: {}", timeRange);
+        log.debug("Fetching orders created in timeRange: {} (using current time as base)", timeRange);
         long now = Instant.now().getEpochSecond();
         long sevenDaysAgo = now - (7 * 86400);  // 7 days window for testing
         return cyberbizApiClient.getOrdersCreatedInTimeRange(token, secret, sevenDaysAgo, now);
     }
 
     /**
-     * 輔助方法：查詢該時段內更新的訂單
+     * 輔助方法：查詢該時段內更新的訂單（已過時，保留為向後相容）
      * 模擬 Cyberbiz API: GET /api/order/get_orders?update_time_from=<timestamp>&update_time_to=<timestamp>
      *
      * 預設時間窗口：過去 24 小時內更新的訂單（確保不漏掉已出貨、已完成等狀態更新）
      * timeRange 參數目前先記錄但不解析，預留未來擴充
+     *
+     * @deprecated 使用 {@link #fetchOrderListByTimestamp(String, long)} 代替
      */
     private List<String> fetchOrdersUpdatedInTimeRange(String timeRange) {
-        log.debug("Fetching orders updated in timeRange: {}", timeRange);
+        log.debug("Fetching orders updated in timeRange: {} (using current time as base)", timeRange);
         long now = Instant.now().getEpochSecond();
         long oneDayAgo = now - 86400;  // 24 hour window for updated orders
         return cyberbizApiClient.getOrdersUpdatedInTimeRange(token, secret, oneDayAgo, now);

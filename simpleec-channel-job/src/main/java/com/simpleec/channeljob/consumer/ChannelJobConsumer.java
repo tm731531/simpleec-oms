@@ -158,9 +158,13 @@ public class ChannelJobConsumer {
 
             log.debug("Processing {} message for {} (channel: {})", taskType, platformCode, channelId);
 
+            // 提取消息的時間戳（心跳時間）
+            String timestamp = header.path("timestamp").asText();
+            long baseTimestamp = parseTimestamp(timestamp);
+
             // 根據 taskType 路由
             if ("FETCH_ORDERS".equals(taskType)) {
-                handleFetchOrders(platformCode, channelId, merchantId, body);
+                handleFetchOrders(platformCode, channelId, merchantId, body, baseTimestamp);
             } else if ("FETCH_ORDER_DETAIL".equals(taskType)) {
                 String channelOrderId = body.get("channelOrderId").asText();
                 handleFetchOrderDetail(platformCode, channelId, merchantId, channelOrderId);
@@ -182,7 +186,7 @@ public class ChannelJobConsumer {
      * Mode A: 直接拉取完整訂單
      * Mode B: 拉取訂單列表，發送 FETCH_ORDER_DETAIL 消息
      */
-    private void handleFetchOrders(String platformCode, String channelId, String merchantId, JsonNode body) {
+    private void handleFetchOrders(String platformCode, String channelId, String merchantId, JsonNode body, long baseTimestamp) {
         try {
             // Use path() instead of get() to handle missing fields safely
             String timeRange = body.path("timeRange").asText("last_5_minutes");
@@ -200,12 +204,24 @@ public class ChannelJobConsumer {
                 log.info("Mode A order list processing completed for {}", platformCode);
             } else {
                 // Mode B: 拉取訂單 ID 列表，然後發送詳情查詢消息
-                modeBOrderListHandler.handleModeBOrderList(merchantId, channelId, adapter, timeRange);
+                modeBOrderListHandler.handleModeBOrderList(merchantId, channelId, adapter, baseTimestamp);
                 log.info("Mode B order list processing completed for {}", platformCode);
             }
 
         } catch (Exception e) {
             log.error("Error handling FETCH_ORDERS for {}", platformCode, e);
+        }
+    }
+
+    /**
+     * 解析 ISO-8601 格式的時間戳為 Unix 時間戳（秒）
+     */
+    private long parseTimestamp(String isoTimestamp) {
+        try {
+            return java.time.Instant.parse(isoTimestamp).getEpochSecond();
+        } catch (Exception e) {
+            log.warn("Failed to parse timestamp: {}, using current time", isoTimestamp);
+            return java.time.Instant.now().getEpochSecond();
         }
     }
 

@@ -41,6 +41,15 @@ public interface ChannelAdapter {
     List<String> fetchOrderList(String channelId, String timeRange) throws Exception;
 
     /**
+     * Mode B: 拉取訂單列表（根據時間戳）
+     *
+     * @param channelId 通路 ID
+     * @param baseTimestamp 基礎時間戳（心跳時間，秒），用於計算時間窗口
+     * @return 訂單 ID 列表
+     */
+    List<String> fetchOrderListByTimestamp(String channelId, long baseTimestamp) throws Exception;
+
+    /**
      * Mode B: 拉取單筆訂單詳情
      *
      * @param channelId 通路 ID（用於獲取 channel 配置如 token）
