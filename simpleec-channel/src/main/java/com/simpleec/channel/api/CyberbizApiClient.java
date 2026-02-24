@@ -75,7 +75,7 @@ public class CyberbizApiClient {
     }
 
     /**
-     * 查詢該時段內更新的訂單
+     * 查詢該時段內更新的訂單（返回訂單 ID 列表）
      */
     public List<String> getOrdersUpdatedInTimeRange(String username, String secret, long updateTimeFrom, long updateTimeTo) {
         try {
@@ -101,6 +101,34 @@ public class CyberbizApiClient {
 
         } catch (Exception e) {
             log.error("Error calling Cyberbiz API getOrdersUpdatedInTimeRange", e);
+            return Collections.emptyList();
+        }
+    }
+
+    /**
+     * 查詢該時段內更新的訂單（返回完整訂單數據 - 用於 Mode A）
+     */
+    public List<Map<String, Object>> getCompleteOrdersUpdatedInTimeRange(String username, String secret, long updateTimeFrom, long updateTimeTo) {
+        try {
+            String path = "/v1/orders";
+            String startTime = formatTimestamp(updateTimeFrom);
+            String endTime = formatTimestamp(updateTimeTo);
+            String encodedStart = java.net.URLEncoder.encode(startTime, "UTF-8").replace("+", "%20");
+            String encodedEnd = java.net.URLEncoder.encode(endTime, "UTF-8").replace("+", "%20");
+            String queryString = String.format("updated_at_start_time=%s&updated_at_end_time=%s&page=1&per_page=50&offset=0",
+                encodedStart, encodedEnd);
+            String url = baseUrl + path + "?" + queryString;
+
+            log.debug("Calling Cyberbiz API for complete orders: GET {}", url);
+
+            HttpHeaders headers = buildHmacHeaders(username, secret, "GET", path, null);
+            HttpEntity<?> entity = new HttpEntity<>(headers);
+            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
+
+            return parseCompleteOrderResponse(response);
+
+        } catch (Exception e) {
+            log.error("Error calling Cyberbiz API getCompleteOrdersUpdatedInTimeRange", e);
             return Collections.emptyList();
         }
     }
@@ -254,14 +282,28 @@ public class CyberbizApiClient {
     }
 
     /**
-     * 解析訂單 API 回應
+     * 解析訂單 API 回應 - 返回訂單 ID 列表
+     * Cyberbiz API 返回的是直接的數組：[{ id, order_number, ... }, ...]
      */
     private List<String> parseOrderResponse(ResponseEntity<String> response) throws Exception {
         if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
             JsonNode root = objectMapper.readTree(response.getBody());
             List<String> orderIds = new ArrayList<>();
 
-            if (root.has("data") && root.get("data").has("orders")) {
+            // Cyberbiz API 返回的是直接的 JSON 數組
+            if (root.isArray()) {
+                root.forEach(order -> {
+                    if (order.has("id")) {
+                        // 使用 id（訂單的內部 ID）或 order_number（訂單號）
+                        String orderId = order.has("id") ? order.get("id").asText() : null;
+                        if (orderId != null && !orderId.isEmpty()) {
+                            orderIds.add(orderId);
+                        }
+                    }
+                });
+            }
+            // 備用：如果是舊格式 { data: { orders: [...] } }
+            else if (root.has("data") && root.get("data").has("orders")) {
                 JsonNode ordersNode = root.get("data").get("orders");
                 if (ordersNode.isArray()) {
                     ordersNode.forEach(order -> {
@@ -274,6 +316,41 @@ public class CyberbizApiClient {
 
             log.debug("Retrieved {} orders from Cyberbiz", orderIds.size());
             return orderIds;
+        }
+
+        log.warn("Unexpected response status from Cyberbiz: {}", response.getStatusCode());
+        return Collections.emptyList();
+    }
+
+    /**
+     * 解析訂單 API 回應 - 返回完整訂單數據（用於 Mode A）
+     */
+    private List<Map<String, Object>> parseCompleteOrderResponse(ResponseEntity<String> response) throws Exception {
+        List<Map<String, Object>> orders = new ArrayList<>();
+
+        if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+            JsonNode root = objectMapper.readTree(response.getBody());
+
+            // Cyberbiz API 返回的是直接的 JSON 數組
+            if (root.isArray()) {
+                root.forEach(order -> {
+                    Map<String, Object> orderMap = objectMapper.convertValue(order, Map.class);
+                    orders.add(orderMap);
+                });
+            }
+            // 備用：如果是舊格式 { data: { orders: [...] } }
+            else if (root.has("data") && root.get("data").has("orders")) {
+                JsonNode ordersNode = root.get("data").get("orders");
+                if (ordersNode.isArray()) {
+                    ordersNode.forEach(order -> {
+                        Map<String, Object> orderMap = objectMapper.convertValue(order, Map.class);
+                        orders.add(orderMap);
+                    });
+                }
+            }
+
+            log.debug("Retrieved {} complete orders from Cyberbiz", orders.size());
+            return orders;
         }
 
         log.warn("Unexpected response status from Cyberbiz: {}", response.getStatusCode());

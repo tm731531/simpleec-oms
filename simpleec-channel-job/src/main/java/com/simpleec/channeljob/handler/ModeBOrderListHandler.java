@@ -82,7 +82,7 @@ public class ModeBOrderListHandler {
             // 第 2 步：為每個訂單 ID 發送 FETCH_ORDER_DETAIL 消息
             for (String channelOrderId : orderIds) {
                 try {
-                    sendFetchDetailMessage(merchantId, channelId, channelOrderId);
+                    sendFetchDetailMessage(merchantId, channelId, channelOrderId, adapter);
                 } catch (Exception e) {
                     log.error("Failed to send detail fetch message for order {}", channelOrderId, e);
                     // 繼續處理其他訂單（不中斷整個列表）
@@ -115,7 +115,7 @@ public class ModeBOrderListHandler {
      *   }
      * }
      */
-    private void sendFetchDetailMessage(String merchantId, String channelId, String channelOrderId)
+    private void sendFetchDetailMessage(String merchantId, String channelId, String channelOrderId, ChannelAdapter adapter)
             throws Exception {
 
         ObjectNode message = objectMapper.createObjectNode();
@@ -135,8 +135,11 @@ public class ModeBOrderListHandler {
         body.put("channelOrderId", channelOrderId);
         message.set("body", body);
 
-        // 發送到 {platform}.slow topic（同一個 channel topic，只是 tasktype 不同）
-        String slowTopic = TopicConstants.platformSlowTopic(channelId);
+        // 發送到 {platform}.slow topic
+        // 重要：使用平台代碼（如 "cyberbiz"）而不是通道 ID（如 "CHANNEL_CYBERBIZ_001"）
+        // 這樣消費者才能正確監聽到消息
+        String platformCode = adapter.getPlatformCode();
+        String slowTopic = TopicConstants.platformSlowTopic(platformCode);
 
         kafkaTemplate.send(slowTopic, channelOrderId, message);
         log.debug("Sent FETCH_ORDER_DETAIL for {} to topic {}", channelOrderId, slowTopic);

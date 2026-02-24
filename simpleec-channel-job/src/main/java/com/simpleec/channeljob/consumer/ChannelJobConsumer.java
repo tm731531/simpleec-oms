@@ -1,9 +1,11 @@
 package com.simpleec.channeljob.consumer;
 
 import com.simpleec.channel.adapter.ChannelAdapter;
+import com.simpleec.channel.adapter.CyberbizAdapter;
 import com.simpleec.channeljob.handler.ModeAOrderListHandler;
 import com.simpleec.channeljob.handler.ModeBOrderListHandler;
 import com.simpleec.channeljob.handler.ModeBOrderDetailHandler;
+import com.simpleec.channeljob.service.ChannelService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -40,6 +42,7 @@ public class ChannelJobConsumer {
     private final ModeBOrderListHandler modeBOrderListHandler;
     private final ModeBOrderDetailHandler modeBOrderDetailHandler;
     private final ObjectMapper objectMapper;
+    private final ChannelService channelService;
 
     @Autowired(required = false)
     private KafkaListenerEndpointRegistry kafkaListenerEndpointRegistry;
@@ -195,6 +198,20 @@ public class ChannelJobConsumer {
             if (adapter == null) {
                 log.error("No adapter found for platform: {}", platformCode);
                 return;
+            }
+
+            // 若是 CyberbizAdapter，設置 token 和 token2
+            if (adapter instanceof CyberbizAdapter) {
+                com.simpleec.channeljob.entity.Channel channel = channelService.getChannel(channelId);
+                if (channel == null) {
+                    throw new IllegalArgumentException("Channel not found for: " + channelId);
+                }
+                String token = channel.getToken();
+                String token2 = channel.getToken2();
+                if (token == null || token.isEmpty() || token2 == null || token2.isEmpty()) {
+                    throw new IllegalArgumentException("Channel credentials not fully configured for: " + channelId);
+                }
+                ((CyberbizAdapter) adapter).setCredentials(token, token2);
             }
 
             // 根據 Mode 調用不同的處理邏輯

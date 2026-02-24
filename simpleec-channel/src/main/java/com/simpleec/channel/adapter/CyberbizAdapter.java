@@ -44,16 +44,42 @@ public class CyberbizAdapter implements ChannelAdapter {
 
     @Override
     public ModeEnum getMode() {
-        return ModeEnum.B;
+        return ModeEnum.A;
     }
 
     /**
-     * Mode A 不支援（Cyberbiz 使用 Mode B）
+     * Mode A: 直接拉取完整訂單（包含所有詳情）
+     *
+     * Cyberbiz API 在 get_orders 直接返回完整訂單資訊，支援 Mode A
+     * 時間窗口：過去 1 天內更新的訂單（基於 updated_at）
+     *
+     * @param channelId 通路 ID
+     * @param timeRange 時間範圍（暫未使用，預留未來擴充）
+     * @return 完整訂單列表
      */
     @Override
     public List<Map<String, Object>> fetchOrders(String channelId, String timeRange) throws Exception {
-        throw new UnsupportedOperationException(
-            "Cyberbiz 使用 Mode B，需分三步：先 fetchOrderList (created + updated)，再 fetchOrderDetail");
+        log.info("Fetching Cyberbiz complete orders for channel {} with timeRange: {}", channelId, timeRange);
+
+        if (token == null || token.isEmpty() || secret == null || secret.isEmpty()) {
+            log.error("Credentials not set for channel {}", channelId);
+            throw new IllegalArgumentException("Credentials not set - call setCredentials() first");
+        }
+
+        // Mode A: 直接使用 1 天時間窗口（Cyberbiz API 特性）
+        long now = Instant.now().getEpochSecond();
+        long oneDayAgo = now - 86400;  // 1 day window for complete orders
+
+        try {
+            List<Map<String, Object>> orders = cyberbizApiClient.getCompleteOrdersUpdatedInTimeRange(
+                token, secret, oneDayAgo, now
+            );
+            log.info("Fetched {} complete orders from Cyberbiz API", orders.size());
+            return orders;
+        } catch (Exception e) {
+            log.error("Error fetching orders from Cyberbiz API", e);
+            throw e;
+        }
     }
 
     /**
@@ -156,6 +182,7 @@ public class CyberbizAdapter implements ChannelAdapter {
      */
     private List<String> fetchOrdersCreatedInTimeRangeByTimestamp(long baseTimestamp) {
         log.debug("Fetching orders created relative to baseTimestamp: {}", baseTimestamp);
+        // Cyberbiz start_time 需要 7 天的時間窗口才能找到訂單
         long sevenDaysAgo = baseTimestamp - (7 * 86400);  // 7 days before baseTimestamp
         return cyberbizApiClient.getOrdersCreatedInTimeRange(token, secret, sevenDaysAgo, baseTimestamp);
     }

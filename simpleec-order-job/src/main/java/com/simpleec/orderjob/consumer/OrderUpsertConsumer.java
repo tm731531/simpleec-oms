@@ -4,6 +4,7 @@ import com.simpleec.core.entity.Order;
 import com.simpleec.core.service.OrderService;
 import com.simpleec.common.enums.OrderStatusEnum;
 import com.simpleec.common.util.RedisKeyUtil;
+import com.simpleec.common.util.NanoIdUtil;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -110,11 +111,16 @@ public class OrderUpsertConsumer {
         // 第 0 步：構建 Redis Key
         String redisKey = RedisKeyUtil.orderHashKey(merchantId, channelId, channelOrderId);
 
-        // 第 1 步：再次檢查 Redis（避免並發重複）
-        String existingHashInRedis = redisTemplate.opsForValue().get(redisKey);
-        if (orderHash.equals(existingHashInRedis)) {
-            log.info("Order already processed (Redis hash match): {}", channelOrderId);
-            return;
+        // 第 1 步：再次檢查 Redis（避免並發重複） — 容錯模式
+        try {
+            String existingHashInRedis = redisTemplate.opsForValue().get(redisKey);
+            if (orderHash.equals(existingHashInRedis)) {
+                log.info("Order already processed (Redis hash match): {}", channelOrderId);
+                return;
+            }
+        } catch (Exception e) {
+            // Redis 連接失敗時，記錄警告但繼續處理
+            log.warn("Redis dedup check failed for order {}, proceeding with database check", channelOrderId, e);
         }
 
         // 第 2 步：檢查資料庫中是否已存在
@@ -137,7 +143,11 @@ public class OrderUpsertConsumer {
                 // Hash 相同 → 沒有變化 → 跳過
                 log.debug("Order content unchanged: {}", channelOrderId);
                 // 但仍要更新 Redis（刷新 TTL）
-                redisTemplate.opsForValue().set(redisKey, orderHash, Duration.ofDays(7));
+                try {
+                    redisTemplate.opsForValue().set(redisKey, orderHash, Duration.ofDays(7));
+                } catch (Exception e) {
+                    log.warn("Failed to update Redis cache for order {}", channelOrderId, e);
+                }
                 return;
             }
         } else {
@@ -149,8 +159,12 @@ public class OrderUpsertConsumer {
         // 第 3 步：儲存訂單到資料庫
         Order savedOrder = orderService.updateOrder(order);
 
-        // 第 4 步：更新 Redis hash 快取
-        redisTemplate.opsForValue().set(redisKey, orderHash, Duration.ofDays(7));
+        // 第 4 步：更新 Redis hash 快取 — 容錯模式
+        try {
+            redisTemplate.opsForValue().set(redisKey, orderHash, Duration.ofDays(7));
+        } catch (Exception e) {
+            log.warn("Failed to update Redis cache for order {}", channelOrderId, e);
+        }
 
         // 第 5 步：觸發後續流程（可選）
         triggerFollowUpTasks(savedOrder);
@@ -165,6 +179,8 @@ public class OrderUpsertConsumer {
                                       JsonNode orderDataJson, boolean isRollback) throws Exception {
 
         Order order = new Order();
+        // 生成 Composite NanoID: merchant_first_4_digits + yyyymmddhhmmss + random_code(2)
+        order.setId(NanoIdUtil.generateComposite(merchantId));
         order.setMerchantId(merchantId);
         order.setChannelId(channelId);
         order.setChannelOrderId(channelOrderId);
