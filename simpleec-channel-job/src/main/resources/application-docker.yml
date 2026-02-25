@@ -9,7 +9,7 @@ spring:
       group-id: ${JOB_CHANNEL_GROUP_ID:channel-job-group}
       auto-offset-reset: earliest
   redis:
-    host: simpleec-redis
+    host: redis
     port: 6379
     database: 0
     timeout: 2000
