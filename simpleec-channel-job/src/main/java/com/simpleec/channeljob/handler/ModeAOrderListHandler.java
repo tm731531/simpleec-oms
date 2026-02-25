@@ -126,11 +126,11 @@ public class ModeAOrderListHandler {
         ObjectNode omsData = objectMapper.createObjectNode();
 
         // 基本信息（支援不同的字段名）
-        // Status — 轉換為 OMS 統一狀態（小寫）
+        // Status — 轉換為 OMS 統一狀態（大寫）
         Object statusObj = channelOrder.get("status");
         String omsStatus = statusObj != null
             ? OrderStatusMapper.mapToOmsStatus(platformCode, statusObj.toString())
-            : "pending";  // 預設
+            : "PENDING";  // 預設
         omsData.put("orderStatus", omsStatus);
 
         // Total Amount（支援 total_price, total_amount, amount 等）
@@ -334,6 +334,17 @@ public class ModeAOrderListHandler {
 
         // 發送到 order.process topic
         // 重要：使用 channelOrderId 作為 partition key，確保同一訂單的消息排隊到同一 partition
-        kafkaTemplate.send(TopicConstants.ORDER_PROCESS, channelOrderId, message);
+        // 添加回調確保訊息被成功發送到 Kafka（處理異步發送結果）
+        kafkaTemplate.send(TopicConstants.ORDER_PROCESS, channelOrderId, message)
+            .whenComplete((result, ex) -> {
+                if (ex != null) {
+                    log.error("Failed to send ORDER_UPSERT for {} to order.process", channelOrderId, ex);
+                } else {
+                    log.debug("Successfully sent ORDER_UPSERT for {} to order.process: partition={}, offset={}",
+                        channelOrderId,
+                        result.getRecordMetadata().partition(),
+                        result.getRecordMetadata().offset());
+                }
+            });
     }
 }
