@@ -65,6 +65,26 @@
 ╚════════════════════════════════════════════════════════╝
 ```
 
+#### 列表 Body 批量限制規則（性能優化）
+
+```
+原則：如果 Body 中包含列表（orders, products 等），
+      每個消息最多包含 10 條記錄
+
+應用場景：
+- FETCH_ORDER_DETAIL：orders 陣列 ≤ 10
+- SYNC_PACK_DETAIL：products 陣列 ≤ 10
+- 其他列表型 TaskType：≤ 10
+
+實施方式：
+如果有超過 10 條，分批發送多個消息（每個消息 ≤ 10 條）
+
+╔════════════════════════════════════════════════════════╗
+║ ✅ DO：分批發送，每個消息 ≤ 10 條                       ║
+║ ❌ DON'T：一個消息包含 100+ 條記錄                     ║
+╚════════════════════════════════════════════════════════╝
+```
+
 ---
 
 ## Body 生成規則（按 TaskType）
@@ -122,20 +142,41 @@ msg.body = new FetchOrdersBody();  // 空白
 
 **生成方式**（在 ChannelJob 中）：
 ```java
+// 步驟 1：找出需要詳情的訂單
 List<String> needsDetail = detectDifference(sellPacksFromAPI);  // 查 DB，對比差異
 
-List<FetchOrderDetailRequest> orders = needsDetail
-  .stream()
-  .map(channelOrderId -> new FetchOrderDetailRequest(channelOrderId))
-  .collect(toList());
+// 步驟 2：分批發送（每個消息最多 10 條）← 性能優化
+List<List<String>> batches = partition(needsDetail, 10);
 
-KafkaMessage msg = new KafkaMessage();
-msg.header = buildHeader(
-  taskType="FETCH_ORDER_DETAIL",
-  correlationId="sched-20260213-fetch-001",  // 關聯到原始 LIST
-  ...
-);
-msg.body = new FetchOrderDetailBody(orders);
+for (List<String> batch : batches) {
+  List<FetchOrderDetailRequest> orders = batch
+    .stream()
+    .map(channelOrderId -> new FetchOrderDetailRequest(channelOrderId))
+    .collect(toList());
+
+  KafkaMessage msg = new KafkaMessage();
+  msg.header = buildHeader(
+    taskType="FETCH_ORDER_DETAIL",
+    timestamp=extractedHeader.getTimestamp(),       // ← 一路帶下去
+    merchantId=extractedHeader.getMerchantId(),     // ← 一路帶下去
+    correlationId="sched-20260213-fetch-001",       // 關聯到原始 LIST
+    requestId=generateRequestId("channel_job"),     // 每個批次有不同的 requestId
+    ...
+  );
+  msg.body = new FetchOrderDetailBody(orders);
+
+  // 發送到 Kafka
+  kafkaTemplate.send("{platform}.slow", msg);
+}
+
+// 輔助方法：分批
+private <T> List<List<T>> partition(List<T> list, int size) {
+  List<List<T>> result = new ArrayList<>();
+  for (int i = 0; i < list.size(); i += size) {
+    result.add(list.subList(i, Math.min(i + size, list.size())));
+  }
+  return result;
+}
 ```
 
 ---
@@ -298,20 +339,30 @@ List<String> changedProductIds = allProducts.stream()
   .map(prod -> prod.getChannelProductId())
   .collect(toList());
 
-// 步驟 3：只有有差異的產品進入 DETAIL
-List<SyncPackDetailRequest> products = changedProductIds.stream()
-  .map(id -> new SyncPackDetailRequest(id))
-  .collect(toList());
+// 步驟 3：分批發送（每個消息最多 10 個產品）← 性能優化
+List<List<String>> batches = partition(changedProductIds, 10);
 
-// 步驟 4：構建消息
-KafkaMessage msg = new KafkaMessage();
-msg.header = buildHeader(
-  taskType="SYNC_PACK_DETAIL",
-  correlationId="sched-20260213-synclist-001",
-  priority="HIGH",
-  ...
-);
-msg.body = new SyncPackDetailBody(products);
+for (List<String> batch : batches) {
+  List<SyncPackDetailRequest> products = batch.stream()
+    .map(id -> new SyncPackDetailRequest(id))
+    .collect(toList());
+
+  // 步驟 4：構建消息
+  KafkaMessage msg = new KafkaMessage();
+  msg.header = buildHeader(
+    taskType="SYNC_PACK_DETAIL",
+    timestamp=extractedHeader.getTimestamp(),       // ← 一路帶下去
+    merchantId=extractedHeader.getMerchantId(),     // ← 一路帶下去
+    correlationId="sched-20260213-synclist-001",    // 關聯到原始 LIST
+    requestId=generateRequestId("channel_job"),     // 每個批次有不同的 requestId
+    priority="HIGH",
+    ...
+  );
+  msg.body = new SyncPackDetailBody(products);
+
+  // 發送到 Kafka
+  kafkaTemplate.send("{platform}.slow", msg);
+}
 ```
 
 **核心設計**：
