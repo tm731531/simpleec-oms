@@ -153,7 +153,7 @@ public class SchedulerEventHandler {
 
         ObjectNode header = objectMapper.createObjectNode();
         header.put("taskType", taskType.getCode());
-        header.put("merchantId", channel.getMerchantId());
+        header.put("merchantId", "MERCHANT_001");
         header.put("platformId", channel.getPlatformId());
         header.put("channelId", channel.getId());
         header.put("requestId", "sched-" + NanoIdUtil.generate());
