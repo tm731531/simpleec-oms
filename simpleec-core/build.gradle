@@ -12,4 +12,7 @@ dependencies {
 
     // PostgreSQL
     implementation 'org.postgresql:postgresql:42.7.1'
+
+    // Flyway for database migrations
+    implementation 'org.flywaydb:flyway-core:9.22.3'
 }
