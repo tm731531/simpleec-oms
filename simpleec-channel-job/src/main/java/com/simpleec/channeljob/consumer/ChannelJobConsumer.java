@@ -2,6 +2,7 @@ package com.simpleec.channeljob.consumer;
 
 import com.simpleec.channel.adapter.ChannelAdapter;
 import com.simpleec.channel.adapter.CyberbizAdapter;
+import com.simpleec.channeljob.entity.Channel;
 import com.simpleec.channeljob.handler.ModeAOrderListHandler;
 import com.simpleec.channeljob.handler.ModeBOrderListHandler;
 import com.simpleec.channeljob.handler.ModeBOrderDetailHandler;
@@ -147,6 +148,9 @@ public class ChannelJobConsumer {
 
     /**
      * 消費 Channel 消息 (動態註冊，支援所有配置的 topics)
+     *
+     * 重要：merchantId 從數據庫 channel 表查詢，而不是從消息頭讀取
+     * Scheduler 只需發送 channelId，ChannelJob 負責查詢對應的 merchantId
      */
     public void consumeChannelMessage(JsonNode json) {
         try {
@@ -156,10 +160,18 @@ public class ChannelJobConsumer {
 
             String taskType = header.get("taskType").asText();
             String channelId = header.get("channelId").asText();
-            String merchantId = header.get("merchantId").asText();
             String platformCode = extractPlatformFromGroupId();
 
-            log.debug("Processing {} message for {} (channel: {})", taskType, platformCode, channelId);
+            // 從數據庫查詢 Channel，獲得真實的 merchantId
+            Channel channel = channelService.getChannel(channelId);
+            if (channel == null) {
+                log.error("Channel not found: {}", channelId);
+                return;
+            }
+            String merchantId = channel.getMerchantId();
+
+            log.debug("Processing {} message for {} (channel: {}, merchant: {})",
+                taskType, platformCode, channelId, merchantId);
 
             // 提取消息的時間戳（心跳時間）
             String timestamp = header.path("timestamp").asText();

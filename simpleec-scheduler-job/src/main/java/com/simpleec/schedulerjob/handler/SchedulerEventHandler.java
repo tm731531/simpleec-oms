@@ -147,13 +147,16 @@ public class SchedulerEventHandler {
 
     /**
      * 構建 FETCH_ORDERS 消息
+     *
+     * 重要：此處只發送 channelId，不發送 merchantId
+     * ChannelJob 會根據 channelId 從數據庫查詢對應的 merchantId
+     * 這樣確保使用的總是最新的、真實的 merchant_id 值
      */
     private ObjectNode buildFetchOrdersMessage(TaskTypeEnum taskType, long timestamp, Channel channel) {
         ObjectNode message = objectMapper.createObjectNode();
 
         ObjectNode header = objectMapper.createObjectNode();
         header.put("taskType", taskType.getCode());
-        header.put("merchantId", "MERCHANT_001");
         header.put("platformId", channel.getPlatformId());
         header.put("channelId", channel.getId());
         header.put("requestId", "sched-" + NanoIdUtil.generate());
