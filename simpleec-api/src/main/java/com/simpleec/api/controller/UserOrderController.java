@@ -41,9 +41,10 @@ public class UserOrderController {
             @AuthenticationPrincipal UserPrincipal principal,
             @RequestParam(required = false) String channelId,
             @RequestParam(required = false) String status,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size) {
-        PageRequest pageable = PageRequest.of(page, size);
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int pageSize) {
+        // 轉換 1-indexed 頁碼到 0-indexed (Spring Data 期望的格式)
+        PageRequest pageable = PageRequest.of(page - 1, pageSize);
         Page<Order> orders;
         if (status != null) {
             try {
