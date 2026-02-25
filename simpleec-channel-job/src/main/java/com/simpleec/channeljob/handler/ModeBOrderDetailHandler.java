@@ -7,6 +7,7 @@ import com.simpleec.channel.adapter.ChannelAdapter;
 import com.simpleec.channel.adapter.CyberbizAdapter;
 import com.simpleec.channeljob.entity.Channel;
 import com.simpleec.channeljob.service.ChannelService;
+import com.simpleec.channeljob.util.OrderStatusMapper;
 import com.simpleec.common.enums.TaskTypeEnum;
 import com.simpleec.common.util.NanoIdUtil;
 import com.simpleec.common.constants.TopicConstants;
@@ -77,7 +78,7 @@ public class ModeBOrderDetailHandler {
             log.info("Fetched order detail from {}: {}", channelId, channelOrderId);
 
             // 第 2 步：轉換為 OMS 標準 schema
-            ObjectNode orderData = buildOmsOrderData(orderDetail);
+            ObjectNode orderData = buildOmsOrderData(orderDetail, adapter.getPlatformCode());
 
             // 第 3 步：計算 Hash（用於去重）
             String orderHash = calculateOrderHash(orderData);
@@ -117,12 +118,12 @@ public class ModeBOrderDetailHandler {
      *   "shippedAt": null
      * }
      */
-    private ObjectNode buildOmsOrderData(Map<String, Object> channelData) {
+    private ObjectNode buildOmsOrderData(Map<String, Object> channelData, String platformCode) {
         ObjectNode omsData = objectMapper.createObjectNode();
 
-        // 1. 轉換訂單狀態
+        // 1. 轉換訂單狀態 — 使用統一的平台映射器
         String channelStatus = extractString(channelData, "status", "");
-        String omsStatus = mapChannelStatusToOMS(channelStatus);
+        String omsStatus = OrderStatusMapper.mapToOmsStatus(platformCode, channelStatus);
         omsData.put("orderStatus", omsStatus);
 
         // 2. 金額資訊（支援多層結構）
@@ -240,15 +241,6 @@ public class ModeBOrderDetailHandler {
      * - Shopee: "READY_TO_SHIP" → "READY_TO_SHIP"
      * - Easystore: "pending" → "PENDING"
      */
-    private String mapChannelStatusToOMS(String channelStatus) {
-        if (channelStatus == null) {
-            return "PENDING";
-        }
-
-        return channelStatus.toUpperCase()
-            .replaceAll("-", "_")
-            .replaceAll(" ", "_");
-    }
 
     /**
      * 計算訂單 Hash（與 Mode A 相同邏輯）

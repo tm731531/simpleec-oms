@@ -62,7 +62,7 @@ public class OrderVO {
         // 前端期望的字段
         vo.setOrderNumber(order.getChannelOrderId());  // 使用 channelOrderId 作為訂單編號
         vo.setPlatform(platformName);                  // 通路名稱
-        vo.setStatus(order.getOrderStatus().getCode().toLowerCase());  // 狀態轉成小寫
+        vo.setStatus(order.getOrderStatus().getCode());  // 統一使用小寫
         vo.setTotalAmount(order.getTotalAmount());
         vo.setCreatedAt(order.getCreatedAt());
         vo.setUpdatedAt(order.getUpdatedAt());

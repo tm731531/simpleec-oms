@@ -1,6 +1,7 @@
 package com.simpleec.channeljob.handler;
 
 import com.simpleec.channel.adapter.ChannelAdapter;
+import com.simpleec.channeljob.util.OrderStatusMapper;
 import com.simpleec.common.enums.ModeEnum;
 import com.simpleec.common.enums.TaskTypeEnum;
 import com.simpleec.common.constants.TopicConstants;
@@ -125,13 +126,12 @@ public class ModeAOrderListHandler {
         ObjectNode omsData = objectMapper.createObjectNode();
 
         // 基本信息（支援不同的字段名）
-        // Status
+        // Status — 轉換為 OMS 統一狀態（小寫）
         Object statusObj = channelOrder.get("status");
-        if (statusObj != null) {
-            omsData.put("orderStatus", statusObj.toString());
-        } else {
-            omsData.put("orderStatus", "PENDING");  // 預設
-        }
+        String omsStatus = statusObj != null
+            ? OrderStatusMapper.mapToOmsStatus(platformCode, statusObj.toString())
+            : "pending";  // 預設
+        omsData.put("orderStatus", omsStatus);
 
         // Total Amount（支援 total_price, total_amount, amount 等）
         Object amountObj = channelOrder.get("total_price");
