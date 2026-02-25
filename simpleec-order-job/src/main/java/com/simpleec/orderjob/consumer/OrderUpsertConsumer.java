@@ -221,28 +221,31 @@ public class OrderUpsertConsumer {
             order.setOrderStatus(OrderStatusEnum.fromCode(status));
         }
 
-        // 總金額
+        // 總金額（可選；數據庫約束: NOT NULL DEFAULT 0，Hibernate @ColumnDefault 會使用 DB DEFAULT）
         if (orderDataJson.has("totalAmount")) {
             order.setTotalAmount(
                 new java.math.BigDecimal(orderDataJson.get("totalAmount").asText())
             );
         }
+        // 不提供時，保持 null — Hibernate 會使用 @ColumnDefault("0")
 
-        // 運費
+        // 運費（可選；數據庫約束: NOT NULL DEFAULT 0）
         if (orderDataJson.has("shippingFee")) {
             order.setShippingFee(
                 new java.math.BigDecimal(orderDataJson.get("shippingFee").asText())
             );
         }
+        // 不提供時，保持 null — Hibernate 會使用 @ColumnDefault("0")
 
-        // 折扣金額
+        // 折扣金額（可選；數據庫約束: NOT NULL DEFAULT 0）
         if (orderDataJson.has("discountAmount")) {
             order.setDiscountAmount(
                 new java.math.BigDecimal(orderDataJson.get("discountAmount").asText())
             );
         }
+        // 不提供時，保持 null — Hibernate 會使用 @ColumnDefault("0")
 
-        // 商品清單（JSONB 格式 — 確保為有效的 JSON 字符串）
+        // 商品清單（JSONB 格式 — 可選；數據庫約束: NOT NULL DEFAULT '[]'::jsonb）
         if (orderDataJson.has("items")) {
             try {
                 JsonNode itemsNode = orderDataJson.get("items");
@@ -250,8 +253,10 @@ public class OrderUpsertConsumer {
                 order.setItems(itemsJson);
             } catch (Exception e) {
                 log.warn("Failed to serialize items: {}", e.getMessage());
+                // 序列化失敗時，保持 null — Hibernate 會使用 @ColumnDefault("'[]'::jsonb")
             }
         }
+        // 不提供時，保持 null — Hibernate 會使用 @ColumnDefault("'[]'::jsonb")
 
         // 買家資訊（JSONB 格式 — 確保為有效的 JSON 字符串）
         if (orderDataJson.has("buyerInfo")) {
