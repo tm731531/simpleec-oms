@@ -360,6 +360,27 @@ isRollback=true (回補訂單)：
 - **不做狀態轉換驗證** — 接受任何狀態跳轉
 - **所有邏輯都必須容錯** — 訂單可能從任何狀態跳到任何狀態
 
+### ★ 外鍵原則：數據庫和 Queue 只傳 ID，不傳名稱
+- **數據庫中存外表的東西 → 必須存 ID**（外鍵）
+  - ❌ 不要存名稱、代碼、字符串
+  - ✅ 存真實的 NanoID（如 platformId, merchantId, channelId）
+- **Kafka Queue 中傳遞 → 也必須傳 ID**
+  - ❌ 不要傳 platformCode, platformName 這類字符串
+  - ✅ 傳 platformId（從 header 中直接提取，無需轉換）
+- **好處**：
+  - 數據一致性強（自動外鍵約束）
+  - 性能最優（無需額外查詢轉換）
+  - 邏輯簡潔清晰（直接傳 ID，無中間轉換層）
+
+**反例**：
+```
+❌ 舊做法：
+  Scheduler → platformCode("cyberbiz") → Queue → Consumer → Service → 查詢 Platform 獲得 platformId → DB
+
+✅ 新做法：
+  Scheduler → platformId → Queue → Consumer → Service → 直接用 platformId → DB
+```
+
 ### ★ 抓取策略：Channel 自主
 - **Channel 內部決定**：時間欄位、狀態過濾、分頁策略
 - **外部只給時間範圍**：不指定細節
