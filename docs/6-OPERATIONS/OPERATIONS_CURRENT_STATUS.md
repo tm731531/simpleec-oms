@@ -1,6 +1,6 @@
-# SimpleEC OMS - 当前运维状态 (Feb 24, 2026)
+# SimpleEC OMS - 当前运维状态 (Feb 25, 2026)
 
-## 📊 系统状态：✅ 完全操作 (All Systems Operational)
+## 📊 系统状态：✅ 完全操作 (All Systems Operational) + 新特性已发布
 
 ### 核心系统
 | 组件 | 状态 | 备注 |
@@ -37,9 +37,12 @@
 - ✅ `GET /api/user/refunds` → 200
 - ✅ `GET /api/user/settings` → 200
 
+### 新增公开端点
+- ✅ `GET /api/enums/order-statuses` → 200 (返回所有订单状态)
+
 ---
 
-## 🔧 最近的关键修复 (Feb 24, 2026)
+## 🔧 最近的关键修复和新功能 (Feb 24-25, 2026)
 
 ### 修复1：API 端点路由 (Commits 0ed6853, 7f594a7)
 **问题**：所有端点返回 403/404 Forbidden/Not Found
@@ -49,7 +52,38 @@
 - AuthController: `@RequestMapping("/auth")` → `@RequestMapping("/api/auth")`
 - 9个用户/后端控制器：添加 `/api` 前缀
 
-### 修复2：系统重启版本部署 (Commit 34d5805)
+### 新功能1：动态订单状态选项 (Feb 25, 2026) ✨
+**特性**：
+- ✅ 后端 EnumController 提供公开 API 端点 `/api/enums/order-statuses`
+- ✅ 前端 useOrderStatuses composable 自动获取并缓存状态
+- ✅ Pinia store 管理全局状态（避免重复请求）
+- ✅ 5个 Vue 组件（OrderTable, ShipmentTable, Dashboard, OrderPage, ShipmentPage）更新
+- ✅ 所有硬编码的状态选项已替换为动态绑定
+- ✅ App.vue 初始化时自动加载状态
+
+**优势**：
+- 后端 enum 修改时，前端自动同步（无需手动更新）
+- 减少前后端重复定义状态
+- 支持多语言（标签由后端定义）
+
+**相关提交**：
+- db51ae1: feat: Add label and description to OrderStatusEnum
+- 99ae5b1: feat: Add /api/enums/order-statuses endpoint
+- 3ea3220: feat: Allow public access to /api/enums/* endpoint
+
+### 新功能2：Cyberbiz 订单流整合 (Feb 24-25, 2026) ✨
+**特性**：
+- ✅ ModeAOrderListHandler 添加 Kafka 回调确保消息送达
+- ✅ OrderStatusMapper 支持 15+ 通路的状态转换
+- ✅ 时间戳正确传递（Scheduler → Kafka → Handler）
+- ✅ Cyberbiz 订单自动流入数据库（每 5 分钟同步一次）
+- ✅ 状态统一为大写（PENDING, CONFIRMED 等）
+
+**相关提交**：
+- 7e14bfa: fix: Add Kafka send callback to ensure orders reach order.process topic
+- 7220993: chore: Update user-app submodule with dynamic status options implementation
+
+### 修复3：系统重启版本部署 (Commit 34d5805)
 **问题**：重启后 API 运行旧版本代码（有路由错误）
 **根本原因**：`start-on-boot.sh` 使用 `docker compose up -d` 无 `--build` 标志
 **修复**：
@@ -273,3 +307,43 @@ A:
 **最后更新**: Feb 24, 2026 12:50 AM
 **维护者**: Tom
 **分支**: `fix/admin-app-api-routing-and-nginx-proxy`
+
+### 修复4：Nginx 配置和登入端口 (Feb 25, 2026)
+**问题**：用户无法通过 `http://localhost:8080` 登入
+**根本原因**：Nginx 监听 port **8089** 而不是 8080，且配置需要重新构建 Docker 镜像
+**修复**：
+```bash
+# 重建 Nginx 容器
+./quick-redeploy.sh simpleec-nginx
+```
+**正确的访问 URL**：
+- 🟢 本地开发：`http://localhost:8089`（Nginx 代理）
+- 🟢 生产环境：`https://oms.tomting.com`
+- 🟡 后端直连（开发用）：`http://localhost:8082/api/...`
+
+---
+
+## 🎯 下一步工作项
+
+### 立即优先
+- [ ] 验证生产环境 Cyberbiz 订单流正常运作
+- [ ] 测试订单状态在前端的完整显示和筛选
+- [ ] 确认用户可以通过 `https://oms.tomting.com` 正常登入
+
+### 本周计划
+- [ ] 实现其他通路的 OrderStatusMapper（Shopee, Momo, Yahoo 等）
+- [ ] 添加单元测试 for OrderStatusEnum 和 StatusOptionVO
+- [ ] 实现订单状态转移和业务规则验证
+- [ ] 创建后台任务 for 订单状态对账
+
+### 长期计划
+- [ ] 完整的 Return 流程实现
+- [ ] Inventory sync 功能
+- [ ] Analytics & reporting 模块
+- [ ] 性能优化和监控告警增强
+
+---
+
+**最后更新**: Feb 25, 2026 1:42 PM (登入问题修复 + 代码发布)
+**当前分支**: `ops/production` (已完成 feature/cyberbiz-channel-job-integration 的合并)
+**维护者**: Tom + Claude
