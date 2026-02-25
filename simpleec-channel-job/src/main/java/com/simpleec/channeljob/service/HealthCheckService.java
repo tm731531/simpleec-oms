@@ -1,10 +1,12 @@
 package com.simpleec.channeljob.service;
 
+import com.simpleec.core.entity.Platform;
 import com.simpleec.channeljob.entity.Channel;
 import com.simpleec.channeljob.client.PlatformApiClient;
 import com.simpleec.channeljob.repository.ChannelRepository;
 import com.simpleec.channeljob.repository.ChannelSyncLogRepository;
 import com.simpleec.channeljob.entity.ChannelSyncLog;
+import com.simpleec.core.repository.PlatformRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -21,13 +23,16 @@ public class HealthCheckService {
 
     private final ChannelRepository channelRepository;
     private final ChannelSyncLogRepository channelSyncLogRepository;
+    private final PlatformRepository platformRepository;
     private final PlatformApiClient platformApiClient;
 
     public HealthCheckService(ChannelRepository channelRepository,
                               ChannelSyncLogRepository channelSyncLogRepository,
+                              PlatformRepository platformRepository,
                               PlatformApiClient platformApiClient) {
         this.channelRepository = channelRepository;
         this.channelSyncLogRepository = channelSyncLogRepository;
+        this.platformRepository = platformRepository;
         this.platformApiClient = platformApiClient;
     }
 
@@ -103,13 +108,17 @@ public class HealthCheckService {
         }
     }
 
-    private void recordHealthLog(String channelId, String merchantId, String platformCode,
+    /**
+     * 記錄通路檢查：需要 platformId + merchantId + channelId
+     */
+    private void recordHealthLog(String channelId, String merchantId, String platformId,
                                  int httpStatus, String errorMessage) {
         try {
             ChannelSyncLog log = new ChannelSyncLog();
             log.setId(UUID.randomUUID().toString());
-            log.setChannelId(channelId);
-            log.setMerchantId(merchantId);
+            log.setPlatformId(platformId);     // 必填
+            log.setMerchantId(merchantId);     // 可選
+            log.setChannelId(channelId);       // 可選
             log.setSyncType("CHANNEL_HEALTH_CHECK");
             log.setHttpStatus(httpStatus);
             log.setStatus(httpStatus >= 400 ? "failed" : "success");
@@ -123,13 +132,28 @@ public class HealthCheckService {
         }
     }
 
+    /**
+     * 記錄平台檢查：只需要 platformId
+     * platformCode 如 "CYBERBIZ"、"SHOPEE" 需要查詢 Platform 表獲得真實的 platformId
+     */
     private void recordPlatformHealthLog(String platformCode, int httpStatus, String errorMessage) {
         try {
+            // 根據 platformCode（大寫如 "CYBERBIZ"）查詢 Platform 實體
+            // Platform 的 platformName 是小寫的（"cyberbiz"）
+            Platform platform = platformRepository.findByPlatformName(platformCode.toLowerCase())
+                .orElse(null);
+
+            if (platform == null) {
+                log.warn("Platform {} not found for health check", platformCode);
+                // 如果找不到，直接記錄，但 platformId 為 null（會導致數據庫約束違反）
+                // 這種情況下應該告警但不保存
+                return;
+            }
+
             ChannelSyncLog log = new ChannelSyncLog();
             log.setId(UUID.randomUUID().toString());
-            log.setChannelId("PLATFORM_CHECK"); // Platform-level check marker
-            log.setPlatformCode(platformCode); // 記錄具體的平台代碼 (e.g., "CYBERBIZ", "SHOPEE")
-            log.setMerchantId("SYSTEM"); // System-level check
+            log.setPlatformId(platform.getId());  // 使用真實的 platformId（NanoID）
+            // 平台級檢查不設置 merchantId 和 channelId
             log.setSyncType("PLATFORM_HEALTH_CHECK");
             log.setHttpStatus(httpStatus);
             log.setStatus(httpStatus >= 400 ? "failed" : "success");

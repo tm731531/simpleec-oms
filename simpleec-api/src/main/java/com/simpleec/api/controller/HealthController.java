@@ -11,6 +11,8 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.simpleec.api.repository.ChannelSyncLogRepository;
 import com.simpleec.api.entity.ChannelSyncLog;
+import com.simpleec.core.entity.Platform;
+import com.simpleec.core.repository.PlatformRepository;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import java.util.List;
@@ -25,10 +27,14 @@ public class HealthController {
 
     private final ObjectMapper objectMapper;
     private final ChannelSyncLogRepository channelSyncLogRepository;
+    private final PlatformRepository platformRepository;
 
-    public HealthController(ObjectMapper objectMapper, ChannelSyncLogRepository channelSyncLogRepository) {
+    public HealthController(ObjectMapper objectMapper,
+                           ChannelSyncLogRepository channelSyncLogRepository,
+                           PlatformRepository platformRepository) {
         this.objectMapper = objectMapper;
         this.channelSyncLogRepository = channelSyncLogRepository;
+        this.platformRepository = platformRepository;
     }
 
     @GetMapping("/health")
@@ -171,27 +177,41 @@ public class HealthController {
 
     /**
      * 特定平台健康狀態（從 channel_sync_logs 查詢最新 PLATFORM_HEALTH_CHECK 記錄）
-     * 按 platformCode 過濾，確保查詢的是該特定平台的記錄
+     * 根據平台名稱查詢對應的 platformId，然後過濾記錄
      */
     @GetMapping("/health/platform/{platform}")
     public ResponseEntity<Object> platformHealth(@PathVariable String platform) {
         try {
-            var logs = channelSyncLogRepository.findAll();
-            var latestLog = logs.stream()
-                .filter(log -> "PLATFORM_CHECK".equals(log.getChannelId())
-                           && "PLATFORM_HEALTH_CHECK".equals(log.getSyncType())
-                           && platform.equalsIgnoreCase(log.getPlatformCode()))
-                .max((a, b) -> a.getCreatedAt().compareTo(b.getCreatedAt()))
+            // 根據平台名稱查詢對應的 Platform 實體
+            Platform platformEntity = platformRepository.findByPlatformName(platform.toLowerCase())
                 .orElse(null);
 
             ObjectNode data = objectMapper.createObjectNode();
+            data.put("platform", platform);
+
+            if (platformEntity == null) {
+                log.warn("Platform {} not found", platform);
+                data.put("health", "unknown");
+                data.put("httpStatus", 0);
+                data.putNull("lastCheckTime");
+                return ResponseEntity.ok(data);
+            }
+
+            var logs = channelSyncLogRepository.findAll();
+            var latestLog = logs.stream()
+                .filter(log -> "PLATFORM_HEALTH_CHECK".equals(log.getSyncType())
+                           && log.getPlatformId() != null
+                           && log.getPlatformId().equals(platformEntity.getId())
+                           && log.getChannelId() == null      // 平台級檢查不設置 channelId
+                           && log.getMerchantId() == null)    // 平台級檢查不設置 merchantId
+                .max((a, b) -> a.getCreatedAt().compareTo(b.getCreatedAt()))
+                .orElse(null);
+
             if (latestLog != null) {
-                data.put("platform", platform);
                 data.put("health", latestLog.getHealth() != null ? latestLog.getHealth() : "unknown");
                 data.put("httpStatus", latestLog.getHttpStatus());
                 data.put("lastCheckTime", latestLog.getCreatedAt().toString());
             } else {
-                data.put("platform", platform);
                 data.put("health", "unknown");
                 data.put("httpStatus", 0);
                 data.putNull("lastCheckTime");
@@ -211,16 +231,30 @@ public class HealthController {
 
     /**
      * 特定平台的健康檢查歷史（從 channel_sync_logs 查詢）
-     * 按 platformCode 過濾，確保只返回該特定平台的歷史記錄
+     * 根據平台名稱查詢對應的 platformId，然後過濾記錄
      */
     @GetMapping("/health/platform/{platform}/history")
     public ResponseEntity<Object> platformHealthHistory(@PathVariable String platform) {
         try {
+            // 根據平台名稱查詢對應的 Platform 實體
+            Platform platformEntity = platformRepository.findByPlatformName(platform.toLowerCase())
+                .orElse(null);
+
+            ObjectNode data = objectMapper.createObjectNode();
+
+            if (platformEntity == null) {
+                log.warn("Platform {} not found", platform);
+                data.set("logs", objectMapper.createArrayNode());
+                return ResponseEntity.ok(data);
+            }
+
             var logs = channelSyncLogRepository.findAll();
             var historyLogs = logs.stream()
-                .filter(log -> "PLATFORM_CHECK".equals(log.getChannelId())
-                           && "PLATFORM_HEALTH_CHECK".equals(log.getSyncType())
-                           && platform.equalsIgnoreCase(log.getPlatformCode()))
+                .filter(log -> "PLATFORM_HEALTH_CHECK".equals(log.getSyncType())
+                           && log.getPlatformId() != null
+                           && log.getPlatformId().equals(platformEntity.getId())
+                           && log.getChannelId() == null      // 平台級檢查不設置 channelId
+                           && log.getMerchantId() == null)    // 平台級檢查不設置 merchantId
                 .sorted((a, b) -> b.getCreatedAt().compareTo(a.getCreatedAt()))
                 .limit(50)
                 .toList();
@@ -237,7 +271,6 @@ public class HealthController {
                 historyArray.add(historyItem);
             }
 
-            ObjectNode data = objectMapper.createObjectNode();
             data.set("logs", historyArray);
             return ResponseEntity.ok(data);
         } catch (Exception e) {

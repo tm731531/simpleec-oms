@@ -529,21 +529,37 @@ CREATE INDEX idx_refund_merchant ON public.refund_orders (merchant_id);
 
 ### channel_sync_logs — 通路同步/健康檢查記錄
 
+> **設計原則：**
+> - **platform_id 必填** — 所有記錄都屬於某個平台（momo, shopee, yahoo 等）
+> - **merchant_id 可選** — 僅當檢查特定通路時需要
+> - **channel_id 可選** — 僅當檢查特定通路時需要
+> - 三種查詢場景：
+>   1. 平台級檢查（PLATFORM_HEALTH_CHECK）：只需 platform_id
+>   2. 通路級檢查（CHANNEL_HEALTH_CHECK）：platform_id + merchant_id + channel_id
+>   3. 其他同步（SYNC_*）：取決於具體操作
+
 ```sql
 CREATE TABLE public.channel_sync_logs (
     id               VARCHAR(20)  NOT NULL,      -- NanoID
-    merchant_id      VARCHAR(20)  NOT NULL,
-    channel_id       VARCHAR(20)  NOT NULL,
-    sync_type        VARCHAR(50)  NOT NULL,
-    status           VARCHAR(20)  NOT NULL DEFAULT 'success',
-    health           VARCHAR(20),
-    request_payload  TEXT,
-    response_payload TEXT,
+    platform_id      VARCHAR(20)  NOT NULL,      -- FK: platform(id) - 必填
+    merchant_id      VARCHAR(20),                -- FK: merchant(id) - 可選
+    channel_id       VARCHAR(20),                -- FK: channel(id) - 可選
+    sync_type        VARCHAR(50)  NOT NULL,      -- PLATFORM_HEALTH_CHECK, CHANNEL_HEALTH_CHECK, ORDER_SYNC, etc.
+    http_status      INTEGER,                    -- HTTP status (200, 401, 404, 500, etc.)
+    status           VARCHAR(20)  NOT NULL DEFAULT 'success',  -- success, failed, error
+    health           VARCHAR(20),                -- healthy, unhealthy (for health checks)
     error_message    TEXT,
     created_at       TIMESTAMPTZ  NOT NULL DEFAULT now(),
-    PRIMARY KEY (id)
+    PRIMARY KEY (id),
+    CONSTRAINT fk_sync_log_platform FOREIGN KEY (platform_id)
+        REFERENCES public.platform (id) ON UPDATE CASCADE ON DELETE NO ACTION,
+    CONSTRAINT fk_sync_log_merchant FOREIGN KEY (merchant_id)
+        REFERENCES public.merchant (id) ON UPDATE CASCADE ON DELETE NO ACTION,
+    CONSTRAINT fk_sync_log_channel FOREIGN KEY (channel_id)
+        REFERENCES public.channel (id) ON UPDATE CASCADE ON DELETE NO ACTION
 );
 
+CREATE INDEX idx_sync_log_platform ON public.channel_sync_logs (platform_id, created_at DESC);
 CREATE INDEX idx_sync_log_channel ON public.channel_sync_logs (channel_id, created_at DESC);
 CREATE INDEX idx_sync_log_merchant ON public.channel_sync_logs (merchant_id, created_at DESC);
 ```
