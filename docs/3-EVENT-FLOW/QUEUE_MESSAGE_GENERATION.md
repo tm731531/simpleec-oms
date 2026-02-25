@@ -1,0 +1,463 @@
+# Queue 消息生成規範 v1.0
+
+> 如何在代碼中正確生成每個 TaskType 的消息
+> 確保 Header 和 Body 的一致性
+
+---
+
+## Header 生成通用規則
+
+所有消息的 Header 遵循以下規則：
+
+```java
+{
+  "taskType": "由調用者決定（見下表）",
+  "merchantId": "固定值（配置中讀取，通常是 M001）",
+  "platformId": "通路編號（momo/shopee/yahoo/pchome/cyberbiz/easystore）",
+  "channelId": "通路實例（MOMO_001, SHOPEE_002 等）",
+  "requestId": "由生成方生成（UUID 或自定義格式）",
+  "timestamp": "ISO-8601 格式（UTC）",
+  "source": "由生成方決定（scheduler/channel_job/api/webhook）",
+  "version": 1,
+  "retryCount": 0,
+  "priority": "根據 TaskType 決定（HIGH/NORMAL/LOW）",
+  "correlationId": "可選，用於串聯多個消息"
+}
+```
+
+### Header 字段詳解
+
+| 字段 | 規則 | 例子 |
+|------|------|------|
+| `taskType` | 由調用方決定，見 TaskType 列表 | FETCH_ORDERS |
+| `merchantId` | 固定值，從系統配置讀取 | M001 |
+| `platformId` | 通路編號（小寫） | momo |
+| `channelId` | 通路實例 ID | MOMO_001 |
+| `requestId` | UUID 或「來源-時間-序列號」格式 | sched-20260213-100001 |
+| `timestamp` | Instant.now().toString() 或消息時間 | 2026-02-13T10:00:00Z |
+| `source` | scheduler, channel_job, api, webhook, manual | scheduler |
+| `version` | 固定值 1（未來有破壞性改動才升級） | 1 |
+| `retryCount` | 初始為 0，失敗後遞增 | 0 |
+| `priority` | HIGH, NORMAL, LOW | NORMAL |
+| `correlationId` | 可選，用於串聯 list→detail→process | sched-20260213-fetch-001 |
+
+---
+
+## Body 生成規則（按 TaskType）
+
+### 訂單相關
+
+#### 1. FETCH_ORDERS（訂單列表拉取）
+
+**來源**：Scheduler
+
+**Body 特性**：**空白**（只是觸發）
+
+```json
+{
+  "body": {
+    "fetchSpec": {}
+  }
+}
+```
+
+**生成方式**：
+```java
+KafkaMessage msg = new KafkaMessage();
+msg.header = buildHeader(taskType="FETCH_ORDERS", ...);
+msg.body = new FetchOrdersBody();  // 空白
+```
+
+**Channel Job 接收後**：
+```
+讀取 header.timestamp，自主決策時間窗口（不在 body 中）
+```
+
+---
+
+#### 2. FETCH_ORDER_DETAIL（訂單詳情拉取）
+
+**來源**：Channel Job（LIST 階段判斷需要詳情時）
+
+**Body 特性**：訂單編號清單
+
+```json
+{
+  "body": {
+    "orders": [
+      {
+        "channelOrderId": "MOMO-2026021300001"
+      },
+      {
+        "channelOrderId": "MOMO-2026021300002"
+      }
+    ]
+  }
+}
+```
+
+**生成方式**（在 ChannelJob 中）：
+```java
+List<String> needsDetail = detectDifference(sellPacksFromAPI);  // 查 DB，對比差異
+
+List<FetchOrderDetailRequest> orders = needsDetail
+  .stream()
+  .map(channelOrderId -> new FetchOrderDetailRequest(channelOrderId))
+  .collect(toList());
+
+KafkaMessage msg = new KafkaMessage();
+msg.header = buildHeader(
+  taskType="FETCH_ORDER_DETAIL",
+  correlationId="sched-20260213-fetch-001",  // 關聯到原始 LIST
+  ...
+);
+msg.body = new FetchOrderDetailBody(orders);
+```
+
+---
+
+#### 3. PROCESS_ORDER（訂單處理）
+
+**來源**：Channel Job（完成 LIST/DETAIL 後）
+
+**Body 特性**：**完整訂單資料**
+
+```json
+{
+  "body": {
+    "orderData": {
+      "orderId": "ord_abc123def456",
+      "channelOrderId": "MOMO-2026021300001",
+      "orderStatus": "PENDING",
+      "buyerName": "[加密]",
+      "buyerPhone": "[加密]",
+      "buyerEmail": "[加密]",
+      "shippingAddress": "[加密]",
+      "shippingMethod": "HOME_DELIVERY",
+      "shippingStatus": "PENDING",
+      "paymentMethod": "CREDIT_CARD",
+      "totalAmount": 43900.00,
+      "shippingFee": 0.00,
+      "discountAmount": 1000.00,
+      "channelCreatedAt": "2026-02-13T09:30:00Z",
+      "paidAt": "2026-02-13T09:31:00Z",
+      "items": [
+        {
+          "sku": "IPHONE-15-PRO-MAX",
+          "productId": "pd_xyz789",
+          "channelProductId": "MOMO-SKU-001",
+          "channelSpecId": "MOMO-SPEC-001",
+          "channelItemId": "MOMO-ITEM-2026021300001",
+          "channelProductName": "iPhone 15 Pro Max",
+          "channelSpecName": "太空黑/256GB",
+          "productName": "iPhone 15 Pro Max",
+          "quantity": 1,
+          "unitPrice": 44900.00,
+          "subtotal": 44900.00,
+          "sellPackId": "sp_abc123"
+        }
+      ]
+    }
+  }
+}
+```
+
+**生成方式**（在 ChannelJob 或 Handler 中）：
+```java
+// 步驟 1：解析平台 API 響應，轉換為 OMS 結構
+Order order = parseAndConvert(platformResponse);
+
+// 步驟 2：加密 PII 字段
+order.buyerName = encryptPII(order.buyerName);
+order.buyerPhone = encryptPII(order.buyerPhone);
+...
+
+// 步驟 3：生成 orderId（如果是新訂單）
+if (order.orderId == null) {
+  order.orderId = IdGenerator.nextId();
+}
+
+// 步驟 4：構建消息
+KafkaMessage msg = new KafkaMessage();
+msg.header = buildHeader(
+  taskType="PROCESS_ORDER",
+  correlationId="sched-20260213-fetch-001",
+  isRollback=false,  // 判斷是否是回補訂單
+  ...
+);
+msg.body = new ProcessOrderBody(order);
+```
+
+**核心檢查清單**：
+- [ ] 所有 PII 字段已加密
+- [ ] channelSpecId 已正確填充
+- [ ] items 陣列完整
+- [ ] 金額欄位（totalAmount, shippingFee, discountAmount）都有值
+
+---
+
+### 商品相關
+
+#### 1. SYNC_PACK_LIST（商品列表同步）
+
+**來源**：Scheduler
+
+**Body 特性**：**空白**（只是觸發）
+
+```json
+{
+  "body": {
+    "syncSpec": {}
+  }
+}
+```
+
+**生成方式**：
+```java
+KafkaMessage msg = new KafkaMessage();
+msg.header = buildHeader(taskType="SYNC_PACK_LIST", priority="HIGH", ...);
+msg.body = new SyncPackListBody();  // 空白
+```
+
+**Channel Job 接收後**：
+```
+呼叫平台 LIST API，獲得所有產品
+與 DB SellPack 表對比差異
+只有有差異的產品進入 DETAIL
+```
+
+---
+
+#### 2. SYNC_PACK_DETAIL（商品詳情同步）
+
+**來源**：Channel Job（LIST 階段判斷有差異時）
+
+**Body 特性**：只含有差異的產品 ID 清單
+
+```json
+{
+  "body": {
+    "products": [
+      {
+        "channelProductId": "CYBER-SKU-001"
+      },
+      {
+        "channelProductId": "CYBER-SKU-002"
+      }
+    ]
+  }
+}
+```
+
+**生成方式**（在 ChannelJob 中）：
+```java
+// 步驟 1：呼叫 LIST API，取得所有產品
+List<SellPackDTO> allProducts = adapter.fetchProductList(channelId);
+
+// 步驟 2：與 DB 對比，找出有差異的產品
+List<String> changedProductIds = allProducts.stream()
+  .filter(prod -> hasChanged(channelId, prod))  // 對比價格、庫存、狀態
+  .map(prod -> prod.getChannelProductId())
+  .collect(toList());
+
+// 步驟 3：只有有差異的產品進入 DETAIL
+List<SyncPackDetailRequest> products = changedProductIds.stream()
+  .map(id -> new SyncPackDetailRequest(id))
+  .collect(toList());
+
+// 步驟 4：構建消息
+KafkaMessage msg = new KafkaMessage();
+msg.header = buildHeader(
+  taskType="SYNC_PACK_DETAIL",
+  correlationId="sched-20260213-synclist-001",
+  priority="HIGH",
+  ...
+);
+msg.body = new SyncPackDetailBody(products);
+```
+
+**核心設計**：
+- 「差異檢測」在 LIST 階段完成，不在 DETAIL 中
+- 只發送需要詳情的產品，節省 API 呼叫
+
+---
+
+#### 3. SYNC_PACK_COMPLETE（商品資料完成）
+
+**來源**：Channel Job（完成 DETAIL 後）
+
+**Body 特性**：**完整商品資料**
+
+```json
+{
+  "body": {
+    "products": [
+      {
+        "channelProductId": "CYBER-SKU-001",
+        "channelSpecId": "CYBER-SPEC-001",
+        "sku": "CYBER-SKU-001",
+        "productName": "Samsung 55吋 QLED 電視",
+        "specName": "55吋/黑色",
+        "description": "高端電視...",
+        "sellingPrice": 24999,
+        "originalPrice": 29999,
+        "quantity": 150,
+        "status": "active",
+        "imageUrl": "https://..."
+      }
+    ]
+  }
+}
+```
+
+**生成方式**（在 ChannelJob 中）：
+```java
+// 步驟 1：呼叫 DETAIL API，取得完整商品資訊
+Map<String, DetailResponse> details = adapter.fetchProductDetails(channelId, changedProductIds);
+
+// 步驟 2：轉換為 OMS 結構
+List<SellPack> products = details.entrySet().stream()
+  .map(entry -> {
+    String channelProductId = entry.getKey();
+    DetailResponse detail = entry.getValue();
+
+    SellPack pack = new SellPack();
+    pack.setChannelProductId(channelProductId);
+    pack.setChannelSpecId(detail.getSpecId());  // ← 在此階段提取
+    pack.setSellingPrice(detail.getPrice());
+    pack.setQuantity(detail.getStock());
+    pack.setStatus("active");  // 轉換平台狀態為 OMS 標準狀態
+    ...
+    return pack;
+  })
+  .collect(toList());
+
+// 步驟 3：構建消息
+KafkaMessage msg = new KafkaMessage();
+msg.header = buildHeader(
+  taskType="SYNC_PACK_COMPLETE",
+  correlationId="sched-20260213-synclist-001",
+  ...
+);
+msg.body = new SyncPackCompleteBody(products);
+```
+
+**核心檢查清單**：
+- [ ] 所有產品都有 channelSpecId
+- [ ] 狀態已轉換為 OMS 標準狀態（active/inactive/draft）
+- [ ] 價格和庫存都已填充
+
+---
+
+## 實用代碼範本
+
+### Header 構建函數
+
+```java
+private KafkaMessageHeader buildHeader(
+    String taskType,
+    String platformId,
+    String channelId,
+    String source,
+    String priority,
+    String correlationId
+) {
+    return KafkaMessageHeader.builder()
+        .taskType(taskType)
+        .merchantId(config.getMerchantId())  // 從配置讀取
+        .platformId(platformId)
+        .channelId(channelId)
+        .requestId(generateRequestId(source))
+        .timestamp(Instant.now().toString())
+        .source(source)
+        .version(1)
+        .retryCount(0)
+        .priority(priority != null ? priority : "NORMAL")
+        .correlationId(correlationId)
+        .build();
+}
+
+private String generateRequestId(String source) {
+    return String.format("%s-%s-%d",
+        source,
+        LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")),
+        System.nanoTime() % 10000
+    );
+}
+```
+
+### 差異檢測函數
+
+```java
+private boolean hasChanged(String channelId, SellPackDTO newProduct) {
+    // 查詢 DB 中現有的 SellPack
+    SellPack existing = sellPackRepository
+        .findByChannelAndProductId(channelId, newProduct.getChannelProductId(), null)
+        .orElse(null);
+
+    if (existing == null) {
+        return true;  // 新產品
+    }
+
+    // 對比欄位
+    boolean priceChanged = !Objects.equals(
+        existing.getSellingPrice(),
+        newProduct.getSellingPrice()
+    );
+
+    boolean quantityChanged = !Objects.equals(
+        existing.getQuantity(),
+        newProduct.getQuantity()
+    );
+
+    boolean statusChanged = !Objects.equals(
+        existing.getStatus(),
+        "active"
+    );
+
+    return priceChanged || quantityChanged || statusChanged;
+}
+```
+
+---
+
+## 檢查清單
+
+### 生成任何消息前
+
+- [ ] Header 中的 `taskType` 正確？
+- [ ] `merchantId` 從配置讀取？
+- [ ] `platformId` 和 `channelId` 都有值？
+- [ ] `requestId` 唯一且可追蹤？
+- [ ] `timestamp` 是 UTC ISO-8601 格式？
+- [ ] `source` 準確反映消息來源？
+- [ ] `version` 是 1？
+
+### 生成 PROCESS_ORDER 前
+
+- [ ] 所有 PII 字段已加密？
+- [ ] `channelSpecId` 已填充？
+- [ ] `items` 陣列非空？
+- [ ] 金額欄位都有值？
+- [ ] `isRollback` 標籤已設置？
+
+### 生成 SYNC_PACK_DETAIL 前
+
+- [ ] 只包含有差異的產品 ID？
+- [ ] 產品 ID 清單非空？
+- [ ] `correlationId` 指向原始 LIST？
+
+### 生成 SYNC_PACK_COMPLETE 前
+
+- [ ] 所有產品都有 `channelSpecId`？
+- [ ] 狀態已轉換為標準值？
+- [ ] 價格和庫存都已填充？
+
+---
+
+## 更新日誌
+
+| 日期 | 版本 | 變更 |
+|------|------|------|
+| 2026-02-25 | 1.0 | 初始版本：Header/Body 生成規則、代碼範本 |
+
