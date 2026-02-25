@@ -84,16 +84,26 @@ public class HealthCheckService {
 
     /**
      * Perform health check for entire platform (no auth needed)
+     * @param platformId The platform ID (NanoID from platform table)
      */
-    public HealthCheckResult performPlatformHealthCheck(String platformCode) {
+    public HealthCheckResult performPlatformHealthCheck(String platformId) {
         try {
-            int httpStatus = platformApiClient.platformHealthCheck(platformCode);
+            // Query Platform to get the platform name for API calls
+            Platform platform = platformRepository.findById(platformId)
+                .orElse(null);
+
+            if (platform == null) {
+                log.warn("Platform {} not found for health check", platformId);
+                return new HealthCheckResult(404, "unhealthy", "Platform not found");
+            }
+
+            int httpStatus = platformApiClient.platformHealthCheck(platform.getPlatformName());
 
             String errorMessage = httpStatus >= 400
-                ? getPlatformErrorMessage(httpStatus, platformCode)
+                ? getPlatformErrorMessage(httpStatus, platform.getPlatformName())
                 : null;
 
-            recordPlatformHealthLog(platformCode, httpStatus, errorMessage);
+            recordPlatformHealthLog(platformId, httpStatus, errorMessage);
 
             return new HealthCheckResult(
                 httpStatus,
@@ -102,8 +112,8 @@ public class HealthCheckService {
             );
 
         } catch (Exception e) {
-            log.error("Error performing platform health check for {}", platformCode, e);
-            recordPlatformHealthLog(platformCode, 500, e.getMessage());
+            log.error("Error performing platform health check for {}", platformId, e);
+            recordPlatformHealthLog(platformId, 500, e.getMessage());
             return new HealthCheckResult(500, "unhealthy", e.getMessage());
         }
     }
@@ -134,25 +144,13 @@ public class HealthCheckService {
 
     /**
      * 記錄平台檢查：只需要 platformId
-     * platformCode 如 "CYBERBIZ"、"SHOPEE" 需要查詢 Platform 表獲得真實的 platformId
+     * @param platformId The platform ID (already validated by caller)
      */
-    private void recordPlatformHealthLog(String platformCode, int httpStatus, String errorMessage) {
+    private void recordPlatformHealthLog(String platformId, int httpStatus, String errorMessage) {
         try {
-            // 根據 platformCode（大寫如 "CYBERBIZ"）查詢 Platform 實體
-            // Platform 的 platformName 是小寫的（"cyberbiz"）
-            Platform platform = platformRepository.findByPlatformName(platformCode.toLowerCase())
-                .orElse(null);
-
-            if (platform == null) {
-                log.warn("Platform {} not found for health check", platformCode);
-                // 如果找不到，直接記錄，但 platformId 為 null（會導致數據庫約束違反）
-                // 這種情況下應該告警但不保存
-                return;
-            }
-
             ChannelSyncLog log = new ChannelSyncLog();
             log.setId(UUID.randomUUID().toString());
-            log.setPlatformId(platform.getId());  // 使用真實的 platformId（NanoID）
+            log.setPlatformId(platformId);  // Direct ID, no lookup needed
             // 平台級檢查不設置 merchantId 和 channelId
             log.setSyncType("PLATFORM_HEALTH_CHECK");
             log.setHttpStatus(httpStatus);
@@ -163,7 +161,7 @@ public class HealthCheckService {
 
             channelSyncLogRepository.save(log);
         } catch (Exception e) {
-            log.warn("Failed to record platform health log for {}", platformCode, e);
+            log.warn("Failed to record platform health log for {}", platformId, e);
         }
     }
 

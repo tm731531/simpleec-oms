@@ -163,16 +163,18 @@ public class ChannelJobConsumer {
             JsonNode body = json.get("body");
 
             String taskType = header.get("taskType").asText();
-            String platformCode = extractPlatformFromGroupId();
 
-            log.debug("Processing {} message for {}", taskType, platformCode);
+            log.debug("Processing {} message", taskType);
 
             // CHECK_HEALTH_PLATFORM 不需要 channelId，直接處理
             if ("CHECK_HEALTH_PLATFORM".equals(taskType)) {
-                healthCheckService.performPlatformHealthCheck(platformCode);
-                log.info("Platform health check completed for {}", platformCode);
+                String platformId = header.get("platformId").asText();
+                healthCheckService.performPlatformHealthCheck(platformId);
+                log.info("Platform health check completed for {}", platformId);
                 return;
             }
+
+            String platformCode = extractPlatformFromGroupId();
 
             // 其他 taskType 需要 channelId 和 merchantId
             String channelId = header.get("channelId").asText();
