@@ -131,12 +131,13 @@ public class HealthCheckScheduler {
 
                 // Header
                 header.put("taskType", "CHECK_HEALTH_PLATFORM");
-                header.put("platformCode", platform.getId());
+                header.put("platformCode", platform.getPlatformName());  // Use platform name, not ID
+                header.put("platformId", platform.getId());              // Include platformId in header
                 header.put("timestamp", Instant.now().toString());
                 header.put("version", 1);
 
                 // Body
-                body.put("platformCode", platform.getId());
+                body.put("platformCode", platform.getPlatformName());    // Use platform name (e.g., "cyberbiz")
 
                 // Message
                 message.set("header", header);
