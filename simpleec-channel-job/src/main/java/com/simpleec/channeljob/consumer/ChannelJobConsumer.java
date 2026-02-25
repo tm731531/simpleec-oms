@@ -46,7 +46,9 @@ public class ChannelJobConsumer {
     private final ModeBOrderDetailHandler modeBOrderDetailHandler;
     private final ObjectMapper objectMapper;
     private final ChannelService channelService;
-    private final HealthCheckService healthCheckService;
+
+    @Autowired(required = false)
+    private HealthCheckService healthCheckService;
 
     @Autowired(required = false)
     private KafkaListenerEndpointRegistry kafkaListenerEndpointRegistry;

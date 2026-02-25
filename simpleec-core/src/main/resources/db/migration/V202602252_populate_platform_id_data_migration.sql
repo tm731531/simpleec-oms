@@ -15,13 +15,11 @@
 -- These records should have a channel_id, so we can join with channel table to get platform_id
 UPDATE public.channel_sync_logs csl
 SET platform_id = c.platform_id
-WHERE csl.sync_type = 'CHANNEL_HEALTH_CHECK'
+FROM public.channel c
+WHERE c.id = csl.channel_id
+  AND csl.sync_type = 'CHANNEL_HEALTH_CHECK'
   AND csl.channel_id IS NOT NULL
-  AND csl.platform_id IS NULL
-  AND EXISTS (
-    SELECT 1 FROM public.channel c
-    WHERE c.id = csl.channel_id
-  );
+  AND csl.platform_id IS NULL;
 
 -- Step 2: For PLATFORM_HEALTH_CHECK records, we have two options:
 -- Option A: Delete all old PLATFORM_HEALTH_CHECK records (RECOMMENDED)

@@ -1,5 +1,7 @@
 spring:
   datasource:
+  flyway:
+    enabled: false
     url: jdbc:postgresql://postgres:5432/simpleec
   jpa:
     hibernate:

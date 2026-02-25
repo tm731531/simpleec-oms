@@ -4,6 +4,10 @@ spring:
     username: simpleec
     password: simpleec123
     driver-class-name: org.postgresql.Driver
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
   kafka:
     bootstrap-servers: kafka:9092
   web:

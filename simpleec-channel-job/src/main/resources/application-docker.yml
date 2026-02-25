@@ -21,6 +21,8 @@ spring:
     hikari:
       maximum-pool-size: 10
       minimum-idle: 2
+  flyway:
+    enabled: false
   jpa:
     enabled: true
     hibernate:

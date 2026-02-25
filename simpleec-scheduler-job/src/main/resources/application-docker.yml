@@ -2,6 +2,8 @@ spring:
   datasource:
     url: jdbc:postgresql://postgres:5432/simpleec
     driver-class-name: org.postgresql.Driver
+  flyway:
+    enabled: false
   jpa:
     hibernate:
       ddl-auto: none  # 只查詢，不驗證或修改 schema
