@@ -8,7 +8,6 @@ import com.simpleec.channeljob.handler.ModeBOrderListHandler;
 import com.simpleec.channeljob.handler.ModeBOrderDetailHandler;
 import com.simpleec.channeljob.service.ChannelService;
 import com.simpleec.channeljob.service.HealthCheckService;
-import com.simpleec.schedulerjob.dto.HealthCheckMessage;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -104,8 +103,8 @@ public class ChannelJobConsumer {
         }
 
         try {
-            // Get the consume method (accepts JsonNode instead of String)
-            Method consumeMethod = this.getClass().getDeclaredMethod("consumeChannelMessage", JsonNode.class);
+            // Get the consume method (accepts String, will be parsed to JsonNode)
+            Method consumeMethod = this.getClass().getDeclaredMethod("consumeChannelMessage", String.class);
 
             // Create endpoint
             MethodKafkaListenerEndpoint<String, String> endpoint = new MethodKafkaListenerEndpoint<>();
@@ -143,42 +142,6 @@ public class ChannelJobConsumer {
 
             log.info("✓ Dynamic listener registered: groupId={}, topics={}", groupId, Arrays.toString(topics));
 
-            // 也為健康檢查消息註冊監聽器（相同的 topics）
-            try {
-                Method healthCheckMethod = this.getClass().getDeclaredMethod("consumeHealthCheckMessage", HealthCheckMessage.class);
-                MethodKafkaListenerEndpoint<String, String> healthEndpoint = new MethodKafkaListenerEndpoint<>();
-                healthEndpoint.setId("dynamic-health-check-listener-" + groupId);
-                healthEndpoint.setGroupId(groupId + "-health-check");
-                healthEndpoint.setTopics(topics);
-                healthEndpoint.setMethod(healthCheckMethod);
-                healthEndpoint.setBean(this);
-                healthEndpoint.setConcurrency(concurrency);
-
-                if (messageHandlerMethodFactory != null) {
-                    healthEndpoint.setMessageHandlerMethodFactory(messageHandlerMethodFactory);
-                } else {
-                    org.springframework.messaging.handler.annotation.support.DefaultMessageHandlerMethodFactory defaultFactory =
-                        new org.springframework.messaging.handler.annotation.support.DefaultMessageHandlerMethodFactory();
-                    try {
-                        defaultFactory.afterPropertiesSet();
-                    } catch (Exception e) {
-                        log.warn("Failed to initialize default MessageHandlerMethodFactory", e);
-                    }
-                    healthEndpoint.setMessageHandlerMethodFactory(defaultFactory);
-                }
-
-                kafkaListenerEndpointRegistry.registerListenerContainer(
-                        healthEndpoint,
-                        kafkaListenerContainerFactory
-                );
-
-                log.info("✓ Health check listener registered: groupId={}, topics={}", groupId + "-health-check", Arrays.toString(topics));
-            } catch (NoSuchMethodException e) {
-                log.error("Failed to find consumeHealthCheckMessage method", e);
-            } catch (Exception e) {
-                log.error("Failed to register health check listener", e);
-            }
-
         } catch (NoSuchMethodException e) {
             log.error("Failed to find consumeChannelMessage method", e);
         } catch (Exception e) {
@@ -192,15 +155,27 @@ public class ChannelJobConsumer {
      * 重要：merchantId 從數據庫 channel 表查詢，而不是從消息頭讀取
      * Scheduler 只需發送 channelId，ChannelJob 負責查詢對應的 merchantId
      */
-    public void consumeChannelMessage(JsonNode json) {
+    public void consumeChannelMessage(String messageJson) {
         try {
-            // message is already a JsonNode, no need to parse
+            // Parse JSON string to JsonNode
+            JsonNode json = objectMapper.readTree(messageJson);
             JsonNode header = json.get("header");
             JsonNode body = json.get("body");
 
             String taskType = header.get("taskType").asText();
-            String channelId = header.get("channelId").asText();
             String platformCode = extractPlatformFromGroupId();
+
+            log.debug("Processing {} message for {}", taskType, platformCode);
+
+            // CHECK_HEALTH_PLATFORM 不需要 channelId，直接處理
+            if ("CHECK_HEALTH_PLATFORM".equals(taskType)) {
+                healthCheckService.performPlatformHealthCheck(platformCode);
+                log.info("Platform health check completed for {}", platformCode);
+                return;
+            }
+
+            // 其他 taskType 需要 channelId 和 merchantId
+            String channelId = header.get("channelId").asText();
 
             // 從數據庫查詢 Channel，獲得真實的 merchantId
             Channel channel = channelService.getChannel(channelId);
@@ -227,10 +202,6 @@ public class ChannelJobConsumer {
                 // 檢查特定通路的 token 健康狀況
                 healthCheckService.performChannelHealthCheck(channelId);
                 log.info("Health check completed for channel {}", channelId);
-            } else if ("CHECK_HEALTH_PLATFORM".equals(taskType)) {
-                // 檢查整個平台的健康狀況
-                healthCheckService.performPlatformHealthCheck(platformCode);
-                log.info("Platform health check completed for {}", platformCode);
             } else if ("SYNC_PACK".equals(taskType)) {
                 log.debug("SYNC_PACK not implemented yet");
             } else if ("SHIP_ORDER".equals(taskType) || "UPDATE_INVENTORY".equals(taskType) || "UPDATE_PRICE".equals(taskType)) {
@@ -354,36 +325,5 @@ public class ChannelJobConsumer {
             return groupId.substring("channel-job-".length());
         }
         return "unknown";
-    }
-
-    /**
-     * 單獨監聽健康檢查消息
-     * 處理 HealthCheckMessage 物件（來自 HealthCheckScheduler）
-     * 手動註冊此 listener 來消費所有 platform.fast topics
-     */
-    public void consumeHealthCheckMessage(HealthCheckMessage message) {
-        try {
-            String taskType = message.getTaskType();
-            String channelId = message.getChannelId();
-            String platformCode = message.getPlatformCode();
-
-            log.debug("Processing {} message for {} (channel: {})",
-                taskType, platformCode, channelId);
-
-            if ("CHECK_HEALTH".equals(taskType)) {
-                // 檢查特定通路的 token 健康狀況
-                healthCheckService.performChannelHealthCheck(channelId);
-                log.info("Health check completed for channel {}", channelId);
-            } else if ("CHECK_HEALTH_PLATFORM".equals(taskType)) {
-                // 檢查整個平台的健康狀況
-                healthCheckService.performPlatformHealthCheck(platformCode);
-                log.info("Platform health check completed for {}", platformCode);
-            } else {
-                log.warn("Unknown health check taskType: {}", taskType);
-            }
-
-        } catch (Exception e) {
-            log.error("Error processing health check message", e);
-        }
     }
 }

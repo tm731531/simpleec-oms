@@ -110,8 +110,10 @@ public class HealthCheckService {
             log.setId(UUID.randomUUID().toString());
             log.setChannelId(channelId);
             log.setMerchantId(merchantId);
+            log.setSyncType("CHANNEL_HEALTH_CHECK");
             log.setHttpStatus(httpStatus);
             log.setStatus(httpStatus >= 400 ? "failed" : "success");
+            log.setHealth(httpStatus >= 400 ? "unhealthy" : "healthy");
             log.setErrorMessage(errorMessage);
             log.setCreatedAt(LocalDateTime.now());
 
@@ -125,9 +127,12 @@ public class HealthCheckService {
         try {
             ChannelSyncLog log = new ChannelSyncLog();
             log.setId(UUID.randomUUID().toString());
-            log.setChannelId(null); // No specific channel for platform check
+            log.setChannelId("PLATFORM_CHECK"); // Platform-level check marker
+            log.setMerchantId("SYSTEM"); // System-level check
+            log.setSyncType("PLATFORM_HEALTH_CHECK");
             log.setHttpStatus(httpStatus);
             log.setStatus(httpStatus >= 400 ? "failed" : "success");
+            log.setHealth(httpStatus >= 400 ? "unhealthy" : "healthy");
             log.setErrorMessage(errorMessage);
             log.setCreatedAt(LocalDateTime.now());
 

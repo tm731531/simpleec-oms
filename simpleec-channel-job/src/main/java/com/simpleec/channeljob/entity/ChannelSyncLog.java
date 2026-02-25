@@ -29,6 +29,9 @@ public class ChannelSyncLog {
     @Column(nullable = true)
     private String channelId;
 
+    @Column(nullable = false, name = "sync_type")
+    private String syncType; // e.g., "CHANNEL_HEALTH_CHECK", "PLATFORM_HEALTH_CHECK", "ORDER_SYNC"
+
     @Column(nullable = false)
     private Integer httpStatus;
 
@@ -38,6 +41,9 @@ public class ChannelSyncLog {
     @Column(nullable = true)
     private String errorMessage;
 
+    @Column(nullable = true)
+    private String health; // "healthy" or "unhealthy"
+
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -46,13 +52,5 @@ public class ChannelSyncLog {
         if (createdAt == null) {
             createdAt = LocalDateTime.now();
         }
-    }
-
-    /**
-     * Computed property: health status based on HTTP status
-     */
-    @Transient
-    public String getHealth() {
-        return httpStatus >= 400 ? "unhealthy" : "healthy";
     }
 }

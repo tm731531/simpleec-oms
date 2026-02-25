@@ -6,10 +6,13 @@ import com.simpleec.schedulerjob.entity.Channel;
 import com.simpleec.schedulerjob.entity.Platform;
 import com.simpleec.schedulerjob.dto.HealthCheckMessage;
 import com.simpleec.schedulerjob.dto.PlatformHealthCheckMessage;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.time.Instant;
 import java.util.List;
 
 /**
@@ -22,10 +25,13 @@ public class HealthCheckScheduler {
 
     private final ChannelService channelService;
     private final KafkaProducer kafkaProducer;
+    private final ObjectMapper objectMapper;
 
-    public HealthCheckScheduler(ChannelService channelService, KafkaProducer kafkaProducer) {
+    public HealthCheckScheduler(ChannelService channelService, KafkaProducer kafkaProducer,
+                                ObjectMapper objectMapper) {
         this.channelService = channelService;
         this.kafkaProducer = kafkaProducer;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -48,6 +54,7 @@ public class HealthCheckScheduler {
 
     /**
      * Publish health check tasks for all enabled channels
+     * Sends in standard Kafka message format: {header: {...}, body: {...}}
      */
     private void publishChannelHealthChecks() {
         // Get all enabled channels
@@ -67,12 +74,25 @@ public class HealthCheckScheduler {
                 // Publish CHECK_HEALTH task to {queueTopic}.fast topic
                 String topic = platform.getQueueTopic() + ".fast";
 
-                HealthCheckMessage message = new HealthCheckMessage();
-                message.setTaskType("CHECK_HEALTH");
-                message.setMerchantId(channel.getMerchantId());
-                message.setChannelId(channel.getId());
-                message.setPlatformCode(channel.getPlatformId());
-                message.setTimestamp(System.currentTimeMillis());
+                // Create standard Kafka message format (header + body)
+                ObjectNode message = objectMapper.createObjectNode();
+                ObjectNode header = objectMapper.createObjectNode();
+                ObjectNode body = objectMapper.createObjectNode();
+
+                // Header
+                header.put("taskType", "CHECK_HEALTH");
+                header.put("channelId", channel.getId());
+                header.put("merchantId", channel.getMerchantId());
+                header.put("platformCode", channel.getPlatformId());
+                header.put("timestamp", Instant.now().toString());
+                header.put("version", 1);
+
+                // Body
+                body.put("channelId", channel.getId());
+
+                // Message
+                message.set("header", header);
+                message.set("body", body);
 
                 kafkaProducer.publishToTopic(topic, channel.getId(), message);
                 log.debug("Published health check for channel {} to topic {}", channel.getId(), topic);
@@ -85,6 +105,7 @@ public class HealthCheckScheduler {
 
     /**
      * Publish health check tasks for all active platforms
+     * Sends in standard Kafka message format: {header: {...}, body: {...}}
      */
     private void publishPlatformHealthChecks() {
         // Get all active platforms
@@ -103,10 +124,23 @@ public class HealthCheckScheduler {
                 // Publish CHECK_HEALTH_PLATFORM task to {queueTopic}.fast topic
                 String topic = platform.getQueueTopic() + ".fast";
 
-                PlatformHealthCheckMessage message = new PlatformHealthCheckMessage();
-                message.setTaskType("CHECK_HEALTH_PLATFORM");
-                message.setPlatformCode(platform.getId());
-                message.setTimestamp(System.currentTimeMillis());
+                // Create standard Kafka message format (header + body)
+                ObjectNode message = objectMapper.createObjectNode();
+                ObjectNode header = objectMapper.createObjectNode();
+                ObjectNode body = objectMapper.createObjectNode();
+
+                // Header
+                header.put("taskType", "CHECK_HEALTH_PLATFORM");
+                header.put("platformCode", platform.getId());
+                header.put("timestamp", Instant.now().toString());
+                header.put("version", 1);
+
+                // Body
+                body.put("platformCode", platform.getId());
+
+                // Message
+                message.set("header", header);
+                message.set("body", body);
 
                 kafkaProducer.publishToTopic(topic, platform.getId(), message);
                 log.debug("Published platform health check for {} to topic {}", platform.getId(), topic);
