@@ -2,6 +2,7 @@ package com.simpleec.api.controller;
 
 import com.simpleec.api.dto.UserPageResponse;
 import com.simpleec.api.security.UserPrincipal;
+import com.simpleec.api.vo.OrderVO;
 import com.simpleec.common.constants.TopicConstants;
 import com.simpleec.common.enums.OrderStatusEnum;
 import com.simpleec.core.entity.Channel;
@@ -13,6 +14,7 @@ import com.simpleec.core.repository.PlatformRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -20,8 +22,10 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import java.time.LocalDateTime;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 /**
  * 用戶訂單管理控制器
@@ -37,7 +41,7 @@ public class UserOrderController {
     private final KafkaTemplate<String, Object> kafkaTemplate;
 
     @GetMapping
-    public ResponseEntity<UserPageResponse<Order>> listOrders(
+    public ResponseEntity<UserPageResponse<OrderVO>> listOrders(
             @AuthenticationPrincipal UserPrincipal principal,
             @RequestParam(required = false) String channelId,
             @RequestParam(required = false) String status,
@@ -56,7 +60,34 @@ public class UserOrderController {
         } else {
             orders = orderRepository.findByMerchantId(principal.getMerchantId(), pageable);
         }
-        return ResponseEntity.ok(UserPageResponse.from(orders));
+
+        // 轉換 Order 到 OrderVO，並填充 platform 信息
+        List<OrderVO> orderVOs = orders.stream().map(order -> {
+            String platformName = getPlatformName(order.getChannelId());
+            return OrderVO.from(order, platformName);
+        }).collect(Collectors.toList());
+
+        // 建立新的 Page 物件，保留分頁信息
+        Page<OrderVO> orderVOPage = new PageImpl<>(orderVOs, orders.getPageable(), orders.getTotalElements());
+        return ResponseEntity.ok(UserPageResponse.from(orderVOPage));
+    }
+
+    /**
+     * 根據 channelId 獲取平台名稱
+     */
+    private String getPlatformName(String channelId) {
+        try {
+            Optional<Channel> channelOpt = channelRepository.findById(channelId);
+            if (channelOpt.isPresent()) {
+                Optional<Platform> platformOpt = platformRepository.findById(channelOpt.get().getPlatformId());
+                if (platformOpt.isPresent()) {
+                    return platformOpt.get().getPlatformName();
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to get platform name for channel {}", channelId, e);
+        }
+        return "Unknown";  // 默認值
     }
 
     @GetMapping("/{id}")
