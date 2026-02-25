@@ -30,6 +30,9 @@ public class ChannelSyncLog {
     @Column(nullable = true)
     private String channelId;
 
+    @Column(nullable = true)
+    private String platformCode; // e.g., "CYBERBIZ", "SHOPEE" for PLATFORM_HEALTH_CHECK
+
     @Column(nullable = false, name = "sync_type")
     private String syncType; // e.g., "CHANNEL_HEALTH_CHECK", "PLATFORM_HEALTH_CHECK", "ORDER_SYNC"
 

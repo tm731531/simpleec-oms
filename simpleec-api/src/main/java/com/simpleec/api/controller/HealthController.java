@@ -171,13 +171,16 @@ public class HealthController {
 
     /**
      * 特定平台健康狀態（從 channel_sync_logs 查詢最新 PLATFORM_HEALTH_CHECK 記錄）
+     * 按 platformCode 過濾，確保查詢的是該特定平台的記錄
      */
     @GetMapping("/health/platform/{platform}")
     public ResponseEntity<Object> platformHealth(@PathVariable String platform) {
         try {
             var logs = channelSyncLogRepository.findAll();
             var latestLog = logs.stream()
-                .filter(log -> "PLATFORM_CHECK".equals(log.getChannelId()) && "PLATFORM_HEALTH_CHECK".equals(log.getSyncType()))
+                .filter(log -> "PLATFORM_CHECK".equals(log.getChannelId())
+                           && "PLATFORM_HEALTH_CHECK".equals(log.getSyncType())
+                           && platform.equalsIgnoreCase(log.getPlatformCode()))
                 .max((a, b) -> a.getCreatedAt().compareTo(b.getCreatedAt()))
                 .orElse(null);
 
@@ -208,13 +211,16 @@ public class HealthController {
 
     /**
      * 特定平台的健康檢查歷史（從 channel_sync_logs 查詢）
+     * 按 platformCode 過濾，確保只返回該特定平台的歷史記錄
      */
     @GetMapping("/health/platform/{platform}/history")
     public ResponseEntity<Object> platformHealthHistory(@PathVariable String platform) {
         try {
             var logs = channelSyncLogRepository.findAll();
             var historyLogs = logs.stream()
-                .filter(log -> "PLATFORM_CHECK".equals(log.getChannelId()) && "PLATFORM_HEALTH_CHECK".equals(log.getSyncType()))
+                .filter(log -> "PLATFORM_CHECK".equals(log.getChannelId())
+                           && "PLATFORM_HEALTH_CHECK".equals(log.getSyncType())
+                           && platform.equalsIgnoreCase(log.getPlatformCode()))
                 .sorted((a, b) -> b.getCreatedAt().compareTo(a.getCreatedAt()))
                 .limit(50)
                 .toList();
