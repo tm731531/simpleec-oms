@@ -361,25 +361,95 @@ isRollback=true (回補訂單)：
 - **所有邏輯都必須容錯** — 訂單可能從任何狀態跳到任何狀態
 
 ### ★ 外鍵原則：數據庫和 Queue 只傳 ID，不傳名稱
+**核心目的：⚡ 快速、🔗 統一性、🔒 資訊安全**
+
+#### 設計規則
 - **數據庫中存外表的東西 → 必須存 ID**（外鍵）
   - ❌ 不要存名稱、代碼、字符串
   - ✅ 存真實的 NanoID（如 platformId, merchantId, channelId）
 - **Kafka Queue 中傳遞 → 也必須傳 ID**
   - ❌ 不要傳 platformCode, platformName 這類字符串
   - ✅ 傳 platformId（從 header 中直接提取，無需轉換）
-- **好處**：
-  - 數據一致性強（自動外鍵約束）
-  - 性能最優（無需額外查詢轉換）
-  - 邏輯簡潔清晰（直接傳 ID，無中間轉換層）
 
-**反例**：
-```
-❌ 舊做法：
-  Scheduler → platformCode("cyberbiz") → Queue → Consumer → Service → 查詢 Platform 獲得 platformId → DB
+#### 三大核心目的
 
-✅ 新做法：
-  Scheduler → platformId → Queue → Consumer → Service → 直接用 platformId → DB
+**⚡ 快速 (Performance)**
+- **消除名稱→ID 的往返查詢**
+  - ❌ 舊做法：Queue 傳 platformCode("cyberbiz") → Consumer 接收 → 查詢 Platform 表得到 platformId → 再查業務數據
+  - ✅ 新做法：Queue 直接傳 platformId → Consumer 直接用 → O(1) 查表
+- **減少 N+1 查詢問題**
+  - 若傳名稱，每條記錄都要轉換一次：單個查詢消費者、批量拉取時則變成 N+1 問題
+  - 直接傳 ID，無轉換層，直接用索引查詢
+- **實際效果**
+  - 消費 Kafka 消息速度：原本需要 2 次查詢，現在只需 1 次直接 ID 索引
+  - 批量操作時，效能提升明顯（減少 50% 的 DB 查詢）
+
+**🔗 統一性 (Consistency)**
+- **數據庫自動強制一致性（外鍵約束）**
+  - 存 ID：PostgreSQL 通過 FK 自動驗證 `platformId` 存在於 platform 表
+  - 存名稱：無法設置 FK，若平台名稱被改或刪除，舊記錄變成孤立數據
+- **系統範圍內的單一真實源 (Single Source of Truth)**
+  - 平台資訊改了（如狀態、配置），所有使用 ID 的記錄自動正確參照最新數據
+  - 若存名稱，舊名稱和新名稱不同步，導致數據混亂
+- **多語言友好**
+  - ID 全球通用（1，23，abc123 等），不受語言影響
+  - 存名稱很容易遇到 i18n 問題（"cyberbiz" vs "網家" 誰是唯一標識？）
+
+**🔒 資訊安全 (Security)**
+- **不傳敏感信息**
+  - platformCode("cyberbiz", "shopee", "momo") 暴露平台配置資訊
+  - platformId(NanoID) 是不可預測的雜亂字符，無法猜測系統的平台清單
+- **防止意外洩露**
+  - Queue 消息可能被日誌記錄、監控工具截獲
+  - 傳 ID：即使被截獲，攻擊者只看到 `platformId: "abc123def456"`
+  - 傳名稱：攻擊者立刻知道 `"cyberbiz"` 是一個已接入的平台，可能進一步攻擊
+- **外鍵約束的防護**
+  - 直接存 ID 且有 FK 約束，無法插入虛假 platformId（約束會拒絕）
+  - 存名稱時無約束，容易被應用邏輯漏洞利用
+
+#### 實際案例
+
+**反例 - 舊做法**：
 ```
+Scheduler → platformCode("cyberbiz")
+  ↓
+Queue 消息：{header: {platformCode: "cyberbiz"}}
+  ↓
+Consumer 接收 → Service 查詢：SELECT * FROM platform WHERE platform_code = 'cyberbiz'
+  ↓
+Service 獲得 platformId = "id_123abc"
+  ↓
+DB INSERT：channel_sync_logs (platform_id = "id_123abc")
+
+❌ 問題：
+- 多一次 DB 查詢（効率降低）
+- Queue 中暴露 platformCode（安全隱患）
+- 若 platform_code 值改了，系統可能混亂（一致性破裂）
+```
+
+**正例 - 新做法**：
+```
+Scheduler → platformId("id_123abc")
+  ↓
+Queue 消息：{header: {platformId: "id_123abc"}}
+  ↓
+Consumer 直接接收 platformId
+  ↓
+Service 直接用：DB INSERT：channel_sync_logs (platform_id = "id_123abc")
+
+✅ 好處：
+- 無需額外查詢（效能最優）
+- Queue 中只傳加密的 ID（安全）
+- 數據庫 FK 自動保證一致性（若 platform 被刪，FK 約束會防止）
+```
+
+#### 應用範圍
+- **所有外表參照**：platformId, merchantId, channelId, productId, orderId 等
+- **所有傳遞層**：
+  - 數據庫：使用 FK 約束
+  - Kafka Queue：header 和 body 中傳 ID，不傳名稱
+  - API：接收 ID 參數，不接受模糊的名稱查詢（除非特意設計）
+- **例外**：用戶搜索介面（如「搜索平台名稱」），需要名稱查詢；但內部系統流程一律傳 ID
 
 ### ★ 抓取策略：Channel 自主
 - **Channel 內部決定**：時間欄位、狀態過濾、分頁策略
