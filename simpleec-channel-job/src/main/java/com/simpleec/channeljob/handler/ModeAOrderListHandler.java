@@ -38,21 +38,22 @@ public class ModeAOrderListHandler {
      * 處理 Mode A 訂單列表
      *
      * @param adapter 通路適配器
-     * @param timeRange 時間範圍
+     * @param baseTimestamp 基礎時間戳（心跳時間，秒），用於計算時間窗口
      * @param merchantId 商家 ID
      * @param channelId 通路實例 ID
      */
-    public void handleModeAOrders(ChannelAdapter adapter, String timeRange,
+    public void handleModeAOrders(ChannelAdapter adapter, long baseTimestamp,
                                    String merchantId, String channelId) {
         try {
-            log.info("Processing Mode A orders for {} ({})", adapter.getPlatformCode(), channelId);
+            log.info("Processing Mode A orders for {} ({}) using baseTimestamp", adapter.getPlatformCode(), channelId);
 
             if (adapter.getMode() != ModeEnum.A) {
                 throw new IllegalArgumentException("This handler only supports Mode A");
             }
 
-            // 第一步：呼叫列表 API（已含完整資訊）
-            List<Map<String, Object>> orders = adapter.fetchOrders(channelId, timeRange);
+            // 第一步：呼叫列表 API（調用 fetchOrdersByTimestamp 以使用正確的時間窗口）
+            // 該方法會自動調用兩次 API：新建（7天） + 更新（1天），然後合併去重
+            List<Map<String, Object>> orders = adapter.fetchOrdersByTimestamp(channelId, baseTimestamp);
 
             log.info("Fetched {} orders from {} API", orders.size(), adapter.getPlatformCode());
 

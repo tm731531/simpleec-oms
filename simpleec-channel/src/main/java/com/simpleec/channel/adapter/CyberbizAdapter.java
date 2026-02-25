@@ -325,6 +325,71 @@ public class CyberbizAdapter implements ChannelAdapter {
         // TODO: 實現 Cyberbiz 庫存更新邏輯
     }
 
+    /**
+     * Mode A (改進版)：拉取完整訂單列表（根據 baseTimestamp）
+     *
+     * 調用兩次 API：
+     * 1. 新建訂單：baseTimestamp - 7 天 ～ baseTimestamp（創建時間）
+     * 2. 更新訂單：baseTimestamp - 1 天 ～ baseTimestamp（更新時間）
+     * 然後合併結果去重
+     *
+     * @param channelId 通路 ID
+     * @param baseTimestamp 基礎時間戳（秒），來自 Kafka 消息 header.timestamp
+     * @return 訂單列表（完整數據，按 ID 去重）
+     */
+    @Override
+    public List<Map<String, Object>> fetchOrdersByTimestamp(String channelId, long baseTimestamp) throws Exception {
+        log.info("Fetching Cyberbiz complete orders for channel {} using baseTimestamp: {}", channelId, baseTimestamp);
+
+        if (token == null || token.isEmpty() || secret == null || secret.isEmpty()) {
+            log.error("Credentials not set for channel {}", channelId);
+            throw new IllegalArgumentException("Credentials not set - call setCredentials() first");
+        }
+
+        // 使用 LinkedHashMap 去重：key = order id，value = order data
+        Map<Integer, Map<String, Object>> ordersMap = new LinkedHashMap<>();
+
+        // 第一次呼叫：查詢該時段內建立的訂單（7 天窗口）
+        try {
+            long sevenDaysAgo = baseTimestamp - (7 * 86400);
+            log.debug("Fetching orders created in timeRange: {} to {}", sevenDaysAgo, baseTimestamp);
+
+            List<Map<String, Object>> createdOrders = cyberbizApiClient.getCompleteOrdersCreatedInTimeRange(
+                token, secret, sevenDaysAgo, baseTimestamp
+            );
+            for (Map<String, Object> order : createdOrders) {
+                Integer orderId = ((Number) order.get("id")).intValue();
+                ordersMap.put(orderId, order);
+            }
+            log.debug("Fetched {} orders created in timeRange from Cyberbiz", createdOrders.size());
+        } catch (Exception e) {
+            log.error("Error fetching created orders from Cyberbiz", e);
+            throw e;
+        }
+
+        // 第二次呼叫：查詢該時段內更新的訂單（1 天窗口）
+        try {
+            long oneDayAgo = baseTimestamp - 86400;
+            log.debug("Fetching orders updated in timeRange: {} to {}", oneDayAgo, baseTimestamp);
+
+            List<Map<String, Object>> updatedOrders = cyberbizApiClient.getCompleteOrdersUpdatedInTimeRange(
+                token, secret, oneDayAgo, baseTimestamp
+            );
+            for (Map<String, Object> order : updatedOrders) {
+                Integer orderId = ((Number) order.get("id")).intValue();
+                ordersMap.put(orderId, order);  // 覆蓋或新增（去重邏輯）
+            }
+            log.debug("Fetched {} orders updated in timeRange from Cyberbiz", updatedOrders.size());
+        } catch (Exception e) {
+            log.error("Error fetching updated orders from Cyberbiz", e);
+            throw e;
+        }
+
+        List<Map<String, Object>> result = new ArrayList<>(ordersMap.values());
+        log.info("Fetched {} unique complete orders from Cyberbiz (after dedup)", result.size());
+        return result;
+    }
+
     @Override
     public boolean testConnection() throws Exception {
         log.info("Testing connection to Cyberbiz API");

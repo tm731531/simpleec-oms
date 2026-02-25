@@ -134,6 +134,41 @@ public class CyberbizApiClient {
     }
 
     /**
+     * 查詢特定時間範圍內建立的完整訂單（包含所有詳情）
+     * 使用 start_time 和 end_time 參數篩選訂單
+     *
+     * @param username    API username
+     * @param secret      API secret key
+     * @param createTimeFrom 建立時間開始（Unix 秒）
+     * @param createTimeTo   建立時間結束（Unix 秒）
+     * @return 完整訂單列表（已包含 items, buyer_info, shipping_info 等詳情）
+     */
+    public List<Map<String, Object>> getCompleteOrdersCreatedInTimeRange(String username, String secret, long createTimeFrom, long createTimeTo) {
+        try {
+            String path = "/v1/orders";
+            String startTime = formatTimestamp(createTimeFrom);
+            String endTime = formatTimestamp(createTimeTo);
+            String encodedStart = java.net.URLEncoder.encode(startTime, "UTF-8").replace("+", "%20");
+            String encodedEnd = java.net.URLEncoder.encode(endTime, "UTF-8").replace("+", "%20");
+            String queryString = String.format("start_time=%s&end_time=%s&page=1&per_page=50&offset=0",
+                encodedStart, encodedEnd);
+            String url = baseUrl + path + "?" + queryString;
+
+            log.debug("Calling Cyberbiz API for complete orders (created): GET {}", url);
+
+            HttpHeaders headers = buildHmacHeaders(username, secret, "GET", path, null);
+            HttpEntity<?> entity = new HttpEntity<>(headers);
+            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
+
+            return parseCompleteOrderResponse(response);
+
+        } catch (Exception e) {
+            log.error("Error calling Cyberbiz API getCompleteOrdersCreatedInTimeRange", e);
+            return Collections.emptyList();
+        }
+    }
+
+    /**
      * 查詢單筆訂單詳情
      */
     public Map<String, Object> getOrderDetail(String username, String secret, String orderId) {

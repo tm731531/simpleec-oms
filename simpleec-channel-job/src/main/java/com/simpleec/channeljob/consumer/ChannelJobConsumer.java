@@ -228,8 +228,9 @@ public class ChannelJobConsumer {
 
             // 根據 Mode 調用不同的處理邏輯
             if ("A".equals(adapter.getMode().getCode())) {
-                // Mode A: 直接拉取完整訂單列表
-                modeAOrderListHandler.handleModeAOrders(adapter, timeRange, merchantId, channelId);
+                // Mode A: 直接拉取完整訂單列表（使用 baseTimestamp 計算時間窗口）
+                // 調用兩次 API：新建（7天） + 更新（1天），然後合併去重
+                modeAOrderListHandler.handleModeAOrders(adapter, baseTimestamp, merchantId, channelId);
                 log.info("Mode A order list processing completed for {}", platformCode);
             } else {
                 // Mode B: 拉取訂單 ID 列表，然後發送詳情查詢消息

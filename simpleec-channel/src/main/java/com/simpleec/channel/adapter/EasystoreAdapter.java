@@ -161,6 +161,13 @@ public class EasystoreAdapter implements ChannelAdapter {
     }
 
     @Override
+    public List<Map<String, Object>> fetchOrdersByTimestamp(String channelId, long baseTimestamp) throws Exception {
+        log.info("Fetching Easystore complete orders for channel {} using baseTimestamp", channelId);
+        // TODO: 實現 Easystore Mode A 時間戳查詢邏輯
+        return new ArrayList<>();
+    }
+
+    @Override
     public boolean testConnection() throws Exception {
         log.info("Testing connection to Easystore API");
         // 模擬連接測試

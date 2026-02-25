@@ -32,6 +32,20 @@ public interface ChannelAdapter {
     List<Map<String, Object>> fetchOrders(String channelId, String timeRange) throws Exception;
 
     /**
+     * Mode A: 拉取完整訂單列表（根據時間戳）
+     *
+     * 調用兩次 API：
+     * - 新建訂單：baseTimestamp - 7 天 ～ baseTimestamp
+     * - 更新訂單：baseTimestamp - 1 天 ～ baseTimestamp
+     * 然後合併去重
+     *
+     * @param channelId 通路 ID
+     * @param baseTimestamp 基礎時間戳（心跳時間，秒），用於計算時間窗口
+     * @return 訂單列表（完整數據，已去重）
+     */
+    List<Map<String, Object>> fetchOrdersByTimestamp(String channelId, long baseTimestamp) throws Exception;
+
+    /**
      * Mode B: 拉取訂單列表（概要，不含詳情）
      *
      * @param channelId 通路 ID（用於獲取 channel 配置如 token）

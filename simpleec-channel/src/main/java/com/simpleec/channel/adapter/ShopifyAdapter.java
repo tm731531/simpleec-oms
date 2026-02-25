@@ -126,6 +126,13 @@ public class ShopifyAdapter implements ChannelAdapter {
     }
 
     @Override
+    public List<Map<String, Object>> fetchOrdersByTimestamp(String channelId, long baseTimestamp) throws Exception {
+        log.info("Fetching Shopify complete orders for channel {} using baseTimestamp", channelId);
+        // TODO: 實現 Shopify Mode A 時間戳查詢邏輯
+        return new ArrayList<>();
+    }
+
+    @Override
     public boolean testConnection() throws Exception {
         log.info("Testing Shopify connection...");
         // TODO: 實際測試連接

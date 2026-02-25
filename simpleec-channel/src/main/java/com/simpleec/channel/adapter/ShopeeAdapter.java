@@ -169,6 +169,13 @@ public class ShopeeAdapter implements ChannelAdapter {
     }
 
     @Override
+    public List<Map<String, Object>> fetchOrdersByTimestamp(String channelId, long baseTimestamp) throws Exception {
+        // Mode B adapters use fetchOrderListByTimestamp() + fetchOrderDetail()
+        // This is not used for Mode B
+        throw new UnsupportedOperationException("Shopee is Mode B - use fetchOrderListByTimestamp() + fetchOrderDetail() instead");
+    }
+
+    @Override
     public boolean testConnection() throws Exception {
         log.info("Testing connection to Shopee API");
         // 模擬連接測試
