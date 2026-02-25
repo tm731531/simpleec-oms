@@ -93,6 +93,14 @@ public class ModeAOrderListHandler {
             return;
         }
 
+        // 提取訂單號碼（人可讀的訂單號）
+        String channelOrderNumber = null;
+        if (channelOrder.containsKey("order_number")) {
+            channelOrderNumber = channelOrder.get("order_number").toString();
+        } else if (channelOrder.containsKey("order_name")) {
+            channelOrderNumber = channelOrder.get("order_name").toString();
+        }
+
         ObjectNode omsOrderData = buildOmsOrderData(channelOrder, platformCode);
 
         // 第四步：計算 Hash（基於完整資料）
@@ -113,7 +121,7 @@ public class ModeAOrderListHandler {
         }
 
         // 第六步：發送 ORDER_UPSERT 到 order.process topic
-        sendOrderUpsert(channelOrderId, omsOrderData, orderHash, channelId, merchantId, platformCode);
+        sendOrderUpsert(channelOrderId, channelOrderNumber, omsOrderData, orderHash, channelId, merchantId, platformCode);
 
         log.info("Sent ORDER_UPSERT for {} from {}", channelOrderId, platformCode);
     }
@@ -133,19 +141,28 @@ public class ModeAOrderListHandler {
             : "PENDING";  // 預設
         omsData.put("orderStatus", omsStatus);
 
-        // Total Amount（支援 total_price, total_amount, amount 等）
-        Object amountObj = channelOrder.get("total_price");
-        if (amountObj == null) amountObj = channelOrder.get("total_amount");
-        if (amountObj == null) amountObj = channelOrder.get("amount");
-        if (amountObj != null) {
-            try {
-                omsData.put("totalAmount", Double.parseDouble(amountObj.toString()));
-            } catch (Exception e) {
-                omsData.put("totalAmount", 0.0);
+        // Total Amount — 從 line_items 計算（price × quantity 的總和）
+        double calculatedTotal = 0.0;
+        Object itemsForCalc = channelOrder.get("line_items");
+        if (itemsForCalc == null) itemsForCalc = channelOrder.get("items");
+        if (itemsForCalc instanceof java.util.List) {
+            for (Object item : (java.util.List<?>) itemsForCalc) {
+                if (item instanceof java.util.Map) {
+                    java.util.Map<?, ?> itemMap = (java.util.Map<?, ?>) item;
+                    Object price = itemMap.get("price");
+                    Object qty = itemMap.get("quantity");
+                    if (price != null && qty != null) {
+                        try {
+                            calculatedTotal += Double.parseDouble(price.toString())
+                                             * Integer.parseInt(qty.toString());
+                        } catch (Exception e) {
+                            log.warn("Failed to parse item price/quantity: price={}, qty={}", price, qty);
+                        }
+                    }
+                }
             }
-        } else {
-            omsData.put("totalAmount", 0.0);
         }
+        omsData.put("totalAmount", calculatedTotal);
 
         // Shipping Fee
         Object shippingFeeObj = channelOrder.get("shipping_fee");
@@ -305,7 +322,7 @@ public class ModeAOrderListHandler {
     /**
      * 發送 ORDER_UPSERT 到 order.process topic
      */
-    private void sendOrderUpsert(String channelOrderId, ObjectNode omsOrderData,
+    private void sendOrderUpsert(String channelOrderId, String channelOrderNumber, ObjectNode omsOrderData,
                                  String orderHash, String channelId, String merchantId, String platformCode) throws Exception {
 
         ObjectNode message = objectMapper.createObjectNode();
@@ -326,6 +343,7 @@ public class ModeAOrderListHandler {
         // Body
         ObjectNode body = objectMapper.createObjectNode();
         body.put("channelOrderId", channelOrderId);
+        body.put("channelOrderNumber", channelOrderNumber != null ? channelOrderNumber : "");
         body.put("orderHash", orderHash);
         body.set("orderData", omsOrderData);
 

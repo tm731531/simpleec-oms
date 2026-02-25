@@ -21,7 +21,7 @@ public class OrderVO {
     private String merchantId;
 
     // 前端期望的字段
-    private String orderNumber;              // 訂單編號（使用 channelOrderId）
+    private String orderNumber;              // 訂單編號（使用 channelOrderNumber 或 fallback 到 channelOrderId）
     private String platform;                 // 通路（從 channelId 提取或映射）
     private String status;                   // 訂單狀態（從 orderStatus 轉換）
     private BigDecimal totalAmount;          // 金額
@@ -32,6 +32,7 @@ public class OrderVO {
     // 額外的有用字段
     private String channelId;
     private String channelOrderId;
+    private String channelOrderNumber;       // 平台訂單號碼（給用戶看的）
     private String orderStatus;              // 原始訂單狀態
     private BigDecimal shippingFee;
     private BigDecimal discountAmount;
@@ -58,9 +59,14 @@ public class OrderVO {
         vo.setMerchantId(order.getMerchantId());
         vo.setChannelId(order.getChannelId());
         vo.setChannelOrderId(order.getChannelOrderId());
+        vo.setChannelOrderNumber(order.getChannelOrderNumber());
 
         // 前端期望的字段
-        vo.setOrderNumber(order.getChannelOrderId());  // 使用 channelOrderId 作為訂單編號
+        // 優先顯示人可讀的訂單號碼，fallback 到 channelOrderId
+        String displayNumber = order.getChannelOrderNumber() != null && !order.getChannelOrderNumber().isEmpty()
+            ? order.getChannelOrderNumber()
+            : order.getChannelOrderId();
+        vo.setOrderNumber(displayNumber);
         vo.setPlatform(platformName);                  // 通路名稱
         vo.setStatus(order.getOrderStatus().getCode());  // 統一使用小寫
         vo.setTotalAmount(order.getTotalAmount());

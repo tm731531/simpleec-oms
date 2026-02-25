@@ -58,6 +58,12 @@ public class Order {
     private String channelOrderId;
 
     /**
+     * 通路的人可讀訂單號碼 (e.g., Cyberbiz order_number 4319)
+     */
+    @Column(name = "channel_order_number", length = 100)
+    private String channelOrderNumber;
+
+    /**
      * OMS 統一訂單狀態
      */
     @Column(name = "order_status", length = 50, nullable = false)

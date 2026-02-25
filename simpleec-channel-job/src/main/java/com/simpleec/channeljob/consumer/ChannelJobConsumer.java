@@ -7,12 +7,15 @@ import com.simpleec.channeljob.handler.ModeAOrderListHandler;
 import com.simpleec.channeljob.handler.ModeBOrderListHandler;
 import com.simpleec.channeljob.handler.ModeBOrderDetailHandler;
 import com.simpleec.channeljob.service.ChannelService;
+import com.simpleec.channeljob.service.HealthCheckService;
+import com.simpleec.schedulerjob.dto.HealthCheckMessage;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
 import org.springframework.kafka.config.MethodKafkaListenerEndpoint;
 import org.springframework.kafka.listener.KafkaListenerErrorHandler;
@@ -44,6 +47,7 @@ public class ChannelJobConsumer {
     private final ModeBOrderDetailHandler modeBOrderDetailHandler;
     private final ObjectMapper objectMapper;
     private final ChannelService channelService;
+    private final HealthCheckService healthCheckService;
 
     @Autowired(required = false)
     private KafkaListenerEndpointRegistry kafkaListenerEndpointRegistry;
@@ -139,6 +143,42 @@ public class ChannelJobConsumer {
 
             log.info("✓ Dynamic listener registered: groupId={}, topics={}", groupId, Arrays.toString(topics));
 
+            // 也為健康檢查消息註冊監聽器（相同的 topics）
+            try {
+                Method healthCheckMethod = this.getClass().getDeclaredMethod("consumeHealthCheckMessage", HealthCheckMessage.class);
+                MethodKafkaListenerEndpoint<String, String> healthEndpoint = new MethodKafkaListenerEndpoint<>();
+                healthEndpoint.setId("dynamic-health-check-listener-" + groupId);
+                healthEndpoint.setGroupId(groupId + "-health-check");
+                healthEndpoint.setTopics(topics);
+                healthEndpoint.setMethod(healthCheckMethod);
+                healthEndpoint.setBean(this);
+                healthEndpoint.setConcurrency(concurrency);
+
+                if (messageHandlerMethodFactory != null) {
+                    healthEndpoint.setMessageHandlerMethodFactory(messageHandlerMethodFactory);
+                } else {
+                    org.springframework.messaging.handler.annotation.support.DefaultMessageHandlerMethodFactory defaultFactory =
+                        new org.springframework.messaging.handler.annotation.support.DefaultMessageHandlerMethodFactory();
+                    try {
+                        defaultFactory.afterPropertiesSet();
+                    } catch (Exception e) {
+                        log.warn("Failed to initialize default MessageHandlerMethodFactory", e);
+                    }
+                    healthEndpoint.setMessageHandlerMethodFactory(defaultFactory);
+                }
+
+                kafkaListenerEndpointRegistry.registerListenerContainer(
+                        healthEndpoint,
+                        kafkaListenerContainerFactory
+                );
+
+                log.info("✓ Health check listener registered: groupId={}, topics={}", groupId + "-health-check", Arrays.toString(topics));
+            } catch (NoSuchMethodException e) {
+                log.error("Failed to find consumeHealthCheckMessage method", e);
+            } catch (Exception e) {
+                log.error("Failed to register health check listener", e);
+            }
+
         } catch (NoSuchMethodException e) {
             log.error("Failed to find consumeChannelMessage method", e);
         } catch (Exception e) {
@@ -183,6 +223,14 @@ public class ChannelJobConsumer {
             } else if ("FETCH_ORDER_DETAIL".equals(taskType)) {
                 String channelOrderId = body.get("channelOrderId").asText();
                 handleFetchOrderDetail(platformCode, channelId, merchantId, channelOrderId);
+            } else if ("CHECK_HEALTH".equals(taskType)) {
+                // 檢查特定通路的 token 健康狀況
+                healthCheckService.performChannelHealthCheck(channelId);
+                log.info("Health check completed for channel {}", channelId);
+            } else if ("CHECK_HEALTH_PLATFORM".equals(taskType)) {
+                // 檢查整個平台的健康狀況
+                healthCheckService.performPlatformHealthCheck(platformCode);
+                log.info("Platform health check completed for {}", platformCode);
             } else if ("SYNC_PACK".equals(taskType)) {
                 log.debug("SYNC_PACK not implemented yet");
             } else if ("SHIP_ORDER".equals(taskType) || "UPDATE_INVENTORY".equals(taskType) || "UPDATE_PRICE".equals(taskType)) {
@@ -306,5 +354,36 @@ public class ChannelJobConsumer {
             return groupId.substring("channel-job-".length());
         }
         return "unknown";
+    }
+
+    /**
+     * 單獨監聽健康檢查消息
+     * 處理 HealthCheckMessage 物件（來自 HealthCheckScheduler）
+     * 手動註冊此 listener 來消費所有 platform.fast topics
+     */
+    public void consumeHealthCheckMessage(HealthCheckMessage message) {
+        try {
+            String taskType = message.getTaskType();
+            String channelId = message.getChannelId();
+            String platformCode = message.getPlatformCode();
+
+            log.debug("Processing {} message for {} (channel: {})",
+                taskType, platformCode, channelId);
+
+            if ("CHECK_HEALTH".equals(taskType)) {
+                // 檢查特定通路的 token 健康狀況
+                healthCheckService.performChannelHealthCheck(channelId);
+                log.info("Health check completed for channel {}", channelId);
+            } else if ("CHECK_HEALTH_PLATFORM".equals(taskType)) {
+                // 檢查整個平台的健康狀況
+                healthCheckService.performPlatformHealthCheck(platformCode);
+                log.info("Platform health check completed for {}", platformCode);
+            } else {
+                log.warn("Unknown health check taskType: {}", taskType);
+            }
+
+        } catch (Exception e) {
+            log.error("Error processing health check message", e);
+        }
     }
 }

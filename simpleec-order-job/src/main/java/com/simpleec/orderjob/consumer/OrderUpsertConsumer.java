@@ -67,6 +67,8 @@ public class OrderUpsertConsumer {
             String merchantId = header.get("merchantId").asText();
             String channelId = header.get("channelId").asText();
             String channelOrderId = body.get("channelOrderId").asText();
+            String channelOrderNumber = body.has("channelOrderNumber")
+                ? body.get("channelOrderNumber").asText() : null;
             String orderHash = body.get("orderHash").asText();
             JsonNode orderDataJson = body.get("orderData");
             boolean isRollback = header.has("isRollback") ? header.get("isRollback").asBoolean() : false;
@@ -75,7 +77,7 @@ public class OrderUpsertConsumer {
                 channelOrderId, channelId, orderHash.substring(0, 8) + "...", isRollback);
 
             // 執行訂單入庫邏輯
-            handleOrderUpsert(merchantId, channelId, channelOrderId, orderHash, orderDataJson, isRollback);
+            handleOrderUpsert(merchantId, channelId, channelOrderId, channelOrderNumber, orderHash, orderDataJson, isRollback);
 
             // 手動提交 offset（確保訂單已入庫）
             acknowledgment.acknowledge();
@@ -105,7 +107,7 @@ public class OrderUpsertConsumer {
      * 3. INSERT 或 UPDATE
      * 4. 更新 Redis hash 快取
      */
-    private void handleOrderUpsert(String merchantId, String channelId, String channelOrderId,
+    private void handleOrderUpsert(String merchantId, String channelId, String channelOrderId, String channelOrderNumber,
                                     String orderHash, JsonNode orderDataJson, boolean isRollback) throws Exception {
 
         // 第 0 步：構建 Redis Key
@@ -137,6 +139,10 @@ public class OrderUpsertConsumer {
             if (!orderHash.equals(dbOrderHash)) {
                 // Hash 不同 → 有實質變化 → 執行 UPDATE
                 order = updateOrderFromData(order, orderDataJson, isRollback);
+                // 設定 channelOrderNumber（若提供）
+                if (channelOrderNumber != null && !channelOrderNumber.isBlank()) {
+                    order.setChannelOrderNumber(channelOrderNumber);
+                }
                 log.info("Updated order: {} from channel {} (hash changed)",
                     order.getId(), channelId);
             } else {
@@ -152,7 +158,7 @@ public class OrderUpsertConsumer {
             }
         } else {
             // INSERT 新訂單
-            order = createOrderFromData(merchantId, channelId, channelOrderId, orderDataJson, isRollback);
+            order = createOrderFromData(merchantId, channelId, channelOrderId, channelOrderNumber, orderDataJson, isRollback);
             log.info("Created new order: {} from channel {}", order.getId(), channelId);
         }
 
@@ -187,7 +193,7 @@ public class OrderUpsertConsumer {
     /**
      * 從 API 數據創建 Order 實體
      */
-    private Order createOrderFromData(String merchantId, String channelId, String channelOrderId,
+    private Order createOrderFromData(String merchantId, String channelId, String channelOrderId, String channelOrderNumber,
                                       JsonNode orderDataJson, boolean isRollback) throws Exception {
 
         Order order = new Order();
@@ -196,6 +202,7 @@ public class OrderUpsertConsumer {
         order.setMerchantId(merchantId);
         order.setChannelId(channelId);
         order.setChannelOrderId(channelOrderId);
+        order.setChannelOrderNumber(channelOrderNumber);
 
         // 填充訂單數據
         populateOrderFromData(order, orderDataJson, isRollback);

@@ -77,6 +77,12 @@ public class ModeBOrderDetailHandler {
             Map<String, Object> orderDetail = adapter.fetchOrderDetail(channelId, channelOrderId);
             log.info("Fetched order detail from {}: {}", channelId, channelOrderId);
 
+            // 提取訂單號碼（人可讀的訂單號）
+            String channelOrderNumber = null;
+            if (orderDetail.containsKey("order_number")) {
+                channelOrderNumber = orderDetail.get("order_number").toString();
+            }
+
             // 第 2 步：轉換為 OMS 標準 schema
             ObjectNode orderData = buildOmsOrderData(orderDetail, adapter.getPlatformCode());
 
@@ -85,7 +91,7 @@ public class ModeBOrderDetailHandler {
             log.debug("Calculated order hash: {}", orderHash.substring(0, 8) + "...");
 
             // 第 4 步：發送 ORDER_UPSERT 消息
-            sendOrderUpsertMessage(merchantId, channelId, channelOrderId, orderHash, orderData, adapter.getPlatformCode());
+            sendOrderUpsertMessage(merchantId, channelId, channelOrderId, channelOrderNumber, orderHash, orderData, adapter.getPlatformCode());
 
             log.info("Successfully processed Mode B order detail: {}", channelOrderId);
 
@@ -285,7 +291,7 @@ public class ModeBOrderDetailHandler {
     /**
      * 發送 ORDER_UPSERT 消息到 order.process topic
      */
-    private void sendOrderUpsertMessage(String merchantId, String channelId, String channelOrderId,
+    private void sendOrderUpsertMessage(String merchantId, String channelId, String channelOrderId, String channelOrderNumber,
                                         String orderHash, ObjectNode orderData, String platformCode) throws Exception {
 
         ObjectNode message = objectMapper.createObjectNode();
@@ -307,6 +313,7 @@ public class ModeBOrderDetailHandler {
         // 構建 body
         ObjectNode body = objectMapper.createObjectNode();
         body.put("channelOrderId", channelOrderId);
+        body.put("channelOrderNumber", channelOrderNumber != null ? channelOrderNumber : "");
         body.put("orderHash", orderHash);
         body.set("orderData", orderData);
         message.set("body", body);
