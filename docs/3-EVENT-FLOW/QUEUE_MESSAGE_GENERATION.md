@@ -30,16 +30,40 @@
 | 字段 | 規則 | 例子 |
 |------|------|------|
 | `taskType` | 由調用方決定，見 TaskType 列表 | FETCH_ORDERS |
-| `merchantId` | 固定值，從系統配置讀取 | M001 |
+| `merchantId` | **動態值**，來自具體訂單/請求的商家 ID | M001 |
 | `platformId` | 通路編號（小寫） | momo |
 | `channelId` | 通路實例 ID | MOMO_001 |
 | `requestId` | UUID 或「來源-時間-序列號」格式 | sched-20260213-100001 |
-| `timestamp` | Instant.now().toString() 或消息時間 | 2026-02-13T10:00:00Z |
+| `timestamp` | **一路帶下去**，不重新生成（見規則） | 2026-02-13T10:00:00Z |
 | `source` | scheduler, channel_job, api, webhook, manual | scheduler |
 | `version` | 固定值 1（未來有破壞性改動才升級） | 1 |
 | `retryCount` | 初始為 0，失敗後遞增 | 0 |
 | `priority` | HIGH, NORMAL, LOW | NORMAL |
 | `correlationId` | 可選，用於串聯 list→detail→process | sched-20260213-fetch-001 |
+
+#### timestamp 傳遞規則（重要！）
+
+```
+原則：timestamp 代表「這個事件是為了處理什麼時間的事」，一旦設定就不變
+
+來源分為兩種：
+
+1. Scheduler 心跳（DISPATCH_ORDER_FETCH 等）：
+   ├─ 心跳發送：timestamp = 2026-02-13T10:00:00Z
+   ├─ 發到 {platform}.slow：帶同一個 timestamp
+   ├─ Channel Job 發 FETCH_ORDER_DETAIL：帶同一個 timestamp
+   └─ 最後發 PROCESS_ORDER：帶同一個 timestamp
+
+2. API/UI 發起（如人工審核返回訂單）：
+   ├─ UI 發起：timestamp = 2026-02-13T10:05:23Z
+   ├─ 發到 task.backend：帶同一個 timestamp
+   └─ 所有下游都帶同一個 timestamp
+
+╔════════════════════════════════════════════════════════╗
+║ ✅ DO：timestamp 一路帶下去                              ║
+║ ❌ DON'T：在每個環節重新生成 Instant.now()             ║
+╚════════════════════════════════════════════════════════╝
+```
 
 ---
 
@@ -162,30 +186,44 @@ msg.body = new FetchOrderDetailBody(orders);
 }
 ```
 
-**生成方式**（在 ChannelJob 或 Handler 中）：
+**生成方式**（在 ChannelJob 中）：
 ```java
+// 前提：已經收到 FETCH_ORDERS 消息，extractedHeader 包含原始 timestamp 和 merchantId
+
 // 步驟 1：解析平台 API 響應，轉換為 OMS 結構
 Order order = parseAndConvert(platformResponse);
 
 // 步驟 2：加密 PII 字段
 order.buyerName = encryptPII(order.buyerName);
 order.buyerPhone = encryptPII(order.buyerPhone);
-...
+order.buyerEmail = encryptPII(order.buyerEmail);
+order.shippingAddress = encryptPII(order.shippingAddress);
 
 // 步驟 3：生成 orderId（如果是新訂單）
 if (order.orderId == null) {
   order.orderId = IdGenerator.nextId();
 }
 
-// 步驟 4：構建消息
+// 步驟 4：決定是否是回補訂單（isRollback）
+boolean isRollback = determineIfRollback(order);  // 根據業務規則判斷
+
+// 步驟 5：構建消息（重要：使用原始 timestamp 和 merchantId）
 KafkaMessage msg = new KafkaMessage();
 msg.header = buildHeader(
   taskType="PROCESS_ORDER",
-  correlationId="sched-20260213-fetch-001",
-  isRollback=false,  // 判斷是否是回補訂單
-  ...
+  merchantId=extractedHeader.getMerchantId(),     // ← 不變
+  platformId=extractedHeader.getPlatformId(),
+  channelId=extractedHeader.getChannelId(),
+  timestamp=extractedHeader.getTimestamp(),       // ← 不變，一路帶下去
+  source="channel_job",
+  priority="NORMAL",
+  correlationId=extractedHeader.getCorrelationId()
 );
 msg.body = new ProcessOrderBody(order);
+msg.header.setIsRollback(isRollback);            // ← 額外標籤
+
+// 步驟 6：發送到 Kafka
+kafkaTemplate.send("order.process", msg);
 ```
 
 **核心檢查清單**：
@@ -356,19 +394,21 @@ msg.body = new SyncPackCompleteBody(products);
 ```java
 private KafkaMessageHeader buildHeader(
     String taskType,
+    String merchantId,              // ← 動態值，來自訂單/請求
     String platformId,
     String channelId,
+    String timestamp,               // ← 不重新生成，傳入既有值
     String source,
     String priority,
     String correlationId
 ) {
     return KafkaMessageHeader.builder()
         .taskType(taskType)
-        .merchantId(config.getMerchantId())  // 從配置讀取
+        .merchantId(merchantId)     // ← 動態傳入
         .platformId(platformId)
         .channelId(channelId)
         .requestId(generateRequestId(source))
-        .timestamp(Instant.now().toString())
+        .timestamp(timestamp)       // ← 使用傳入的值，不生成新的
         .source(source)
         .version(1)
         .retryCount(0)
@@ -384,6 +424,27 @@ private String generateRequestId(String source) {
         System.nanoTime() % 10000
     );
 }
+```
+
+**使用範例**（PROCESS_ORDER）：
+
+```java
+// 接收來自 Channel Job 的數據，保持原始 timestamp 和 merchantId
+String originalTimestamp = orderData.getHeader().getTimestamp();
+String originalMerchantId = orderData.getHeader().getMerchantId();
+
+KafkaMessage msg = new KafkaMessage();
+msg.header = buildHeader(
+    "PROCESS_ORDER",
+    originalMerchantId,         // ← 用原始商家 ID
+    platformId,
+    channelId,
+    originalTimestamp,          // ← 用原始 timestamp，不生成新的
+    "channel_job",
+    "NORMAL",
+    correlationId
+);
+msg.body = new ProcessOrderBody(order);
 ```
 
 ### 差異檢測函數

@@ -86,10 +86,14 @@ Body 結構：根據 TaskType 靈活變化
 }
 ```
 
+**重點**：
+- `merchantId`: 動態值，表示這次請求屬於哪個商家
+- `timestamp`: 來自心跳（Scheduler），所有下游都帶同一個時間戳
+
 **Channel Job 內部邏輯**（不在消息中）：
 
 ```
-讀取 header.timestamp = 2026-02-13T10:00:00Z
+讀取 header.timestamp = 2026-02-13T10:00:00Z（不重新生成）
 
 根據平台特性自主決策時間窗口：
   ├─ Cyberbiz：過去 7 天
@@ -130,7 +134,7 @@ Body 結構：根據 TaskType 靈活變化
     "platformId": "momo",
     "channelId": "MOMO_001",
     "requestId": "detail_req_momo_20260213_001",
-    "timestamp": "2026-02-13T10:30:00Z",
+    "timestamp": "2026-02-13T10:00:00Z",
     "source": "channel_job",
     "version": 1,
     "correlationId": "sched-20260213-fetch-001",
@@ -148,6 +152,10 @@ Body 結構：根據 TaskType 靈活變化
   }
 }
 ```
+
+**重點**：
+- `timestamp`: 保持 `2026-02-13T10:00:00Z`（與 LIST 的心跳時間相同，不重新生成）
+- `correlationId`: 指向原始的 FETCH_ORDERS 請求
 
 **Channel Job 內部邏輯**：
 
@@ -183,7 +191,7 @@ Body 結構：根據 TaskType 靈活變化
     "platformId": "momo",
     "channelId": "MOMO_001",
     "requestId": "process_req_momo_20260213_001",
-    "timestamp": "2026-02-13T10:35:00Z",
+    "timestamp": "2026-02-13T10:00:00Z",
     "source": "channel_job",
     "version": 1,
     "correlationId": "sched-20260213-fetch-001",
@@ -350,7 +358,7 @@ Body 結構：根據 TaskType 靈活變化
     "platformId": "cyberbiz",
     "channelId": "CYBERBIZ_001",
     "requestId": "detail_syncprod_20260213_001",
-    "timestamp": "2026-02-13T06:15:00Z",
+    "timestamp": "2026-02-13T06:00:00Z",
     "source": "channel_job",
     "version": 1,
     "correlationId": "sched-20260213-synclist-001",
@@ -406,7 +414,7 @@ Body 結構：根據 TaskType 靈活變化
     "platformId": "cyberbiz",
     "channelId": "CYBERBIZ_001",
     "requestId": "complete_syncprod_20260213_001",
-    "timestamp": "2026-02-13T06:30:00Z",
+    "timestamp": "2026-02-13T06:00:00Z",
     "source": "channel_job",
     "version": 1,
     "correlationId": "sched-20260213-synclist-001"
