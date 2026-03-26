@@ -13,6 +13,7 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "daily_statistics")
+@IdClass(DailyStatisticsId.class)
 @Data
 @Builder
 @NoArgsConstructor
@@ -31,6 +32,7 @@ public class DailyStatistics {
     @Column(name = "channel_id", nullable = false, length = 20)
     private String channelId;
 
+    @Id
     @Column(name = "stat_date", nullable = false)
     private LocalDate statDate;
 

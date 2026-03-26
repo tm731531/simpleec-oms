@@ -44,14 +44,15 @@ public class CyberbizAdapter implements ChannelAdapter {
 
     @Override
     public ModeEnum getMode() {
-        return ModeEnum.A;
+        return ModeEnum.B;
     }
 
     /**
-     * Mode A: 直接拉取完整訂單（包含所有詳情）
+     * Legacy fetchOrders (kept to satisfy ChannelAdapter interface).
+     * Cyberbiz primary flow is Mode B: fetchOrderListByTimestamp() + fetchOrderDetail().
+     * This method is retained for backward compatibility only.
      *
-     * Cyberbiz API 在 get_orders 直接返回完整訂單資訊，支援 Mode A
-     * 時間窗口：過去 1 天內更新的訂單（基於 updated_at）
+     * Time window: orders updated within the past 1 day (based on updated_at)
      *
      * @param channelId 通路 ID
      * @param timeRange 時間範圍（暫未使用，預留未來擴充）

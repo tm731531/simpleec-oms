@@ -56,18 +56,18 @@ public interface OrderRepository extends JpaRepository<Order, String> {
      */
     long countByMerchantIdAndChannelId(String merchantId, String channelId);
 
-    @Query("""
+    @Query(value = """
         SELECT
-            COUNT(o) AS orderCount,
-            COALESCE(SUM(o.totalAmount), 0) AS totalAmount,
-            SUM(CASE WHEN o.orderStatus IN ('SHIPPED', 'COMPLETED') THEN 1 ELSE 0 END) AS shippedCount,
-            SUM(CASE WHEN o.orderStatus = 'COMPLETED' THEN 1 ELSE 0 END) AS completedCount,
-            SUM(CASE WHEN o.orderStatus = 'CANCELLED' THEN 1 ELSE 0 END) AS cancelledCount
-        FROM Order o
-        WHERE o.merchantId = :merchantId
-          AND o.channelId = :channelId
-          AND CAST(o.channelCreatedAt AS LocalDate) = :statDate
-        """)
+            COUNT(*) AS orderCount,
+            COALESCE(SUM(total_amount), 0) AS totalAmount,
+            SUM(CASE WHEN order_status IN ('SHIPPED', 'COMPLETED') THEN 1 ELSE 0 END) AS shippedCount,
+            SUM(CASE WHEN order_status = 'COMPLETED' THEN 1 ELSE 0 END) AS completedCount,
+            SUM(CASE WHEN order_status = 'CANCELLED' THEN 1 ELSE 0 END) AS cancelledCount
+        FROM orders
+        WHERE merchant_id = :merchantId
+          AND channel_id = :channelId
+          AND DATE(channel_created_at) = :statDate
+        """, nativeQuery = true)
     @org.springframework.data.jpa.repository.QueryHints(
         @jakarta.persistence.QueryHint(name = "org.hibernate.readOnly", value = "true")
     )
