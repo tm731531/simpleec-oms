@@ -37,4 +37,11 @@ public interface SellPackRepository extends JpaRepository<SellPack, String> {
      * Count total active packs for a merchant
      */
     long countByMerchantId(String merchantId);
+
+    /**
+     * Find sell_pack by channel + channelProductId + channelSpecId (upsert key).
+     * channelSpecId may be null — pass null to match rows where channel_spec_id IS NULL.
+     */
+    Optional<SellPack> findByChannelIdAndChannelProductIdAndChannelSpecId(
+            String channelId, String channelProductId, String channelSpecId);
 }
