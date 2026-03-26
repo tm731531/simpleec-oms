@@ -16,6 +16,7 @@ import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * SellPack 同步服務 - 發布 Kafka 事件
@@ -48,15 +49,30 @@ public class SellPackSyncService {
             if (channelOpt.isPresent()) {
                 Optional<Platform> platformOpt = platformRepository.findById(channelOpt.get().getPlatformId());
                 if (platformOpt.isPresent()) {
+                    Platform platform = platformOpt.get();
                     String topic = TopicConstants.platformFastTopic(
-                        platformOpt.get().getPlatformName().toLowerCase());
+                        platform.getPlatformName().toLowerCase());
+
+                    Map<String, Object> header = new HashMap<>();
+                    header.put("taskType", taskType);
+                    header.put("merchantId", sellPack.getMerchantId());
+                    header.put("platformId", platform.getPlatformName().toLowerCase());
+                    header.put("channelId", sellPack.getChannelId());
+                    header.put("requestId", UUID.randomUUID().toString());
+                    header.put("timestamp", Instant.now().toString());
+                    header.put("source", "api");
+                    header.put("version", 1);
+                    header.put("isRollback", false);
+
+                    Map<String, Object> body = new HashMap<>();
+                    body.put("sellPackId", sellPack.getId());
+                    body.put("operation", operation);
+                    body.put("newValue", newValue);
+
                     Map<String, Object> message = new HashMap<>();
-                    message.put("taskType", taskType);
-                    message.put("channelId", sellPack.getChannelId());
-                    message.put("merchantId", sellPack.getMerchantId());
-                    message.put("sellPackId", sellPack.getId());
-                    message.put("operation", operation);
-                    message.put("newValue", newValue);
+                    message.put("header", header);
+                    message.put("body", body);
+
                     kafkaTemplate.send(topic, sellPack.getId(), message);
                     log.info("Published {} event to topic {} for sellpack {}", taskType, topic, sellPack.getId());
                 }

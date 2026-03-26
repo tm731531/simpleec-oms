@@ -1,5 +1,6 @@
 package com.simpleec.core.entity;
 
+import com.simpleec.core.crypto.EncryptedAttributeConverter;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -35,18 +36,23 @@ public class Channel {
     @Column(name = "multi_spec", nullable = false)
     private Boolean multiSpec = false;
 
+    @Convert(converter = EncryptedAttributeConverter.class)
     @Column(name = "token", nullable = false)
     private String token;
 
+    @Convert(converter = EncryptedAttributeConverter.class)
     @Column(name = "token2", length = 4096)
     private String token2;
 
+    @Convert(converter = EncryptedAttributeConverter.class)
     @Column(name = "token3", length = 4096)
     private String token3;
 
+    @Convert(converter = EncryptedAttributeConverter.class)
     @Column(name = "token4", length = 4096)
     private String token4;
 
+    @Convert(converter = EncryptedAttributeConverter.class)
     @Column(name = "token5", length = 4096)
     private String token5;
 

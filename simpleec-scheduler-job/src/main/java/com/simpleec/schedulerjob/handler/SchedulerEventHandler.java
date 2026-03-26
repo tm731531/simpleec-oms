@@ -21,7 +21,7 @@ import java.util.List;
  *
  * 消費 heartbeat 消息，根據分鐘位做決策派發：
  *   :00, :05, :10... (% 5 == 0) → FETCH_ORDERS（查詢訂單）
- *   :01, :06, :11... (% 5 == 1) → ORDER_REPORT（訂單報表）
+ *   :01, :06, :11... (% 5 == 1) → ORDER_REPORT（訂單報表）, STATS_RECALC（統計重算）
  *   :02, :07, :12... (% 5 == 2) → INVENTORY_REPORT（庫存報表）
  *   :03, :08, :13... (% 5 == 3) → SALES_REPORT（銷售報表）
  *   :04, :09, :14... (% 5 == 4) → RETURN_REPORT（退貨報表）
@@ -61,6 +61,7 @@ public class SchedulerEventHandler {
             // :01, :06, :11 ...
             if (mod5 == 1) {
                 dispatchTask(TaskTypeEnum.ORDER_REPORT, timestamp);
+                dispatchTask(TaskTypeEnum.STATS_RECALC, timestamp);  // add this line
             }
 
             // :02, :07, :12 ...

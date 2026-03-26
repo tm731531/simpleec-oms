@@ -24,6 +24,20 @@ public class RedisKeyUtil {
     }
 
     /**
+     * Stats dirty sorted set key — marks merchant/platform/channel/date combos needing recalc
+     * oms:stats:dirty
+     */
+    public static final String STATS_DIRTY_KEY = "oms:stats:dirty";
+
+    /**
+     * Stats dirty member format
+     * {merchantId}:{platformId}:{channelId}:{statDate}
+     */
+    public static String statsDirtyMember(String merchantId, String platformId, String channelId, String statDate) {
+        return String.join(SEPARATOR, merchantId, platformId, channelId, statDate);
+    }
+
+    /**
      * 緩存 Key (通用)
      * cache:{type}:{id}
      */

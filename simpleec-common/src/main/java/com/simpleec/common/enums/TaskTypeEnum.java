@@ -35,6 +35,7 @@ public enum TaskTypeEnum {
     // ========== Backend Tasks (後端任務) ==========
     SYNC_PRODUCT("SYNC_PRODUCT", "商品元數據同步", false),
     ORDER_REPORT("ORDER_REPORT", "訂單報表", false),
+    STATS_RECALC("STATS_RECALC", "Statistics Recalculation", false),
     INVENTORY_REPORT("INVENTORY_REPORT", "庫存報表", false),
     SALES_REPORT("SALES_REPORT", "銷售報表", false),
     RETURN_REPORT("RETURN_REPORT", "退貨報表", false),

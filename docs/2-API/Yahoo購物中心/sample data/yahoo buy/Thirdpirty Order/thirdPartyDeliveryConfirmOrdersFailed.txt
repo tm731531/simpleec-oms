@@ -1,0 +1,1 @@
+{"ResponseCode":"00001","ResponseMessage":"訂單有錯誤","SuccessfulCount":0,"FailedCount":1,"SuccessfulOrders":[],"FailedOrders":[{"PackageNo":1,"FailedCode":2140,"FailedMessage":"同包裝箱中訂單出貨狀態不一致","OrderCodes":["RM2201270006077","RM2201270006105"]}]}

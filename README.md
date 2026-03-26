@@ -1,5 +1,7 @@
 # SimpleEC OMS - 簡易電商訂單管理系統
 
+**Select Language:** [English](README.md) | [繁體中文](README.zh-TW.md) | [簡體中文](README.zh-CN.md) (planned) | [語言指南](LANGUAGE-GUIDE.md)
+
 > Multi-Channel Order Management System
 > 支持 7 個通路：Cyberbiz, PChome, MOMO, Shopline, Yahoo 購物中心, Shopee, Shopify
 

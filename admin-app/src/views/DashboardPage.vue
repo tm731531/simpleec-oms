@@ -49,9 +49,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { merchantAPI } from '../api/merchant'
-import { accountAPI } from '../api/account'
-import { platformAPI } from '../api/platform'
+import axiosInstance from '../api/index'
 
 const stats = ref({
   merchantCount: 0,
@@ -65,21 +63,15 @@ const loading = ref(false)
 async function loadStats() {
   loading.value = true
   try {
-    // 並行加載所有統計數據
-    const [merchantRes, accountRes, platformRes] = await Promise.all([
-      merchantAPI.list(1, 1),
-      accountAPI.list(1, 1),
-      platformAPI.list(1, 1)
-    ])
-
+    const res = await axiosInstance.get('/admin/stats')
     stats.value = {
-      merchantCount: merchantRes.total,
-      accountCount: accountRes.total,
-      platformCount: platformRes.total,
-      orderCount: 0 // 暫時為 0，待後端補充訂單 API
+      merchantCount: res.merchantCount,
+      accountCount: res.accountCount,
+      platformCount: res.platformCount,
+      orderCount: res.orderCount
     }
   } catch (err) {
-    console.error('加載統計數據失敗:', err)
+    console.error('Failed to load stats:', err)
   } finally {
     loading.value = false
   }

@@ -1,8 +1,12 @@
 package com.simpleec.orderjob.consumer;
 
+import com.simpleec.core.crypto.EncryptionContext;
 import com.simpleec.core.entity.Order;
 import com.simpleec.core.service.OrderService;
 import com.simpleec.common.enums.OrderStatusEnum;
+import com.simpleec.common.kafka.SchemaVersionHandler;
+import com.simpleec.common.kafka.TaskMdcHelper;
+import com.simpleec.common.kafka.UnsupportedSchemaVersionException;
 import com.simpleec.common.util.RedisKeyUtil;
 import com.simpleec.common.util.NanoIdUtil;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -52,6 +56,16 @@ public class OrderUpsertConsumer {
                                    @Header(name = "kafka_receivedPartitionId") int partition,
                                    Acknowledgment acknowledgment) {
         try {
+            SchemaVersionHandler.validate(json);
+        } catch (UnsupportedSchemaVersionException e) {
+            log.error("Unsupported schema version in ORDER_UPSERT message: {}", e.getMessage());
+            kafkaTemplate.send("task.dlt", "OrderUpsert", json);
+            acknowledgment.acknowledge();
+            return;
+        }
+
+        TaskMdcHelper.set(json);
+        try {
             JsonNode header = json.get("header");
             JsonNode body = json.get("body");
 
@@ -66,6 +80,7 @@ public class OrderUpsertConsumer {
             // 解析訊息
             String merchantId = header.get("merchantId").asText();
             String channelId = header.get("channelId").asText();
+            String platformId = header.has("platformId") ? header.get("platformId").asText() : "unknown";
             String channelOrderId = body.get("channelOrderId").asText();
             String channelOrderNumber = body.has("channelOrderNumber")
                 ? body.get("channelOrderNumber").asText() : null;
@@ -76,8 +91,14 @@ public class OrderUpsertConsumer {
             log.info("Processing ORDER_UPSERT: {} from {} (hash: {}, isRollback: {})",
                 channelOrderId, channelId, orderHash.substring(0, 8) + "...", isRollback);
 
-            // 執行訂單入庫邏輯
-            handleOrderUpsert(merchantId, channelId, channelOrderId, channelOrderNumber, orderHash, orderDataJson, isRollback);
+            // Set encryption context for PII field encryption/decryption
+            EncryptionContext.setMerchantId(merchantId);
+            try {
+                // 執行訂單入庫邏輯
+                handleOrderUpsert(merchantId, platformId, channelId, channelOrderId, channelOrderNumber, orderHash, orderDataJson, isRollback);
+            } finally {
+                EncryptionContext.clear();
+            }
 
             // 手動提交 offset（確保訂單已入庫）
             acknowledgment.acknowledge();
@@ -95,6 +116,8 @@ public class OrderUpsertConsumer {
             }
             // 確認消息 - 避免無限重複
             acknowledgment.acknowledge();
+        } finally {
+            TaskMdcHelper.clear();
         }
     }
 
@@ -107,7 +130,7 @@ public class OrderUpsertConsumer {
      * 3. INSERT 或 UPDATE
      * 4. 更新 Redis hash 快取
      */
-    private void handleOrderUpsert(String merchantId, String channelId, String channelOrderId, String channelOrderNumber,
+    private void handleOrderUpsert(String merchantId, String platformId, String channelId, String channelOrderId, String channelOrderNumber,
                                     String orderHash, JsonNode orderDataJson, boolean isRollback) throws Exception {
 
         // 第 0 步：構建 Redis Key
@@ -184,8 +207,21 @@ public class OrderUpsertConsumer {
             log.warn("Failed to update Redis cache for order {}", channelOrderId, e);
         }
 
-        // 第 5 步：觸發後續流程（可選）
-        triggerFollowUpTasks(savedOrder);
+        // Step 5: Mark stats dirty for this channel's date
+        try {
+            java.time.LocalDate statDate = isRollback && order.getChannelCreatedAt() != null
+                ? order.getChannelCreatedAt().toLocalDate()
+                : java.time.LocalDate.now();
+            String member = com.simpleec.common.util.RedisKeyUtil.statsDirtyMember(merchantId, platformId, channelId, statDate.toString());
+            redisTemplate.opsForZSet().add(
+                com.simpleec.common.util.RedisKeyUtil.STATS_DIRTY_KEY,
+                member,
+                System.currentTimeMillis()
+            );
+            log.debug("Marked stats dirty: {}", member);
+        } catch (Exception e) {
+            log.warn("Failed to write stats dirty marker for order {}", channelOrderId, e);
+        }
 
         log.info("Completed ORDER_UPSERT for: {}", savedOrder.getId());
     }
@@ -389,15 +425,5 @@ public class OrderUpsertConsumer {
         }
     }
 
-    /**
-     * 觸發後續流程（如果需要）
-     */
-    private void triggerFollowUpTasks(Order order) {
-        // 可能的後續流程：
-        // - 同步商品到 SYNC_PRODUCT
-        // - 同步上架配置到 SYNC_PACK
-        // - 發送到後端報表系統
-        // TODO: 根據業務需求實現
-        log.debug("Triggering follow-up tasks for order: {}", order.getId());
-    }
+
 }

@@ -1,0 +1,202 @@
+╔═══════════════════════════════════════════════════════════════════════════╗
+║         v3 QUALITY AUDIT - COMPLETE FILES MANIFEST                        ║
+║                                                                           ║
+║ 所有相關文件的完整清單、位置和大小                                        ║
+║ 生成: 2026-03-18 01:56 AM UTC+8                                          ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+
+📦 CORE EXECUTION FILES (3 files, 65.1 KB)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[1] QUALITY_AUDIT_PLAN_v3.md
+    Location: /home/tom/ONEEC/simpleec-oms/docs/QUALITY_AUDIT_PLAN_v3.md
+    Size: 14,126 bytes (437 lines)
+    Content: Complete audit plan with 4 phases, 4 tasks, dependencies
+    Purpose: ⭐ MUST READ before launch
+
+[2] QUALITY_AUDIT_AGENT_PROMPTS.md
+    Location: /home/tom/ONEEC/simpleec-oms/docs/QUALITY_AUDIT_AGENT_PROMPTS.md
+    Size: 30,328 bytes (1,035 lines)
+    Content: Complete prompts for 4 agents (Architect, Backend-QA, Frontend-QA, Team-Lead)
+    Purpose: ⭐ Copy to Agent definitions during TeamCreate
+
+[3] QUALITY_AUDIT_IMPLEMENTATION_CHECKLIST.md
+    Location: /home/tom/ONEEC/simpleec-oms/docs/QUALITY_AUDIT_IMPLEMENTATION_CHECKLIST.md
+    Size: 20,624 bytes (632 lines)
+    Content: 7-phase verification, operational runbook, troubleshooting
+    Purpose: ⭐ Reference during execution
+
+📚 BACKGROUND UNDERSTANDING FILES (5 files, 110.1 KB)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[4] QUALITY_AUDIT_v3_README.md
+    Location: /home/tom/ONEEC/simpleec-oms/docs/QUALITY_AUDIT_v3_README.md
+    Size: 11,173 bytes (333 lines)
+    Purpose: High-level v3 improvements summary (reference)
+
+[5] QUALITY_AUDIT_v3_SUMMARY.txt
+    Location: /home/tom/ONEEC/simpleec-oms/docs/QUALITY_AUDIT_v3_SUMMARY.txt
+    Size: 9,525 bytes (234 lines)
+    Purpose: 1-page quick overview (5 min read)
+
+[6] QUALITY_AUDIT_GAP_ANALYSIS.md
+    Location: /home/tom/ONEEC/simpleec-oms/docs/QUALITY_AUDIT_GAP_ANALYSIS.md
+    Size: 21,218 bytes (578 lines)
+    Purpose: v2→v3 gap analysis, 6 improvements
+
+[7] AGENT_TEAM_DESIGN_LESSONS.md
+    Location: /home/tom/ONEEC/simpleec-oms/docs/AGENT_TEAM_DESIGN_LESSONS.md
+    Size: 24,027 bytes (845 lines)
+    Purpose: v1-v4 failure analysis (background understanding)
+
+[8] AGENT_TEAM_DESIGN_IMPROVEMENTS.md
+    Location: /home/tom/ONEEC/simpleec-oms/docs/AGENT_TEAM_DESIGN_IMPROVEMENTS.md
+    Size: 55,258 bytes (1,616 lines)
+    Purpose: Detailed improvement proposals (comprehensive reference)
+
+🔧 SYSTEM CONFIGURATION FILES (2 files)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[9] settings.json ✅ CREATED
+    Location: /home/tom/ONEEC/simpleec-oms/.claude/settings.json
+    Size: 148 bytes (6 lines)
+    Content: {
+      "permissions": {
+        "defaultMode": "bypassPermissions",
+        "allow": ["Bash(*)", "Read(*)", "Write(*)", "Edit(*)", "Glob(*)", "Grep(*)"]
+      }
+    }
+    Status: ✅ Active
+
+[10] permission-mode-fix.md (Memory)
+     Location: /home/tom/.claude/projects/-home-tom-ONEEC/memory/permission-mode-fix.md
+     Content: Root cause diagnosis + 3-layer blocking mechanism
+     Purpose: Understanding why v1-v4 failed + how v3 prevents it
+
+🗂️  NAVIGATION & REPORTING FILES (2 files)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[11] QUALITY_AUDIT_v3_MASTER_INDEX.md
+     Location: /home/tom/ONEEC/simpleec-oms/docs/0-START/QUALITY_AUDIT_v3_MASTER_INDEX.md
+     Size: 9,504 bytes (264 lines)
+     Purpose: Complete navigation guide + reading recommendations
+
+[12] V3_LAUNCH_READINESS_REPORT.md
+     Location: /home/tom/ONEEC/simpleec-oms/.claude/V3_LAUNCH_READINESS_REPORT.md
+     Size: ~12 KB (~320 lines)
+     Purpose: Readiness checklist + launch overview
+     Status: ✅ Just generated
+
+📋 QUICK REFERENCE FILES (2 files)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[13] QUICK_ACCESS.txt
+     Location: /home/tom/ONEEC/simpleec-oms/.claude/QUICK_ACCESS.txt
+     Purpose: This quick guide (what you're reading now)
+
+[14] FILES_MANIFEST.txt (This file)
+     Location: /home/tom/ONEEC/simpleec-oms/.claude/FILES_MANIFEST.txt
+     Purpose: Complete file listing with paths and sizes
+
+═══════════════════════════════════════════════════════════════════════════
+
+📊 FILE STATISTICS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Total Files:           14 (✅ all verified)
+Total Size:            ~200 KB
+Core Execution:        3 files, 65.1 KB
+Background:            5 files, 110.1 KB
+System:                2 files
+Navigation:            2 files
+Quick Reference:       2 files
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🎯 READING PRIORITY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔴 MUST READ (Before Launch)
+   1. This file (QUICK_ACCESS.txt) - 2 min
+   2. QUALITY_AUDIT_PLAN_v3.md - 20 min
+   3. QUALITY_AUDIT_AGENT_PROMPTS.md - 10 min (skim)
+   4. QUALITY_AUDIT_IMPLEMENTATION_CHECKLIST.md - 5 min
+
+🟡 SHOULD READ (Background Understanding)
+   5. QUALITY_AUDIT_v3_README.md - 5 min
+   6. QUALITY_AUDIT_v3_SUMMARY.txt - 2 min
+   7. memory/permission-mode-fix.md - 10 min
+
+🟢 NICE TO HAVE (Deep Dive)
+   8. AGENT_TEAM_DESIGN_LESSONS.md - 20 min
+   9. AGENT_TEAM_DESIGN_IMPROVEMENTS.md - 30 min
+   10. QUALITY_AUDIT_GAP_ANALYSIS.md - 15 min
+
+═══════════════════════════════════════════════════════════════════════════
+
+🔗 QUICK LINKS (Copy & Paste)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Open Plan (必讀):
+  open /home/tom/ONEEC/simpleec-oms/docs/QUALITY_AUDIT_PLAN_v3.md
+
+Open Prompts (執行時):
+  open /home/tom/ONEEC/simpleec-oms/docs/QUALITY_AUDIT_AGENT_PROMPTS.md
+
+Open Checklist (參考):
+  open /home/tom/ONEEC/simpleec-oms/docs/QUALITY_AUDIT_IMPLEMENTATION_CHECKLIST.md
+
+Open Root Cause Analysis:
+  open /home/tom/.claude/projects/-home-tom-ONEEC/memory/permission-mode-fix.md
+
+List All Files:
+  find /home/tom/ONEEC/simpleec-oms -name "QUALITY_AUDIT*" -o -name "AGENT_TEAM*" | sort
+
+Verify All Files:
+  bash /tmp/verify_v3_files.sh
+
+═══════════════════════════════════════════════════════════════════════════
+
+✅ VERIFICATION STATUS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Core Files Verified:    ✅ 11/11
+Settings Configured:    ✅ bypassPermissions set
+Workspace Trust:        ✅ Accepted
+RAM Available:          ✅ 8.9 GB (need 2.8 GB)
+Permission Mode:        ✅ Active
+Team Directory:         ✅ Clean (no orphaned v3/v4)
+
+System Status:          ✅✅✅ READY FOR LAUNCH
+
+═══════════════════════════════════════════════════════════════════════════
+
+🚀 NEXT STEP
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Choose your path:
+
+A) Quick Launch (10 min)
+   - Read QUICK_ACCESS.txt
+   - Read QUALITY_AUDIT_v3_SUMMARY.txt
+   - Ask "I'm ready to start"
+
+B) Standard Launch (45 min)
+   - Read QUICK_ACCESS.txt
+   - Read QUALITY_AUDIT_PLAN_v3.md (full)
+   - Skim QUALITY_AUDIT_AGENT_PROMPTS.md
+   - Read QUALITY_AUDIT_IMPLEMENTATION_CHECKLIST.md
+   - Ask "Create team and tasks"
+
+C) Complete Launch (2 hours)
+   - Read docs/0-START/QUALITY_AUDIT_v3_MASTER_INDEX.md (Scenario 3)
+   - Read all background files
+   - Full understanding before launch
+
+═══════════════════════════════════════════════════════════════════════════
+
+Generated: 2026-03-18 01:56 AM UTC+8
+Status: ✅ All files collected, organized, and verified
+System: Ready for agent team v3 launch
+
+╚═══════════════════════════════════════════════════════════════════════════╝

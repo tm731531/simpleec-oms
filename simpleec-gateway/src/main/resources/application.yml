@@ -7,6 +7,12 @@ spring:
 server:
   port: 8088
 
+webhook:
+  secrets:
+    shopify: ${WEBHOOK_SECRET_SHOPIFY:}
+    shopee: ${WEBHOOK_SECRET_SHOPEE:}
+    easystore: ${WEBHOOK_SECRET_EASYSTORE:}
+
 logging:
   level:
     com.simpleec: DEBUG

@@ -1,6 +1,10 @@
 package com.simpleec.orderjob.consumer;
 
+import com.simpleec.core.crypto.EncryptionContext;
 import com.simpleec.orderjob.handler.ReturnUpsertHandler;
+import com.simpleec.common.kafka.SchemaVersionHandler;
+import com.simpleec.common.kafka.TaskMdcHelper;
+import com.simpleec.common.kafka.UnsupportedSchemaVersionException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -60,49 +64,69 @@ public class ReturnUpsertConsumer {
                 return;
             }
 
-            JsonNode header = json.get("header");
-            JsonNode body = json.get("body");
-
-            // Issue 2: Add missing field validation with helper method
             try {
-                String taskType = extractAndValidateString(header, "taskType");
+                SchemaVersionHandler.validate(json);
+            } catch (UnsupportedSchemaVersionException e) {
+                log.error("Unsupported schema version in RETURN_UPSERT message: {}", e.getMessage());
+                kafkaTemplate.send("task.dlt", "ReturnUpsert", message);
+                acknowledgment.acknowledge();
+                return;
+            }
 
-                if (!taskType.equals("RETURN_UPSERT")) {
-                    log.warn("Unexpected taskType: {} in ReturnUpsertConsumer", taskType);
+            TaskMdcHelper.set(json);
+            try {
+
+                JsonNode header = json.get("header");
+                JsonNode body = json.get("body");
+
+                // Issue 2: Add missing field validation with helper method
+                try {
+                    String taskType = extractAndValidateString(header, "taskType");
+
+                    if (!taskType.equals("RETURN_UPSERT")) {
+                        log.warn("Unexpected taskType: {} in ReturnUpsertConsumer", taskType);
+                        acknowledgment.acknowledge();
+                        return;
+                    }
+
+                    String merchantId = extractAndValidateString(header, "merchantId");
+                    String channelId = extractAndValidateString(header, "channelId");
+                    String channelRefundId = extractAndValidateString(body, "channelRefundId");
+                    String returnHash = extractAndValidateString(body, "returnHash");
+
+                    if (!body.has("returnData") || body.get("returnData").isNull()) {
+                        throw new IllegalArgumentException("Missing returnData");
+                    }
+                    JsonNode returnDataJson = body.get("returnData");
+
+                    log.info("Processing RETURN_UPSERT: {} from {} (hash: {})",
+                        channelRefundId, channelId, returnHash.substring(0, Math.min(8, returnHash.length())) + "...");
+
+                    // Set encryption context for PII field encryption/decryption
+                    EncryptionContext.setMerchantId(merchantId);
+                    // Issue 3: Add exception handling for handler calls with proper acknowledgment
+                    try {
+                        returnUpsertHandler.handleReturnUpsert(merchantId, channelId, channelRefundId, returnHash, returnDataJson);
+                        acknowledgment.acknowledge();
+                        log.info("Successfully processed RETURN_UPSERT: {}", channelRefundId);
+                    } catch (Exception e) {
+                        log.error("Error processing RETURN_UPSERT for {}: {}", channelRefundId, e.getMessage(), e);
+                        // Acknowledge to prevent poison pill, but log the error for investigation
+                        acknowledgment.acknowledge();
+                        // TODO: Route to task.failed topic for retry via DefaultErrorHandler
+                        throw e;  // Let DefaultErrorHandler decide retry strategy
+                    } finally {
+                        EncryptionContext.clear();
+                    }
+
+                } catch (IllegalArgumentException e) {
+                    log.error("Invalid message structure: {}", e.getMessage());
                     acknowledgment.acknowledge();
                     return;
                 }
 
-                String merchantId = extractAndValidateString(header, "merchantId");
-                String channelId = extractAndValidateString(header, "channelId");
-                String channelRefundId = extractAndValidateString(body, "channelRefundId");
-                String returnHash = extractAndValidateString(body, "returnHash");
-
-                if (!body.has("returnData") || body.get("returnData").isNull()) {
-                    throw new IllegalArgumentException("Missing returnData");
-                }
-                JsonNode returnDataJson = body.get("returnData");
-
-                log.info("Processing RETURN_UPSERT: {} from {} (hash: {})",
-                    channelRefundId, channelId, returnHash.substring(0, Math.min(8, returnHash.length())) + "...");
-
-                // Issue 3: Add exception handling for handler calls with proper acknowledgment
-                try {
-                    returnUpsertHandler.handleReturnUpsert(merchantId, channelId, channelRefundId, returnHash, returnDataJson);
-                    acknowledgment.acknowledge();
-                    log.info("Successfully processed RETURN_UPSERT: {}", channelRefundId);
-                } catch (Exception e) {
-                    log.error("Error processing RETURN_UPSERT for {}: {}", channelRefundId, e.getMessage(), e);
-                    // Acknowledge to prevent poison pill, but log the error for investigation
-                    acknowledgment.acknowledge();
-                    // TODO: Route to task.failed topic for retry via DefaultErrorHandler
-                    throw e;  // Let DefaultErrorHandler decide retry strategy
-                }
-
-            } catch (IllegalArgumentException e) {
-                log.error("Invalid message structure: {}", e.getMessage());
-                acknowledgment.acknowledge();
-                return;
+            } finally {
+                TaskMdcHelper.clear();
             }
 
         } catch (Exception e) {

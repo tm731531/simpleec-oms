@@ -1,0 +1,185 @@
+{
+  "OrderCount": 4,
+  "Orders": [
+    {
+      "OrderInfo": {
+        "ExternOrderkey": 217724566,
+        "OrderCode": "RM2202140012598",
+        "TransporterId": 0,
+        "LocationOfficeId": null,
+        "LocationOfficeName": null,
+        "TransferDate": "2022-02-14T16:25:14",
+        "ExpectedShippingDate": "2022-02-15T16:25:00",
+        "LastShippingDate": "2022-02-15T16:25:00",
+        "Note": ""
+      },
+      "ReceiverInfo": {
+        "Name": "廖乃嬅",
+        "Address": "556南投縣信義鄉明德村明德街29號",
+        "Phone": "04-92701008#792120",
+        "Mobile": "0932502285"
+      },
+      "BuyerInfo": {
+        "Name": "廖乃嬅",
+        "Mobile": "0932502285"
+      },
+      "Products": [
+        {
+          "OrderSubCode": "RS2202140016065",
+          "Id": 19355594,
+          "Name": "The Body Shop 綠麝香晨露淡雅香水60ML",
+          "Attribute": "",
+          "ItemPageId": 7132331,
+          "SupplierNo": "12811610605",
+          "Type": "一般商品",
+          "Qty": 1,
+          "Cost": 1071,
+          "ProductPrice": 1260,
+          "RetailPrice": 1680,
+          "CouponActivityCode": "",
+          "CouponAmount": 0,
+          "ActivityCode": "pca_350272",
+          "ActivityAmount": 126,
+          "RedeemAmount": 73,
+          "RewardAmount": 0,
+          "WelfareAmount": 0
+        }
+      ]
+    },
+    {
+      "OrderInfo": {
+        "ExternOrderkey": 217724805,
+        "OrderCode": "RM2202140012875",
+        "TransporterId": 0,
+        "LocationOfficeId": null,
+        "LocationOfficeName": null,
+        "TransferDate": "2022-02-14T16:37:22",
+        "ExpectedShippingDate": "2022-02-15T16:37:00",
+        "LastShippingDate": "2022-02-15T16:37:00",
+        "Note": "OneEC測試訂單，請勿回壓與出貨"
+      },
+      "ReceiverInfo": {
+        "Name": "曾昱融",
+        "Address": "235新北市中和區景平路190號22樓之3",
+        "Phone": "09-63381357",
+        "Mobile": "0963381357"
+      },
+      "BuyerInfo": {
+        "Name": "曾昱融",
+        "Mobile": "0963381357"
+      },
+      "Products": [
+        {
+          "OrderSubCode": "RS2202140016397",
+          "Id": 22721520,
+          "Name": "The Body Shop 玫瑰嫩膚沐浴膠250ML",
+          "Attribute": "",
+          "ItemPageId": 8200451,
+          "SupplierNo": "0316362551",
+          "Type": "一般商品",
+          "Qty": 1,
+          "Cost": 242,
+          "ProductPrice": 285,
+          "RetailPrice": 380,
+          "CouponActivityCode": "",
+          "CouponAmount": 0,
+          "ActivityCode": "pca_350272",
+          "ActivityAmount": 29,
+          "RedeemAmount": 0,
+          "RewardAmount": 0,
+          "WelfareAmount": 0
+        }
+      ]
+    },
+    {
+      "OrderInfo": {
+        "ExternOrderkey": 217724805,
+        "OrderCode": "RM2202140012876",
+        "TransporterId": 0,
+        "LocationOfficeId": null,
+        "LocationOfficeName": null,
+        "TransferDate": "2022-02-14T16:37:22",
+        "ExpectedShippingDate": "2022-02-15T16:37:00",
+        "LastShippingDate": "2022-02-15T16:37:00",
+        "Note": "OneEC測試訂單，請勿回壓與出貨"
+      },
+      "ReceiverInfo": {
+        "Name": "曾昱融",
+        "Address": "235新北市中和區景平路190號22樓之3",
+        "Phone": "09-63381357",
+        "Mobile": "0963381357"
+      },
+      "BuyerInfo": {
+        "Name": "曾昱融",
+        "Mobile": "0963381357"
+      },
+      "Products": [
+        {
+          "OrderSubCode": "RS2202140016398",
+          "Id": 22578740,
+          "Name": "The Body Shop 茶樹淨膚隨身棒2.5ML",
+          "Attribute": "",
+          "ItemPageId": 8154596,
+          "SupplierNo": "08520292",
+          "Type": "一般商品",
+          "Qty": 1,
+          "Cost": 267,
+          "ProductPrice": 315,
+          "RetailPrice": 420,
+          "CouponActivityCode": "",
+          "CouponAmount": 0,
+          "ActivityCode": "pca_350272",
+          "ActivityAmount": 31,
+          "RedeemAmount": 0,
+          "RewardAmount": 0,
+          "WelfareAmount": 0
+        }
+      ]
+    },
+    {
+      "OrderInfo": {
+        "ExternOrderkey": 217724805,
+        "OrderCode": "RM2202140012877",
+        "TransporterId": 0,
+        "LocationOfficeId": null,
+        "LocationOfficeName": null,
+        "TransferDate": "2022-02-14T16:37:22",
+        "ExpectedShippingDate": "2022-02-15T16:37:00",
+        "LastShippingDate": "2022-02-15T16:37:00",
+        "Note": "OneEC測試訂單，請勿回壓與出貨"
+      },
+      "ReceiverInfo": {
+        "Name": "曾昱融",
+        "Address": "235新北市中和區景平路190號22樓之3",
+        "Phone": "09-63381357",
+        "Mobile": "0963381357"
+      },
+      "BuyerInfo": {
+        "Name": "曾昱融",
+        "Mobile": "0963381357"
+      },
+      "Products": [
+        {
+          "OrderSubCode": "RS2202140016399",
+          "Id": 28599466,
+          "Name": "The Body Shop 酪梨潤澤沐浴乳-250ML",
+          "Attribute": "",
+          "ItemPageId": 9715059,
+          "SupplierNo": "031637250",
+          "Type": "一般商品",
+          "Qty": 1,
+          "Cost": 267,
+          "ProductPrice": 315,
+          "RetailPrice": 420,
+          "CouponActivityCode": "",
+          "CouponAmount": 0,
+          "ActivityCode": "pca_350272",
+          "ActivityAmount": 31,
+          "RedeemAmount": 0,
+          "RewardAmount": 0,
+          "WelfareAmount": 0
+        }
+      ]
+    }
+  ]
+}

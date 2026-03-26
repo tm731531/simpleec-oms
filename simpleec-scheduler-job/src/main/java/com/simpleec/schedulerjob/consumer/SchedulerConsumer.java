@@ -1,6 +1,11 @@
 package com.simpleec.schedulerjob.consumer;
 
 import com.simpleec.schedulerjob.handler.SchedulerEventHandler;
+import com.simpleec.schedulerjob.kafka.KafkaProducer;
+import com.simpleec.common.kafka.SchemaVersionHandler;
+import com.simpleec.common.kafka.TaskMdcHelper;
+import com.simpleec.common.kafka.UnsupportedSchemaVersionException;
+import com.simpleec.common.constants.TopicConstants;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -29,6 +34,7 @@ public class SchedulerConsumer {
 
     private final SchedulerEventHandler eventHandler;
     private final ObjectMapper objectMapper;
+    private final KafkaProducer kafkaProducer;
 
     /**
      * 消費 scheduler topic 中的 Heartbeat 訊號
@@ -46,12 +52,27 @@ public class SchedulerConsumer {
             log.debug("Processing heartbeat message");
 
             JsonNode json = objectMapper.readTree(message);
-            JsonNode body = json.get("body");
 
-            long timestamp = body.get("timestamp").asLong();
+            try {
+                SchemaVersionHandler.validate(json);
+            } catch (UnsupportedSchemaVersionException e) {
+                log.error("Unsupported schema version in scheduler heartbeat: {}", e.getMessage());
+                kafkaProducer.publishToTopic(TopicConstants.TASK_DLT, "Scheduler", message);
+                return;
+            }
 
-            // 委派給 handler 處理派發邏輯
-            eventHandler.handleHeartbeat(body, timestamp);
+            TaskMdcHelper.set(json);
+            try {
+                JsonNode body = json.get("body");
+
+                long timestamp = body.get("timestamp").asLong();
+
+                // 委派給 handler 處理派發邏輯
+                eventHandler.handleHeartbeat(body, timestamp);
+
+            } finally {
+                TaskMdcHelper.clear();
+            }
 
         } catch (Exception e) {
             log.error("Error processing scheduler heartbeat", e);

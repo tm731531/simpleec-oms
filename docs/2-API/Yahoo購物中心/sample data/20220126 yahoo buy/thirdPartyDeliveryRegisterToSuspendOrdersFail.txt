@@ -1,0 +1,1 @@
+{"ResponseCode":"00001","ResponseMessage":"訂單有錯誤","SuccessOrdersCount":0,"FailOrdersCount":1,"FailOrders":[{"OrderCode":"RM2201260017057","FailCode":"2172","FailMessage":"已申請無法出貨但尚未結案"}]}

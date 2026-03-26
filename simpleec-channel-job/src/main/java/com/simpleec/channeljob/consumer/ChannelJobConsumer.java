@@ -8,6 +8,10 @@ import com.simpleec.channeljob.handler.ModeBOrderListHandler;
 import com.simpleec.channeljob.handler.ModeBOrderDetailHandler;
 import com.simpleec.channeljob.service.ChannelService;
 import com.simpleec.channeljob.service.HealthCheckService;
+import com.simpleec.common.constants.TopicConstants;
+import com.simpleec.common.kafka.SchemaVersionHandler;
+import com.simpleec.common.kafka.TaskMdcHelper;
+import com.simpleec.common.kafka.UnsupportedSchemaVersionException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -16,6 +20,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.config.MethodKafkaListenerEndpoint;
 import org.springframework.kafka.listener.KafkaListenerErrorHandler;
 import org.springframework.kafka.listener.ListenerExecutionFailedException;
@@ -47,6 +52,7 @@ public class ChannelJobConsumer {
     private final ObjectMapper objectMapper;
     private final ChannelService channelService;
     private final HealthCheckService healthCheckService;
+    private final KafkaTemplate<String, Object> kafkaTemplate;
 
     @Autowired(required = false)
     private KafkaListenerEndpointRegistry kafkaListenerEndpointRegistry;
@@ -159,6 +165,18 @@ public class ChannelJobConsumer {
         try {
             // Parse JSON string to JsonNode
             JsonNode json = objectMapper.readTree(messageJson);
+
+            try {
+                SchemaVersionHandler.validate(json);
+            } catch (UnsupportedSchemaVersionException e) {
+                log.error("Unsupported schema version in channel message: {}", e.getMessage());
+                kafkaTemplate.send(TopicConstants.TASK_DLT, "ChannelJob", messageJson);
+                return;
+            }
+
+            TaskMdcHelper.set(json);
+            try {
+
             JsonNode header = json.get("header");
             JsonNode body = json.get("body");
 
@@ -208,6 +226,10 @@ public class ChannelJobConsumer {
                 log.debug("{} not implemented yet", taskType);
             } else {
                 log.warn("Unknown taskType: {}", taskType);
+            }
+
+            } finally {
+                TaskMdcHelper.clear();
             }
 
         } catch (Exception e) {

@@ -1,5 +1,6 @@
 package com.simpleec.api.controller;
 
+import com.simpleec.core.crypto.EncryptionContext;
 import com.simpleec.api.dto.UserPageResponse;
 import com.simpleec.api.security.UserPrincipal;
 import com.simpleec.api.vo.OrderVO;
@@ -20,11 +21,13 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
@@ -47,29 +50,35 @@ public class UserOrderController {
             @RequestParam(required = false) String status,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
-        // 轉換 1-indexed 頁碼到 0-indexed (Spring Data 期望的格式)
-        PageRequest pageable = PageRequest.of(page - 1, pageSize);
-        Page<Order> orders;
-        if (status != null) {
-            try {
-                OrderStatusEnum statusEnum = OrderStatusEnum.fromCode(status);
-                orders = orderRepository.findByMerchantIdAndOrderStatus(principal.getMerchantId(), statusEnum, pageable);
-            } catch (IllegalArgumentException e) { orders = Page.empty(); }
-        } else if (channelId != null) {
-            orders = orderRepository.findByMerchantIdAndChannelId(principal.getMerchantId(), channelId, pageable);
-        } else {
-            orders = orderRepository.findByMerchantId(principal.getMerchantId(), pageable);
+        // Set encryption context for decrypting PII fields in Order entities
+        EncryptionContext.setMerchantId(principal.getMerchantId());
+        try {
+            // 轉換 1-indexed 頁碼到 0-indexed (Spring Data 期望的格式)
+            PageRequest pageable = PageRequest.of(page - 1, pageSize);
+            Page<Order> orders;
+            if (status != null) {
+                try {
+                    OrderStatusEnum statusEnum = OrderStatusEnum.fromCode(status);
+                    orders = orderRepository.findByMerchantIdAndOrderStatus(principal.getMerchantId(), statusEnum, pageable);
+                } catch (IllegalArgumentException e) { orders = Page.empty(); }
+            } else if (channelId != null) {
+                orders = orderRepository.findByMerchantIdAndChannelId(principal.getMerchantId(), channelId, pageable);
+            } else {
+                orders = orderRepository.findByMerchantId(principal.getMerchantId(), pageable);
+            }
+
+            // 轉換 Order 到 OrderVO，並填充 platform 信息
+            List<OrderVO> orderVOs = orders.stream().map(order -> {
+                String platformName = getPlatformName(order.getChannelId());
+                return OrderVO.from(order, platformName);
+            }).collect(Collectors.toList());
+
+            // 建立新的 Page 物件，保留分頁信息
+            Page<OrderVO> orderVOPage = new PageImpl<>(orderVOs, orders.getPageable(), orders.getTotalElements());
+            return ResponseEntity.ok(UserPageResponse.from(orderVOPage));
+        } finally {
+            EncryptionContext.clear();
         }
-
-        // 轉換 Order 到 OrderVO，並填充 platform 信息
-        List<OrderVO> orderVOs = orders.stream().map(order -> {
-            String platformName = getPlatformName(order.getChannelId());
-            return OrderVO.from(order, platformName);
-        }).collect(Collectors.toList());
-
-        // 建立新的 Page 物件，保留分頁信息
-        Page<OrderVO> orderVOPage = new PageImpl<>(orderVOs, orders.getPageable(), orders.getTotalElements());
-        return ResponseEntity.ok(UserPageResponse.from(orderVOPage));
     }
 
     /**
@@ -94,11 +103,16 @@ public class UserOrderController {
     public ResponseEntity<Order> getOrder(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable String id) {
-        Optional<Order> order = orderRepository.findById(id);
-        if (order.isEmpty() || !principal.getMerchantId().equals(order.get().getMerchantId())) {
-            return ResponseEntity.notFound().build();
+        EncryptionContext.setMerchantId(principal.getMerchantId());
+        try {
+            Optional<Order> order = orderRepository.findById(id);
+            if (order.isEmpty() || !principal.getMerchantId().equals(order.get().getMerchantId())) {
+                return ResponseEntity.notFound().build();
+            }
+            return ResponseEntity.ok(order.get());
+        } finally {
+            EncryptionContext.clear();
         }
-        return ResponseEntity.ok(order.get());
     }
 
     @PatchMapping("/{id}")
@@ -106,26 +120,31 @@ public class UserOrderController {
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable String id,
             @RequestBody Map<String, Object> body) {
-        Optional<Order> orderOpt = orderRepository.findById(id);
-        if (orderOpt.isEmpty() || !principal.getMerchantId().equals(orderOpt.get().getMerchantId())) {
-            return ResponseEntity.notFound().build();
-        }
-        Order order = orderOpt.get();
-        String action = (String) body.get("action");
+        EncryptionContext.setMerchantId(principal.getMerchantId());
+        try {
+            Optional<Order> orderOpt = orderRepository.findById(id);
+            if (orderOpt.isEmpty() || !principal.getMerchantId().equals(orderOpt.get().getMerchantId())) {
+                return ResponseEntity.notFound().build();
+            }
+            Order order = orderOpt.get();
+            String action = (String) body.get("action");
 
-        if ("ship".equals(action)) {
-            order.setOrderStatus(OrderStatusEnum.SHIPPED);
-            order.setShippedAt(LocalDateTime.now());
-            order = orderRepository.save(order);
-            publishOrderEvent(order, "SHIP_ORDER", body.get("trackingNumber"));
-        } else if ("cancel".equals(action)) {
-            order.setOrderStatus(OrderStatusEnum.CANCELLED);
-            order = orderRepository.save(order);
-            publishOrderEvent(order, "CANCEL_ORDER", body.get("reason"));
-        } else {
-            return ResponseEntity.badRequest().build();
+            if ("ship".equals(action)) {
+                order.setOrderStatus(OrderStatusEnum.SHIPPED);
+                order.setShippedAt(LocalDateTime.now());
+                order = orderRepository.save(order);
+                publishOrderEvent(order, "SHIP_ORDER", body.get("trackingNumber"));
+            } else if ("cancel".equals(action)) {
+                order.setOrderStatus(OrderStatusEnum.CANCELLED);
+                order = orderRepository.save(order);
+                publishOrderEvent(order, "CANCEL_ORDER", body.get("reason"));
+            } else {
+                return ResponseEntity.badRequest().build();
+            }
+            return ResponseEntity.ok(order);
+        } finally {
+            EncryptionContext.clear();
         }
-        return ResponseEntity.ok(order);
     }
 
     private void publishOrderEvent(Order order, String taskType, Object metadata) {
@@ -135,12 +154,26 @@ public class UserOrderController {
                 Optional<Platform> platformOpt = platformRepository.findById(channel.getPlatformId());
                 platformOpt.ifPresent(platform -> {
                     String topic = TopicConstants.platformFastTopic(platform.getPlatformName().toLowerCase());
+
+                    Map<String, Object> header = new HashMap<>();
+                    header.put("taskType", taskType);
+                    header.put("merchantId", order.getMerchantId());
+                    header.put("platformId", platform.getPlatformName().toLowerCase());
+                    header.put("channelId", order.getChannelId());
+                    header.put("requestId", UUID.randomUUID().toString());
+                    header.put("timestamp", Instant.now().toString());
+                    header.put("source", "api");
+                    header.put("version", 1);
+                    header.put("isRollback", false);
+
+                    Map<String, Object> body = new HashMap<>();
+                    body.put("orderId", order.getId());
+                    if (metadata != null) body.put("metadata", metadata);
+
                     Map<String, Object> message = new HashMap<>();
-                    message.put("taskType", taskType);
-                    message.put("orderId", order.getId());
-                    message.put("channelId", order.getChannelId());
-                    message.put("merchantId", order.getMerchantId());
-                    if (metadata != null) message.put("metadata", metadata);
+                    message.put("header", header);
+                    message.put("body", body);
+
                     kafkaTemplate.send(topic, order.getId(), message);
                     log.info("Published {} to {}", taskType, topic);
                 });

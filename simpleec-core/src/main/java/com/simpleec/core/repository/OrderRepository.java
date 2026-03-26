@@ -1,12 +1,16 @@
 package com.simpleec.core.repository;
 
 import com.simpleec.core.entity.Order;
+import com.simpleec.core.dto.OrderStatsResult;
 import com.simpleec.common.enums.OrderStatusEnum;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.List;
@@ -51,4 +55,25 @@ public interface OrderRepository extends JpaRepository<Order, String> {
      * 統計訂單數（按通路）
      */
     long countByMerchantIdAndChannelId(String merchantId, String channelId);
+
+    @Query("""
+        SELECT
+            COUNT(o) AS orderCount,
+            COALESCE(SUM(o.totalAmount), 0) AS totalAmount,
+            SUM(CASE WHEN o.orderStatus IN ('SHIPPED', 'COMPLETED') THEN 1 ELSE 0 END) AS shippedCount,
+            SUM(CASE WHEN o.orderStatus = 'COMPLETED' THEN 1 ELSE 0 END) AS completedCount,
+            SUM(CASE WHEN o.orderStatus = 'CANCELLED' THEN 1 ELSE 0 END) AS cancelledCount
+        FROM Order o
+        WHERE o.merchantId = :merchantId
+          AND o.channelId = :channelId
+          AND CAST(o.channelCreatedAt AS LocalDate) = :statDate
+        """)
+    @org.springframework.data.jpa.repository.QueryHints(
+        @jakarta.persistence.QueryHint(name = "org.hibernate.readOnly", value = "true")
+    )
+    OrderStatsResult aggregateStatsByChannelAndDate(
+        @Param("merchantId") String merchantId,
+        @Param("channelId") String channelId,
+        @Param("statDate") LocalDate statDate
+    );
 }

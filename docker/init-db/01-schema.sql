@@ -329,6 +329,7 @@ CREATE UNIQUE INDEX idx_order_channel_order ON public.orders (channel_id, channe
 CREATE INDEX idx_order_merchant_status ON public.orders (merchant_id, order_status);
 CREATE INDEX idx_order_created ON public.orders (created_at DESC);
 CREATE INDEX idx_order_items ON public.orders USING GIN (items);
+CREATE INDEX idx_order_stats ON public.orders (merchant_id, channel_id, channel_created_at);
 
 -- ---------------------------------------------------------------------------
 -- 14. order_status_logs — Order status change history (FK → orders)

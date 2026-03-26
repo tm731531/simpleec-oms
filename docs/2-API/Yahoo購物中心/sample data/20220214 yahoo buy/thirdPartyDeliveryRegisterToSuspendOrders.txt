@@ -1,0 +1,1 @@
+{"ResponseCode":"00000","ResponseMessage":"成功","ShipResults":[{"OrderCode":"RM2202140012875","IsSuccess":true,"FailureType":0,"FailureMessage":"成功"}],"ShippedSuccessCount":1,"ShippedFailureCount":0}

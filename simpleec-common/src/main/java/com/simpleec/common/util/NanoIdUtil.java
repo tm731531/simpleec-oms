@@ -22,22 +22,46 @@ public class NanoIdUtil {
     private static final int SIZE = 20;
 
     /**
-     * 生成 NanoID
+     * Generate a NanoID of exactly SIZE (20) characters.
      */
     public static String generate() {
-        StringBuilder sb = new StringBuilder(SIZE);
-        for (int i = 0; i < SIZE; i++) {
+        return generate(SIZE);
+    }
+
+    /**
+     * Generate a NanoID of exactly {@code length} characters.
+     * @param length number of random characters to generate
+     */
+    public static String generate(int length) {
+        if (length <= 0) {
+            throw new IllegalArgumentException("length must be positive, got: " + length);
+        }
+        StringBuilder sb = new StringBuilder(length);
+        for (int i = 0; i < length; i++) {
             sb.append(ALPHABET.charAt(RANDOM.nextInt(ALPHABET.length())));
         }
         return sb.toString();
     }
 
     /**
-     * 生成帶前綴的 NanoID
-     * @param prefix 前綴 (e.g., "ORD_", "PROD_")
+     * Generate a prefixed NanoID whose total length is exactly SIZE (20) characters.
+     *
+     * The random suffix length = 20 - prefix.length(), so the result always fits
+     * in a VARCHAR(20) column regardless of prefix length.
+     *
+     * @param prefix prefix string (e.g., "ORD_", "RET_", "PROD_") — must be shorter than 20 chars
+     * @throws IllegalArgumentException if prefix is null or length >= SIZE
      */
     public static String generateWithPrefix(String prefix) {
-        return prefix + generate();
+        if (prefix == null) {
+            throw new IllegalArgumentException("prefix must not be null");
+        }
+        int suffixLength = SIZE - prefix.length();
+        if (suffixLength <= 0) {
+            throw new IllegalArgumentException(
+                "prefix '" + prefix + "' (length " + prefix.length() + ") leaves no room for random suffix in a " + SIZE + "-char ID");
+        }
+        return prefix + generate(suffixLength);
     }
 
     /**

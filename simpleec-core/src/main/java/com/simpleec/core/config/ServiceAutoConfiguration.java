@@ -9,6 +9,6 @@ import org.springframework.context.annotation.ComponentScan;
  * 由 Spring Boot 自動發現（透過 META-INF/spring/AutoConfiguration.imports）
  */
 @AutoConfiguration
-@ComponentScan(basePackages = "com.simpleec.core.service")
+@ComponentScan(basePackages = {"com.simpleec.core.service", "com.simpleec.core.crypto"})
 public class ServiceAutoConfiguration {
 }

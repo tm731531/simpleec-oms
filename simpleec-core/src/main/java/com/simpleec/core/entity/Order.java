@@ -8,6 +8,7 @@ import com.simpleec.common.enums.OrderStatusEnum;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
+import com.simpleec.core.crypto.EncryptedAttributeConverter;
 import jakarta.persistence.*;
 import org.hibernate.type.SqlTypes;
 import org.hibernate.annotations.JdbcTypeCode;
@@ -111,26 +112,30 @@ public class Order {
     private String shippingMethod;
 
     /**
-     * 買家名稱
+     * 買家名稱 (PII — AES-256-GCM encrypted at rest)
      */
+    @Convert(converter = EncryptedAttributeConverter.class)
     @Column(name = "buyer_name", length = 512)
     private String buyerName;
 
     /**
-     * 買家電話
+     * 買家電話 (PII — AES-256-GCM encrypted at rest)
      */
+    @Convert(converter = EncryptedAttributeConverter.class)
     @Column(name = "buyer_phone", length = 256)
     private String buyerPhone;
 
     /**
-     * 買家郵箱
+     * 買家郵箱 (PII — AES-256-GCM encrypted at rest)
      */
+    @Convert(converter = EncryptedAttributeConverter.class)
     @Column(name = "buyer_email", length = 512)
     private String buyerEmail;
 
     /**
-     * 配送地址
+     * 配送地址 (PII — AES-256-GCM encrypted at rest)
      */
+    @Convert(converter = EncryptedAttributeConverter.class)
     @Column(name = "shipping_address")
     private String shippingAddress;
 

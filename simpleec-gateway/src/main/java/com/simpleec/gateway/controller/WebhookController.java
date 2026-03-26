@@ -4,9 +4,10 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.simpleec.common.constants.TopicConstants;
-import com.simpleec.common.util.NanoIdUtil;
+import com.simpleec.gateway.security.WebhookVerifier;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.ResponseEntity;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.web.bind.annotation.*;
 
@@ -31,6 +32,7 @@ public class WebhookController {
 
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final ObjectMapper objectMapper;
+    private final WebhookVerifier webhookVerifier;
 
     /**
      * Shopify Webhook 入口
@@ -38,17 +40,25 @@ public class WebhookController {
      * 例如: /webhook/shopify/orders/create, /webhook/shopify/orders/update
      */
     @PostMapping("/shopify/{eventType}")
-    public void handleShopifyWebhook(@PathVariable String eventType, @RequestBody String payload) {
+    public ResponseEntity<Void> handleShopifyWebhook(
+            @PathVariable String eventType,
+            @RequestHeader(value = "X-Shopify-Hmac-Sha256", required = false) String hmacHeader,
+            @RequestBody String rawBody) {
         try {
+            if (!webhookVerifier.verifyShopify(rawBody, hmacHeader)) {
+                log.warn("Shopify webhook signature verification failed — ignoring payload");
+                return ResponseEntity.ok().build();
+            }
+
             log.info("Received Shopify webhook: {}", eventType);
-            JsonNode shopifyEvent = objectMapper.readTree(payload);
+            JsonNode shopifyEvent = objectMapper.readTree(rawBody);
 
             // 將 Shopify webhook 轉換為 OMS 格式
             ObjectNode omsMessage = convertShopifyWebhook(eventType, shopifyEvent);
 
             // 發送到對應的 topic
             String topic = mapEventToTopic(eventType);
-            kafkaTemplate.send(topic, omsMessage.get("header").get("messageId").asText(),
+            kafkaTemplate.send(topic, omsMessage.get("header").get("requestId").asText(),
                 objectMapper.writeValueAsString(omsMessage));
 
             log.info("Shopify webhook processed: {} -> {}", eventType, topic);
@@ -56,23 +66,32 @@ public class WebhookController {
         } catch (Exception e) {
             log.error("Error processing Shopify webhook", e);
         }
+        return ResponseEntity.ok().build();
     }
 
     /**
      * Shopee Webhook 入口
      */
     @PostMapping("/shopee/{eventType}")
-    public void handleShopeeWebhook(@PathVariable String eventType, @RequestBody String payload) {
+    public ResponseEntity<Void> handleShopeeWebhook(
+            @PathVariable String eventType,
+            @RequestHeader(value = "X-Shopee-Signature", required = false) String signatureHeader,
+            @RequestBody String rawBody) {
         try {
+            if (!webhookVerifier.verifyShopee(rawBody, signatureHeader)) {
+                log.warn("Shopee webhook signature verification failed — ignoring payload");
+                return ResponseEntity.ok().build();
+            }
+
             log.info("Received Shopee webhook: {}", eventType);
-            JsonNode shopeeEvent = objectMapper.readTree(payload);
+            JsonNode shopeeEvent = objectMapper.readTree(rawBody);
 
             // 將 Shopee webhook 轉換為 OMS 格式
             ObjectNode omsMessage = convertShopeeWebhook(eventType, shopeeEvent);
 
             // 發送到對應的 topic
             String topic = mapEventToTopic(eventType);
-            kafkaTemplate.send(topic, omsMessage.get("header").get("messageId").asText(),
+            kafkaTemplate.send(topic, omsMessage.get("header").get("requestId").asText(),
                 objectMapper.writeValueAsString(omsMessage));
 
             log.info("Shopee webhook processed: {} -> {}", eventType, topic);
@@ -80,23 +99,32 @@ public class WebhookController {
         } catch (Exception e) {
             log.error("Error processing Shopee webhook", e);
         }
+        return ResponseEntity.ok().build();
     }
 
     /**
      * Easystore Webhook 入口
      */
     @PostMapping("/easystore/{eventType}")
-    public void handleEasystoreWebhook(@PathVariable String eventType, @RequestBody String payload) {
+    public ResponseEntity<Void> handleEasystoreWebhook(
+            @PathVariable String eventType,
+            @RequestHeader(value = "X-Easystore-Hmac-Sha256", required = false) String hmacHeader,
+            @RequestBody String rawBody) {
         try {
+            if (!webhookVerifier.verifyEasystore(rawBody, hmacHeader)) {
+                log.warn("Easystore webhook signature verification failed — ignoring payload");
+                return ResponseEntity.ok().build();
+            }
+
             log.info("Received Easystore webhook: {}", eventType);
-            JsonNode easystoreEvent = objectMapper.readTree(payload);
+            JsonNode easystoreEvent = objectMapper.readTree(rawBody);
 
             // 將 Easystore webhook 轉換為 OMS 格式
             ObjectNode omsMessage = convertEasystoreWebhook(eventType, easystoreEvent);
 
             // 發送到對應的 topic
             String topic = mapEventToTopic(eventType);
-            kafkaTemplate.send(topic, omsMessage.get("header").get("messageId").asText(),
+            kafkaTemplate.send(topic, omsMessage.get("header").get("requestId").asText(),
                 objectMapper.writeValueAsString(omsMessage));
 
             log.info("Easystore webhook processed: {} -> {}", eventType, topic);
@@ -104,6 +132,7 @@ public class WebhookController {
         } catch (Exception e) {
             log.error("Error processing Easystore webhook", e);
         }
+        return ResponseEntity.ok().build();
     }
 
     /**
@@ -112,17 +141,9 @@ public class WebhookController {
     private ObjectNode convertShopifyWebhook(String eventType, JsonNode shopifyEvent) {
         ObjectNode omsMessage = objectMapper.createObjectNode();
 
-        // 構建 header
-        ObjectNode header = objectMapper.createObjectNode();
-        header.put("messageId", "msg_" + NanoIdUtil.generate());
-        header.put("taskType", mapEventTypeToTaskType(eventType));
-        header.put("channelId", "shopify");
-        header.put("merchantId", "M001");  // TODO: 從 webhook 簽名驗證中提取
-        header.put("timestamp", Instant.now().toString());
-        header.put("version", "1.0");
+        ObjectNode header = buildHeader(eventType, "shopify", shopifyEvent);
         omsMessage.set("header", header);
 
-        // 構建 body - 複製 Shopify 數據
         ObjectNode body = objectMapper.createObjectNode();
         body.set("webhookData", shopifyEvent);
         omsMessage.set("body", body);
@@ -136,13 +157,7 @@ public class WebhookController {
     private ObjectNode convertShopeeWebhook(String eventType, JsonNode shopeeEvent) {
         ObjectNode omsMessage = objectMapper.createObjectNode();
 
-        ObjectNode header = objectMapper.createObjectNode();
-        header.put("messageId", "msg_" + NanoIdUtil.generate());
-        header.put("taskType", mapEventTypeToTaskType(eventType));
-        header.put("channelId", "shopee");
-        header.put("merchantId", "M001");  // TODO: 從 webhook 簽名驗證中提取
-        header.put("timestamp", Instant.now().toString());
-        header.put("version", "1.0");
+        ObjectNode header = buildHeader(eventType, "shopee", shopeeEvent);
         omsMessage.set("header", header);
 
         ObjectNode body = objectMapper.createObjectNode();
@@ -158,13 +173,7 @@ public class WebhookController {
     private ObjectNode convertEasystoreWebhook(String eventType, JsonNode easystoreEvent) {
         ObjectNode omsMessage = objectMapper.createObjectNode();
 
-        ObjectNode header = objectMapper.createObjectNode();
-        header.put("messageId", "msg_" + NanoIdUtil.generate());
-        header.put("taskType", mapEventTypeToTaskType(eventType));
-        header.put("channelId", "easystore");
-        header.put("merchantId", "M001");  // TODO: 從 webhook 簽名驗證中提取
-        header.put("timestamp", Instant.now().toString());
-        header.put("version", "1.0");
+        ObjectNode header = buildHeader(eventType, "easystore", easystoreEvent);
         omsMessage.set("header", header);
 
         ObjectNode body = objectMapper.createObjectNode();
@@ -172,6 +181,31 @@ public class WebhookController {
         omsMessage.set("body", body);
 
         return omsMessage;
+    }
+
+    /**
+     * Builds a unified header following the OMS Header/Body contract.
+     * merchantId and channelId are extracted from the webhook payload where available;
+     * platformId is set to the incoming platform name.
+     */
+    private ObjectNode buildHeader(String eventType, String platformId, JsonNode payload) {
+        ObjectNode header = objectMapper.createObjectNode();
+        header.put("taskType", mapEventTypeToTaskType(eventType));
+        // merchantId must be verified via webhook signature in production; placeholder until implemented
+        String merchantId = payload.has("merchant_id") ? payload.get("merchant_id").asText() : null;
+        if (merchantId != null) {
+            header.put("merchantId", merchantId);
+        } else {
+            header.putNull("merchantId");
+        }
+        header.put("platformId", platformId);
+        header.putNull("channelId");
+        header.put("requestId", java.util.UUID.randomUUID().toString());
+        header.put("timestamp", Instant.now().toString());
+        header.put("source", "webhook");
+        header.put("version", 1);
+        header.put("isRollback", false);
+        return header;
     }
 
     /**
