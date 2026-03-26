@@ -5,6 +5,8 @@ import com.simpleec.common.enums.ReturnStatusEnum;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
@@ -40,4 +42,11 @@ public interface ReturnOrderRepository extends JpaRepository<ReturnOrder, String
      * 統計退貨數
      */
     long countByMerchantIdAndReturnStatus(String merchantId, ReturnStatusEnum status);
+
+    /**
+     * Count returns grouped by status in a single query.
+     * Returns Object[]{ReturnStatusEnum status, Long count} per row.
+     */
+    @Query("SELECT r.returnStatus, COUNT(r) FROM ReturnOrder r WHERE r.merchantId = :merchantId GROUP BY r.returnStatus")
+    List<Object[]> countByMerchantIdGroupByStatus(@Param("merchantId") String merchantId);
 }

@@ -58,7 +58,8 @@ public class SalesReportHandler extends AbstractEventHandler {
 
         // Group by platformId and aggregate order count + revenue per platform
         Map<String, List<DailyStatistics>> byPlatform = records.stream()
-                .collect(Collectors.groupingBy(DailyStatistics::getPlatformId));
+                .collect(Collectors.groupingBy(
+                        r -> r.getPlatformId() != null ? r.getPlatformId() : "UNKNOWN"));
 
         int grandTotalOrders = 0;
         BigDecimal grandTotalRevenue = BigDecimal.ZERO;

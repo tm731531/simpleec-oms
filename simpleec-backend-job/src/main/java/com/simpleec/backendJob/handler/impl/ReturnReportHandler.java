@@ -10,6 +10,9 @@ import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Return report handler — runs at minute % 5 == 4.
@@ -44,12 +47,18 @@ public class ReturnReportHandler extends AbstractEventHandler {
             reportDate = LocalDate.now();
         }
 
-        long pending   = returnOrderRepository.countByMerchantIdAndReturnStatus(merchantId, ReturnStatusEnum.PENDING);
-        long approved  = returnOrderRepository.countByMerchantIdAndReturnStatus(merchantId, ReturnStatusEnum.APPROVED);
-        long rejected  = returnOrderRepository.countByMerchantIdAndReturnStatus(merchantId, ReturnStatusEnum.REJECTED);
-        long completed = returnOrderRepository.countByMerchantIdAndReturnStatus(merchantId, ReturnStatusEnum.COMPLETED);
-        long refunded  = returnOrderRepository.countByMerchantIdAndReturnStatus(merchantId, ReturnStatusEnum.REFUNDED);
+        // Single grouped query instead of 5 separate COUNT queries
+        List<Object[]> rows = returnOrderRepository.countByMerchantIdGroupByStatus(merchantId);
+        Map<ReturnStatusEnum, Long> counts = new EnumMap<>(ReturnStatusEnum.class);
+        for (Object[] row : rows) {
+            counts.put((ReturnStatusEnum) row[0], (Long) row[1]);
+        }
 
+        long pending   = counts.getOrDefault(ReturnStatusEnum.PENDING, 0L);
+        long approved  = counts.getOrDefault(ReturnStatusEnum.APPROVED, 0L);
+        long rejected  = counts.getOrDefault(ReturnStatusEnum.REJECTED, 0L);
+        long completed = counts.getOrDefault(ReturnStatusEnum.COMPLETED, 0L);
+        long refunded  = counts.getOrDefault(ReturnStatusEnum.REFUNDED, 0L);
         long total = pending + approved + rejected + completed + refunded;
 
         if (total == 0) {
