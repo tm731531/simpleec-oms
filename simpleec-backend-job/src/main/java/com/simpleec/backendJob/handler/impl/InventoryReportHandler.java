@@ -2,20 +2,29 @@ package com.simpleec.backendJob.handler.impl;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.simpleec.backendJob.handler.AbstractEventHandler;
+import com.simpleec.core.repository.SellPackRepository;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+
 /**
- * 庫存報表處理器
+ * Inventory report handler — runs at minute % 5 == 2.
  *
- * 定時生成庫存變動摘要報表
- * - 庫存增減
- * - 缺貨預警
- * - 按產品分組統計
+ * Queries the sell_pack table for the merchant and logs a summary of total
+ * packs and how many are low-stock (quantity < LOW_STOCK_THRESHOLD).
  */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class InventoryReportHandler extends AbstractEventHandler {
+
+    /** Packs with quantity below this value are considered low-stock. */
+    private static final int LOW_STOCK_THRESHOLD = 10;
+
+    private final SellPackRepository sellPackRepository;
 
     @Override
     public String getTaskType() {
@@ -29,12 +38,28 @@ public class InventoryReportHandler extends AbstractEventHandler {
             return;
         }
 
-        log.debug("Generating INVENTORY_REPORT for merchant: {}, timestamp: {}", merchantId, timestamp);
+        LocalDate reportDate;
+        try {
+            reportDate = OffsetDateTime.parse(timestamp).toLocalDate();
+        } catch (Exception e) {
+            log.warn("Could not parse timestamp '{}', falling back to LocalDate.now()", timestamp);
+            reportDate = LocalDate.now();
+        }
 
-        // TODO: 實現完整的庫存報表邏輯
-        // queryInventoryChanges(merchantId, timestamp)
-        // identifyStockWarnings()
-        // generateStatistics()
-        // saveReport()
+        long totalPacks = sellPackRepository.countByMerchantId(merchantId);
+        long lowStockPacks = sellPackRepository.countByMerchantIdAndQuantityLessThan(merchantId, LOW_STOCK_THRESHOLD);
+
+        if (totalPacks == 0) {
+            log.info("INVENTORY_REPORT [{}] date={} — no packs found", merchantId, reportDate);
+            return;
+        }
+
+        log.info("INVENTORY_REPORT [{}] date={} totalPacks={} lowStock={} (qty<{})",
+                merchantId, reportDate, totalPacks, lowStockPacks, LOW_STOCK_THRESHOLD);
+
+        if (lowStockPacks > 0) {
+            log.warn("INVENTORY_REPORT [{}] date={} — {} pack(s) are below low-stock threshold (qty<{})",
+                    merchantId, reportDate, lowStockPacks, LOW_STOCK_THRESHOLD);
+        }
     }
 }

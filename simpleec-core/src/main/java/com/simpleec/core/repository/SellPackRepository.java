@@ -27,4 +27,14 @@ public interface SellPackRepository extends JpaRepository<SellPack, String> {
      * 查詢商家的特定上架商品
      */
     Optional<SellPack> findByIdAndMerchantId(String id, String merchantId);
+
+    /**
+     * Count low-stock packs for a merchant (quantity below threshold)
+     */
+    long countByMerchantIdAndQuantityLessThan(String merchantId, int threshold);
+
+    /**
+     * Count total active packs for a merchant
+     */
+    long countByMerchantId(String merchantId);
 }
