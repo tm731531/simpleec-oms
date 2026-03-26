@@ -38,8 +38,14 @@ public class SchedulerEventHandler {
     private final ChannelRepository channelRepository;
 
     /**
-     * 處理 heartbeat 訊號並派發排程任務
-     * 注意：只在滿足條件的分鐘的第 0 秒派發，避免重複派發
+     * Processes a heartbeat signal and dispatches scheduled tasks.
+     * Only dispatches at second=0 to avoid duplicate dispatches within the same minute.
+     *
+     * <p>Dispatch strategy:
+     * <ul>
+     *   <li>STATS_RECALC — single message with merchantId="SYSTEM" (reads from Redis dirty set)</li>
+     *   <li>All other task types — one message per distinct active merchant</li>
+     * </ul>
      */
     public void handleHeartbeat(JsonNode body, long timestamp) {
         try {
@@ -129,17 +135,36 @@ public class SchedulerEventHandler {
     }
 
     /**
-     * 派發報表任務到 task.backend topic
+     * Dispatches a backend task to the task.backend topic.
+     *
+     * <p>STATS_RECALC is dispatched once with merchantId="SYSTEM" because its handler
+     * reads from the Redis dirty set and does not use merchantId for data scoping.
+     * All other task types are dispatched once per distinct active merchant.
      */
     private void dispatchTask(TaskTypeEnum taskType, long timestamp) {
         try {
             log.info("Dispatching {} at {}", taskType.getCode(), DateUtil.toIsoString(timestamp));
 
-            ObjectNode message = buildTaskMessage(taskType, timestamp);
-            kafkaTemplate.send(TopicConstants.TASK_BACKEND,
-                message.get("header").get("messageId").asText(), message);
+            if (taskType == TaskTypeEnum.STATS_RECALC) {
+                // STATS_RECALC reads from Redis dirty set — merchantId not used
+                ObjectNode message = buildTaskMessage(taskType, timestamp, "SYSTEM");
+                kafkaTemplate.send(TopicConstants.TASK_BACKEND,
+                    message.get("header").get("messageId").asText(), message);
+                return;
+            }
 
-            log.debug("Sent {} to task.backend topic", taskType.getCode());
+            // All other tasks: dispatch per active merchant
+            List<String> merchantIds = channelRepository.findDistinctMerchantIdsByActivedTrue();
+            if (merchantIds.isEmpty()) {
+                log.debug("No active merchants for {} dispatch", taskType.getCode());
+                return;
+            }
+            for (String merchantId : merchantIds) {
+                ObjectNode message = buildTaskMessage(taskType, timestamp, merchantId);
+                kafkaTemplate.send(TopicConstants.TASK_BACKEND,
+                    message.get("header").get("messageId").asText(), message);
+            }
+            log.debug("Dispatched {} to {} merchants", taskType.getCode(), merchantIds.size());
 
         } catch (Exception e) {
             log.error("Error dispatching {}", taskType.getCode(), e);
@@ -176,20 +201,25 @@ public class SchedulerEventHandler {
     }
 
     /**
-     * 構建排程任務消息
+     * Builds a task message for the task.backend topic.
+     *
+     * @param taskType  the type of task to dispatch
+     * @param timestamp epoch millis of the triggering heartbeat
+     * @param merchantId the target merchant, or "SYSTEM" for system-wide tasks
      */
-    private ObjectNode buildTaskMessage(TaskTypeEnum taskType, long timestamp) {
+    private ObjectNode buildTaskMessage(TaskTypeEnum taskType, long timestamp, String merchantId) {
         ObjectNode message = objectMapper.createObjectNode();
 
         ObjectNode header = objectMapper.createObjectNode();
         header.put("messageId", NanoIdUtil.generate());
         header.put("taskType", taskType.getCode());
+        header.put("merchantId", merchantId);
         header.put("timestamp", DateUtil.toIsoString(timestamp));
-        header.put("version", "1.0");
+        header.put("source", "scheduler");
+        header.put("version", 1);
 
         ObjectNode body = objectMapper.createObjectNode();
-        body.put("timeRange", "Last 5 minutes");
-        body.put("merchantId", "MERCHANT_001");
+        body.put("merchantId", merchantId);
 
         message.set("header", header);
         message.set("body", body);

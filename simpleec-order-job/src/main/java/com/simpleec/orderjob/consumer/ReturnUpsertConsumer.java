@@ -104,17 +104,21 @@ public class ReturnUpsertConsumer {
 
                     // Set encryption context for PII field encryption/decryption
                     EncryptionContext.setMerchantId(merchantId);
-                    // Issue 3: Add exception handling for handler calls with proper acknowledgment
                     try {
                         returnUpsertHandler.handleReturnUpsert(merchantId, channelId, channelRefundId, returnHash, returnDataJson);
                         acknowledgment.acknowledge();
                         log.info("Successfully processed RETURN_UPSERT: {}", channelRefundId);
                     } catch (Exception e) {
                         log.error("Error processing RETURN_UPSERT for {}: {}", channelRefundId, e.getMessage(), e);
-                        // Acknowledge to prevent poison pill, but log the error for investigation
+                        try {
+                            // Send to failed queue for async retry or manual intervention
+                            kafkaTemplate.send("task.failed", "ReturnUpsert", message);
+                            log.info("Message sent to task.failed topic");
+                        } catch (Exception sendError) {
+                            log.error("Failed to send message to task.failed", sendError);
+                        }
+                        // Always acknowledge to avoid infinite reprocessing
                         acknowledgment.acknowledge();
-                        // TODO: Route to task.failed topic for retry via DefaultErrorHandler
-                        throw e;  // Let DefaultErrorHandler decide retry strategy
                     } finally {
                         EncryptionContext.clear();
                     }
