@@ -36,12 +36,37 @@ public class DailyStatistics {
     @Column(name = "stat_date", nullable = false)
     private LocalDate statDate;
 
-    @Column(name = "order_count")
-    private Integer orderCount;
+    // 業務視角：當日新增訂單（channel_created_at = statDate）
+    @Column(name = "new_order_count")
+    private Integer newOrderCount;
 
-    @Column(name = "total_amount", precision = 15, scale = 2)
-    private BigDecimal totalAmount;
+    @Column(name = "new_order_amount", precision = 15, scale = 2)
+    private BigDecimal newOrderAmount;
 
+    // 老闆視角：營業額（排除 cancelled）
+    @Column(name = "gross_order_count")
+    private Integer grossOrderCount;
+
+    @Column(name = "gross_amount", precision = 15, scale = 2)
+    private BigDecimal grossAmount;
+
+    // 財務視角：實收（confirmed 以上狀態）
+    @Column(name = "received_count")
+    private Integer receivedCount;
+
+    @Column(name = "received_amount", precision = 15, scale = 2)
+    private BigDecimal receivedAmount;
+
+    @Column(name = "refund_count")
+    private Integer refundCount;
+
+    @Column(name = "refund_amount", precision = 15, scale = 2)
+    private BigDecimal refundAmount;
+
+    @Column(name = "net_amount", precision = 15, scale = 2)
+    private BigDecimal netAmount;
+
+    // 物流視角
     @Column(name = "shipped_count")
     private Integer shippedCount;
 
@@ -51,8 +76,9 @@ public class DailyStatistics {
     @Column(name = "cancelled_count")
     private Integer cancelledCount;
 
-    @Column(name = "refund_count")
-    private Integer refundCount;
+    // 商品統計
+    @Column(name = "item_sold_count")
+    private Integer itemSoldCount;
 
     @UpdateTimestamp
     @Column(name = "updated_at")

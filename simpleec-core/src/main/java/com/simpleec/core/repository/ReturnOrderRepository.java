@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDate;
 import java.util.Optional;
 import java.util.List;
 
@@ -49,4 +50,36 @@ public interface ReturnOrderRepository extends JpaRepository<ReturnOrder, String
      */
     @Query("SELECT r.returnStatus, COUNT(r) FROM ReturnOrder r WHERE r.merchantId = :merchantId GROUP BY r.returnStatus")
     List<Object[]> countByMerchantIdGroupByStatus(@Param("merchantId") String merchantId);
+
+    /**
+     * Count refund orders for a merchant/channel on a specific stat date.
+     * Joins refund_orders with orders to filter by channelId and creation date.
+     */
+    @Query(value = """
+        SELECT COUNT(ro.id)
+        FROM refund_orders ro
+        JOIN orders o ON ro.order_id = o.id
+        WHERE ro.merchant_id = :merchantId
+          AND o.channel_id = :channelId
+          AND DATE(ro.requested_at) = :statDate
+        """, nativeQuery = true)
+    long countByMerchantIdAndChannelIdAndStatDate(
+        @Param("merchantId") String merchantId,
+        @Param("channelId") String channelId,
+        @Param("statDate") LocalDate statDate
+    );
+
+    @Query(value = """
+        SELECT COALESCE(SUM(ro.refund_amount), 0)
+        FROM refund_orders ro
+        JOIN orders o ON ro.order_id = o.id
+        WHERE ro.merchant_id = :merchantId
+          AND o.channel_id = :channelId
+          AND DATE(ro.requested_at) = :statDate
+        """, nativeQuery = true)
+    java.math.BigDecimal sumRefundAmountByMerchantIdAndChannelIdAndStatDate(
+        @Param("merchantId") String merchantId,
+        @Param("channelId") String channelId,
+        @Param("statDate") LocalDate statDate
+    );
 }

@@ -67,6 +67,16 @@ public class OrderService {
         if (order.getId() == null) {
             order.setId(NanoIdUtil.generateWithPrefix("ORD_"));
         }
+        // 填充 NOT NULL 欄位的預設值（當 REST API 未提供時）
+        if (order.getOrderStatus() == null) {
+            order.setOrderStatus(OrderStatusEnum.PENDING);
+        }
+        if (order.getIsRollback() == null) {
+            order.setIsRollback(false);
+        }
+        if (order.getHasRefund() == null) {
+            order.setHasRefund(false);
+        }
 
         log.info("Creating order: {} from channel {}", order.getId(), order.getChannelId());
         return orderRepository.save(order);

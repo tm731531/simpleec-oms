@@ -78,6 +78,12 @@ public class SellPack {
     @Column(name = "sync_status", columnDefinition = "jsonb")
     private SyncStatus syncStatus;
 
+    /**
+     * 通路規格屬性（顏色、尺寸等平台特定欄位，JSONB 存放）
+     */
+    @Column(name = "channel_spec_attrs", columnDefinition = "jsonb")
+    private String channelSpecAttrs;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;

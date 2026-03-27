@@ -49,7 +49,7 @@ public class Order {
     /**
      * 通路實例 ID (e.g., SHOPEE_001, SHOPIFY_001)
      */
-    @Column(name = "channel_id", length = 50, nullable = false)
+    @Column(name = "channel_id", length = 20, nullable = false)
     private String channelId;
 
     /**
@@ -67,7 +67,7 @@ public class Order {
     /**
      * OMS 統一訂單狀態
      */
-    @Column(name = "order_status", length = 50, nullable = false)
+    @Column(name = "order_status", length = 20, nullable = false)
     @Enumerated(EnumType.STRING)
     private OrderStatusEnum orderStatus;
 
@@ -186,6 +186,20 @@ public class Order {
      */
     @Column(name = "shipped_at")
     private LocalDateTime shippedAt;
+
+    /**
+     * 累計退款金額（每次退款後更新）
+     */
+    @Builder.Default
+    @Column(name = "refund_amount", precision = 15, scale = 2, columnDefinition = "NUMERIC(15,2) DEFAULT 0")
+    private BigDecimal refundAmount = BigDecimal.ZERO;
+
+    /**
+     * 是否有退款（快速過濾用 index）
+     */
+    @Builder.Default
+    @Column(name = "has_refund", nullable = false, columnDefinition = "boolean default false")
+    private Boolean hasRefund = false;
 
     /**
      * 建立時間

@@ -2,6 +2,7 @@ package com.simpleec.core.crypto;
 
 import jakarta.persistence.AttributeConverter;
 import jakarta.persistence.Converter;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeansException;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
@@ -21,6 +22,7 @@ import org.springframework.stereotype.Component;
  * The decrypt method gracefully returns input as-is if it looks like plaintext.
  * A separate data migration must be performed to encrypt existing rows.
  */
+@Slf4j
 @Converter
 @Component
 public class EncryptedAttributeConverter
@@ -46,8 +48,8 @@ public class EncryptedAttributeConverter
         if (ciphertext == null) return null;
         String merchantId = EncryptionContext.getMerchantIdOrNull();
         if (merchantId == null) {
-            // Graceful degradation: if no context set, return raw ciphertext
-            // This prevents crashes during lazy loading; callers should always set context
+            log.warn("EncryptionContext not set during read — returning raw value. " +
+                     "Wrap the query in EncryptionContext.setMerchantId() / clear().");
             return ciphertext;
         }
         return encryptor.decrypt(ciphertext, merchantId);

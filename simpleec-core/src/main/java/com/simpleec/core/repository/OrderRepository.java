@@ -58,11 +58,19 @@ public interface OrderRepository extends JpaRepository<Order, String> {
 
     @Query(value = """
         SELECT
-            COUNT(*) AS orderCount,
-            COALESCE(SUM(total_amount), 0) AS totalAmount,
-            SUM(CASE WHEN order_status IN ('SHIPPED', 'COMPLETED') THEN 1 ELSE 0 END) AS shippedCount,
-            SUM(CASE WHEN order_status = 'COMPLETED' THEN 1 ELSE 0 END) AS completedCount,
-            SUM(CASE WHEN order_status = 'CANCELLED' THEN 1 ELSE 0 END) AS cancelledCount
+            COUNT(*)                                                                            AS newOrderCount,
+            COALESCE(SUM(total_amount), 0)                                                      AS newOrderAmount,
+            SUM(CASE WHEN order_status != 'cancelled' THEN 1 ELSE 0 END)                       AS grossOrderCount,
+            COALESCE(SUM(CASE WHEN order_status != 'cancelled' THEN total_amount ELSE 0 END), 0) AS grossAmount,
+            SUM(CASE WHEN order_status IN ('confirmed','ready_to_ship','shipping','shipped','completed') THEN 1 ELSE 0 END) AS receivedCount,
+            COALESCE(SUM(CASE WHEN order_status IN ('confirmed','ready_to_ship','shipping','shipped','completed') THEN total_amount ELSE 0 END), 0) AS receivedAmount,
+            SUM(CASE WHEN order_status IN ('shipped', 'completed') THEN 1 ELSE 0 END)          AS shippedCount,
+            SUM(CASE WHEN order_status = 'completed' THEN 1 ELSE 0 END)                        AS completedCount,
+            SUM(CASE WHEN order_status = 'cancelled' THEN 1 ELSE 0 END)                        AS cancelledCount,
+            COALESCE(SUM(
+                (SELECT COALESCE(SUM((item->>'quantity')::integer), 0)
+                 FROM jsonb_array_elements(COALESCE(items, '[]'::jsonb)) AS item)
+            ), 0)                                                                               AS itemSoldCount
         FROM orders
         WHERE merchant_id = :merchantId
           AND channel_id = :channelId

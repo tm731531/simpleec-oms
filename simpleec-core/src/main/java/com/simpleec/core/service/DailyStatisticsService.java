@@ -3,6 +3,7 @@ package com.simpleec.core.service;
 import com.simpleec.core.entity.DailyStatistics;
 import com.simpleec.core.repository.DailyStatisticsRepository;
 import com.simpleec.core.repository.OrderRepository;
+import com.simpleec.core.repository.ReturnOrderRepository;
 import com.simpleec.common.util.NanoIdUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,6 +20,7 @@ public class DailyStatisticsService {
 
     private final DailyStatisticsRepository statsRepository;
     private final OrderRepository orderRepository;
+    private final ReturnOrderRepository returnOrderRepository;
 
     @Transactional
     public void recalculate(String merchantId, String platformId, String channelId, LocalDate statDate) {
@@ -27,8 +29,12 @@ public class DailyStatisticsService {
 
         var stats = orderRepository.aggregateStatsByChannelAndDate(merchantId, channelId, statDate);
 
-        if (stats == null) {
-            log.debug("No orders found for stats recalc: {}/{}/{}/{}", merchantId, platformId, channelId, statDate);
+        // Aggregate queries always return a row; check the actual count instead of null
+        if (stats.getNewOrderCount() == null || stats.getNewOrderCount() == 0) {
+            log.debug("No orders found for stats recalc: {}/{}/{}/{} — deleting stale row if present",
+                    merchantId, platformId, channelId, statDate);
+            statsRepository.findByMerchantIdAndPlatformIdAndChannelIdAndStatDate(merchantId, platformId, channelId, statDate)
+                    .ifPresent(statsRepository::delete);
             return;
         }
 
@@ -46,15 +52,36 @@ public class DailyStatisticsService {
                     .build();
         }
 
-        existing.setOrderCount(stats.getOrderCount());
-        existing.setTotalAmount(stats.getTotalAmount());
+        long refundCount = returnOrderRepository.countByMerchantIdAndChannelIdAndStatDate(merchantId, channelId, statDate);
+        BigDecimal refundAmount = returnOrderRepository.sumRefundAmountByMerchantIdAndChannelIdAndStatDate(merchantId, channelId, statDate);
+        if (refundAmount == null) refundAmount = BigDecimal.ZERO;
+
+        BigDecimal receivedAmount = stats.getReceivedAmount() != null ? stats.getReceivedAmount() : BigDecimal.ZERO;
+        BigDecimal netAmount = receivedAmount.subtract(refundAmount);
+
+        // 業務視角
+        existing.setNewOrderCount(stats.getNewOrderCount());
+        existing.setNewOrderAmount(stats.getNewOrderAmount());
+        // 老闆視角
+        existing.setGrossOrderCount(stats.getGrossOrderCount());
+        existing.setGrossAmount(stats.getGrossAmount());
+        // 財務視角
+        existing.setReceivedCount(stats.getReceivedCount());
+        existing.setReceivedAmount(receivedAmount);
+        existing.setRefundCount((int) refundCount);
+        existing.setRefundAmount(refundAmount);
+        existing.setNetAmount(netAmount);
+        // 物流視角
         existing.setShippedCount(stats.getShippedCount());
         existing.setCompletedCount(stats.getCompletedCount());
         existing.setCancelledCount(stats.getCancelledCount());
-        existing.setRefundCount(0);
+        // 商品統計
+        existing.setItemSoldCount(stats.getItemSoldCount());
+
         statsRepository.save(existing);
 
-        log.info("Stats upserted: merchantId={}, channelId={}, date={}, orders={}, amount={}",
-                merchantId, channelId, statDate, stats.getOrderCount(), stats.getTotalAmount());
+        log.info("Stats upserted: merchantId={}, channelId={}, date={}, newOrders={}, grossAmt={}, netAmt={}",
+                merchantId, channelId, statDate,
+                stats.getNewOrderCount(), stats.getGrossAmount(), netAmount);
     }
 }

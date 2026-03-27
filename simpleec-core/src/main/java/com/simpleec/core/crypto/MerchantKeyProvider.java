@@ -44,10 +44,10 @@ public class MerchantKeyProvider {
                         "Ensure the DB seed data (02-seed-data.sql) has been applied."))
                 .getData();
 
-        // Triple Base64 decode
-        byte[] decoded = Base64.getDecoder().decode(tripleEncoded.trim());
-        decoded = Base64.getDecoder().decode(decoded);
-        decoded = Base64.getDecoder().decode(decoded);
+        // Triple Base64 decode — use MIME decoder which tolerates whitespace/newlines in all layers
+        byte[] decoded = Base64.getMimeDecoder().decode(tripleEncoded);
+        decoded = Base64.getMimeDecoder().decode(decoded);
+        decoded = Base64.getMimeDecoder().decode(decoded);
 
         if (decoded.length < 32) {
             throw new IllegalStateException(
