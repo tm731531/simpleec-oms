@@ -70,9 +70,9 @@ public class UserStatsController {
                 .findByMerchantIdAndStatDate(merchantId, today);
 
         // Aggregate across channels
-        int totalOrders = todayStats.stream().mapToInt(s -> s.getOrderCount() != null ? s.getOrderCount() : 0).sum();
+        int totalOrders = todayStats.stream().mapToInt(s -> s.getNewOrderCount() != null ? s.getNewOrderCount() : 0).sum();
         java.math.BigDecimal totalAmount = todayStats.stream()
-                .map(s -> s.getTotalAmount() != null ? s.getTotalAmount() : java.math.BigDecimal.ZERO)
+                .map(s -> s.getNewOrderAmount() != null ? s.getNewOrderAmount() : java.math.BigDecimal.ZERO)
                 .reduce(java.math.BigDecimal.ZERO, java.math.BigDecimal::add);
 
         return ResponseEntity.ok(Map.of(

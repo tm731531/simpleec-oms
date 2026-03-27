@@ -50,7 +50,15 @@ axiosInstance.interceptors.request.use(
 
 // Response interceptor
 axiosInstance.interceptors.response.use(
-  (response) => response.data.data,
+  (response) => {
+    // If the response is an AdminApiResponse wrapper (has a 'code' field),
+    // return the inner data. Otherwise, return the outer data as-is.
+    // This handles both paginated responses and plain data responses.
+    if (response.data && 'code' in response.data) {
+      return response.data.data ?? response.data
+    }
+    return response.data
+  },
   (error) => {
     if (error.response?.status === 401) {
       localStorage.removeItem('authToken')

@@ -34,8 +34,8 @@ public class UserRefundController {
     public ResponseEntity<UserPageResponse<ReturnOrder>> listRefunds(
             @AuthenticationPrincipal UserPrincipal principal,
             @RequestParam(required = false) String orderId,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size) {
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int pageSize) {
         Page<ReturnOrder> result;
         if (orderId != null) {
             List<ReturnOrder> list = returnOrderRepository.findByOrderId(orderId)
@@ -45,7 +45,7 @@ public class UserRefundController {
                 .pagination(Map.of("page", 1, "pageSize", list.size(), "total", (long) list.size(), "pages", 1))
                 .build());
         }
-        result = returnOrderRepository.findByMerchantId(principal.getMerchantId(), PageRequest.of(page, size));
+        result = returnOrderRepository.findByMerchantId(principal.getMerchantId(), PageRequest.of(page - 1, pageSize));
         return ResponseEntity.ok(UserPageResponse.from(result));
     }
 

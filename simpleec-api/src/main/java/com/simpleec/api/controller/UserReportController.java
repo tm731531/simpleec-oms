@@ -57,9 +57,9 @@ public class UserReportController {
 
         // --- Summary aggregation ---
         int totalOrders = stats.stream()
-                .mapToInt(s -> s.getOrderCount() != null ? s.getOrderCount() : 0).sum();
+                .mapToInt(s -> s.getNewOrderCount() != null ? s.getNewOrderCount() : 0).sum();
         BigDecimal totalAmount = stats.stream()
-                .map(s -> s.getTotalAmount() != null ? s.getTotalAmount() : BigDecimal.ZERO)
+                .map(s -> s.getNewOrderAmount() != null ? s.getNewOrderAmount() : BigDecimal.ZERO)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         int totalShipped = stats.stream()
                 .mapToInt(s -> s.getShippedCount() != null ? s.getShippedCount() : 0).sum();
@@ -88,9 +88,9 @@ public class UserReportController {
         Map<LocalDate, BigDecimal> byDateAmount = new TreeMap<>();
         for (DailyStatistics s : stats) {
             LocalDate d = s.getStatDate();
-            byDateOrders.merge(d, s.getOrderCount() != null ? s.getOrderCount() : 0, Integer::sum);
+            byDateOrders.merge(d, s.getNewOrderCount() != null ? s.getNewOrderCount() : 0, Integer::sum);
             byDateAmount.merge(d,
-                    s.getTotalAmount() != null ? s.getTotalAmount() : BigDecimal.ZERO,
+                    s.getNewOrderAmount() != null ? s.getNewOrderAmount() : BigDecimal.ZERO,
                     BigDecimal::add);
         }
 
@@ -108,9 +108,9 @@ public class UserReportController {
         Map<String, BigDecimal> byPlatformAmount = new LinkedHashMap<>();
         for (DailyStatistics s : stats) {
             String pid = s.getPlatformId();
-            byPlatformOrders.merge(pid, s.getOrderCount() != null ? s.getOrderCount() : 0, Integer::sum);
+            byPlatformOrders.merge(pid, s.getNewOrderCount() != null ? s.getNewOrderCount() : 0, Integer::sum);
             byPlatformAmount.merge(pid,
-                    s.getTotalAmount() != null ? s.getTotalAmount() : BigDecimal.ZERO,
+                    s.getNewOrderAmount() != null ? s.getNewOrderAmount() : BigDecimal.ZERO,
                     BigDecimal::add);
         }
 
@@ -165,7 +165,7 @@ public class UserReportController {
                 .findByMerchantIdAndStatDateBetweenOrderByStatDateDesc(merchantId, startDate, endDate);
 
         BigDecimal totalRevenue = stats.stream()
-                .map(s -> s.getTotalAmount() != null ? s.getTotalAmount() : BigDecimal.ZERO)
+                .map(s -> s.getNewOrderAmount() != null ? s.getNewOrderAmount() : BigDecimal.ZERO)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         // Load products for merchant — cost_price is the only cost data available
