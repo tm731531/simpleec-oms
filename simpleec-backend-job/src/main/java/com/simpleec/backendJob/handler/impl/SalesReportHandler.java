@@ -69,11 +69,11 @@ public class SalesReportHandler extends AbstractEventHandler {
             List<DailyStatistics> platformRecords = entry.getValue();
 
             int platformOrders = platformRecords.stream()
-                    .mapToInt(r -> r.getOrderCount() != null ? r.getOrderCount() : 0)
+                    .mapToInt(r -> r.getNewOrderCount() != null ? r.getNewOrderCount() : 0)
                     .sum();
 
             BigDecimal platformRevenue = platformRecords.stream()
-                    .map(r -> r.getTotalAmount() != null ? r.getTotalAmount() : BigDecimal.ZERO)
+                    .map(r -> r.getNewOrderAmount() != null ? r.getNewOrderAmount() : BigDecimal.ZERO)
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
 
             log.info("SALES_REPORT [{}] date={} platform={} orders={} revenue={}",

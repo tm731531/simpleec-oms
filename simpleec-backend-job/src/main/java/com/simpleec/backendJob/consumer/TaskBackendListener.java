@@ -4,9 +4,11 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.simpleec.backendJob.handler.EventHandler;
 import com.simpleec.backendJob.handler.EventHandlerRegistry;
+import com.simpleec.common.constants.TopicConstants;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
 /**
@@ -22,6 +24,7 @@ public class TaskBackendListener {
 
     private final EventHandlerRegistry handlerRegistry;
     private final ObjectMapper objectMapper;
+    private final KafkaTemplate<String, String> kafkaTemplate;
 
     /**
      * 消費 task.backend topic 中的事件
@@ -37,8 +40,8 @@ public class TaskBackendListener {
                 return;
             }
 
-            String taskType = header.get("taskType").asText();
-            String messageId = header.get("messageId").asText();
+            String taskType = header.path("taskType").asText();
+            String messageId = header.path("messageId").asText("unknown");
 
             log.debug("Received event - messageId: {}, taskType: {}", messageId, taskType);
 
@@ -46,7 +49,8 @@ public class TaskBackendListener {
             EventHandler handler = handlerRegistry.getHandler(taskType);
 
             if (handler == null) {
-                log.warn("No handler found for taskType: {}, messageId: {}", taskType, messageId);
+                log.warn("No handler found for taskType: {}, messageId: {} — routing to task.dlt", taskType, messageId);
+                kafkaTemplate.send(TopicConstants.TASK_DLT, messageId, message);
                 return;
             }
 
@@ -55,8 +59,14 @@ public class TaskBackendListener {
                 handler.handle(event);
                 log.debug("Event processed successfully - messageId: {}, taskType: {}", messageId, taskType);
             } catch (Exception e) {
-                log.error("Error handling event - messageId: {}, taskType: {}", messageId, taskType, e);
-                // 考慮是否需要重試或發送到 DLT (Dead Letter Topic)
+                log.error("Error handling event - messageId: {}, taskType: {} — routing to task.failed",
+                        messageId, taskType, e);
+                try {
+                    kafkaTemplate.send(TopicConstants.TASK_FAILED, messageId, message);
+                } catch (Exception kafkaEx) {
+                    log.error("Failed to send to task.failed, routing to task.dlt", kafkaEx);
+                    kafkaTemplate.send(TopicConstants.TASK_DLT, messageId, message);
+                }
             }
 
         } catch (Exception e) {
