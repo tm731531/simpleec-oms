@@ -42,6 +42,114 @@
 
 ---
 
+## 🔧 Stats Pipeline 修復 + Test Seeder (Mar 27, 2026 — 第二輪)
+
+### 新增功能
+- **`POST /api/user/orders`** — 接收訂單並發布 `ORDER_UPSERT` 到 Kafka，走完整事件流（不直接寫 DB）
+- **`docker/test-data-generator/`** — Python seeder，透過 API 打假訂單驗證端對端資料流
+
+### Bug Fix（共 20+ 個問題，三輪 Code Review）
+- `OrderUpsertConsumer` — `.get()` 改 `.path()` 防 NPE 連鎖，移除 unused import/param
+- `ReturnUpsertConsumer` — 補 stats dirty marker 寫入，移除 unused import/param
+- `DailyStatisticsService` — early return 時改為刪除過時 stats 列
+- `ChannelJobConsumer` — FETCH_ORDER_DETAIL 的 `.get()` 改 `.path()`
+- `RetryJobConsumer` — MissingNode cast ClassCastException 修復
+- `OrderService` — NOT NULL 欄位（isRollback/hasRefund/orderStatus）加 null 守衛
+- `01-schema.sql` — `daily_statistics.id` 加 NOT NULL；加 DEFAULT partition；enum 大小寫改大寫
+- `02-seed-data.sql` — BCrypt hash 修正；訂單狀態改大寫；daily_statistics 欄位名稱修正
+- `docker-compose.yml` — 所有 21 個 Java 容器加 `JAVA_TOOL_OPTIONS` 記憶體限制
+
+---
+
+## 🔧 全面審查修復 — Batch 1+2 (Mar 27, 2026)
+
+### 修復範圍：P0 全部 7 個 + P1-3 至 P1-7（共 12 個問題）
+
+#### P0-1: return.process Kafka topic 補建
+- `docker/init-kafka/create-topics.sh` — 加入 `return.process`（3 partitions，與 order.process 一致）
+
+#### P0-2: FetchReturnsHandler 補實作
+- 新增 `simpleec-channel-job/.../handler/FetchReturnsHandler.java` — stub 實作，防止 FETCH_RETURNS 被靜默丟棄
+- `ChannelJobConsumer.java` — 注入並加入路由分支
+
+#### P0-3: Order Entity column-length 修正
+- `simpleec-core/.../entity/Order.java` — `order_status` 和 `channel_id` 的 `length=50` 改為 `length=20`（對齊 SQL VARCHAR(20)）
+
+#### P0-4: simpleec-gateway 加入 docker-compose
+- `docker/docker-compose.yml` — 新增 `simpleec-gateway` 服務（port 8081，依賴 kafka-init）
+
+#### P0-5: ENCRYPTION_MASTER_KEY 注入
+- `docker/docker-compose.yml` — `simpleec-order-job` 和 `simpleec-api` 加入 `ENCRYPTION_MASTER_KEY: ${ENCRYPTION_MASTER_KEY:}`
+
+#### P0-6: RetryJobConsumer errorInfo wrapping 修正
+- `OrderUpsertConsumer.java` 和 `ReturnUpsertConsumer.java` — catch block 改為包裝 `errorInfo`（errorType: SERVER_ERROR_5XX）再送 task.failed，重試機制恢復正常
+
+#### P0-7: application.yml hardcoded localhost 修正（4 個模組）
+- `simpleec-api` — DB `localhost:5433` → `${DB_HOST:simpleec-postgres}:${DB_PORT:5432}`；Kafka → `${KAFKA_BOOTSTRAP_SERVERS:simpleec-kafka:9092}`
+- `simpleec-scheduler-job` — DB/Redis localhost → env vars
+- `simpleec-backend-job` — DB localhost → env var
+- `simpleec-retry-job` — DB localhost → env var
+
+#### P1-3: admin-app API response interceptor 修正
+- `admin-app/src/api/index.ts` — 改為 `response.data.data ?? response.data`，避免在 AdminApiResponse<Void> 時 crash
+
+#### P1-4: DailyStatisticsService.recalculate() refundCount 修正
+- `DailyStatisticsService.java` — 注入 `ReturnOrderRepository`，`refundCount` 改為從 `refund_orders` 實際計算
+- `ReturnOrderRepository.java` — 新增 `countByMerchantIdAndChannelIdAndStatDate()` native query
+
+#### P1-5: ChannelSyncLog Entity 補齊 request_payload / response_payload
+- `simpleec-channel-job/.../ChannelSyncLog.java` 和 `simpleec-api/.../ChannelSyncLog.java` — 各自補加兩個 TEXT 欄位映射
+
+#### P1-6: CANCEL_ORDER 路由修正
+- `UserOrderController.java` — cancel action 改為發 `CANCEL_ORDER_INTERNAL` 到 `order.process`（原本錯誤地送到 `{platform}.fast`）
+
+#### P1-7: sell_pack unique index NULL 修正
+- `docker/init-db/01-schema.sql` — unique index 改用 `COALESCE(channel_spec_id, '')` 防止 NULL 重複
+
+---
+
+## 🔧 Wave 1 深度審查修復 (Mar 26, 2026)
+
+### DB1 修復：channel_sync_logs 缺少 http_status 欄位
+**問題**：`ChannelSyncLog` Entity 有 `httpStatus` 欄位，但 `01-schema.sql` 和 `SCHEMA.md` 均無此欄位，每次寫入都會拋出 DB 錯誤
+**根本原因**：Schema 文件未與 Entity 代碼同步
+**修復**：
+- `docker/init-db/01-schema.sql` — 在 `channel_sync_logs` 加入 `http_status INTEGER`
+- `docs/4-SCHEMA/SCHEMA.md` — 同步更新
+
+### DB2 修復：sell_pack 唯一索引鍵錯誤
+**問題**：`01-schema.sql` 的唯一索引使用 `(channel_id, channel_spec_id, sku)`，但 Repository 和 Handler 都以 `(channel_id, channel_product_id, channel_spec_id)` 作為 upsert 鍵
+**根本原因**：Schema 文件與代碼邏輯不一致
+**修復**：`01-schema.sql` 唯一索引改為 `(channel_id, channel_product_id, channel_spec_id)`
+
+### K1 修復：FETCH_ORDERS/FETCH_ORDER_DETAIL retry 路由到錯誤 topic
+**問題**：`RetryJobConsumer.routeTaskToTopic()` 把 `FETCH_ORDERS` 和 `FETCH_ORDER_DETAIL` 路由到 `order.process`，但這些是 channel job 任務，應重試到 `{platform}.slow`
+**根本原因**：retry 路由邏輯未考慮 platform-specific topics
+**修復**：
+- `routeTaskToTopic()` 現在接受 `platformId` 參數
+- Channel 任務（FETCH_ORDERS/FETCH_ORDER_DETAIL/FETCH_RETURNS/FETCH_RETURN_DETAIL）→ `{platform}.slow`
+- Channel fast 任務（SHIP_ORDER/UPDATE_INVENTORY/UPDATE_PRICE/APPROVE_RETURN）→ `{platform}.fast`
+- `RetrySchedulerJob` 同步更新，從 header 讀取 `platformId`
+
+### K2 修復：FETCH_RETURNS 從未被 Scheduler 派發
+**問題**：`SchedulerEventHandler.dispatchFetchOrders()` 只派發 `FETCH_ORDERS`，`FETCH_RETURNS` 被完全遺漏，導致退貨同步中斷
+**根本原因**：`dispatchFetchOrders()` 方法未包含 FETCH_RETURNS 邏輯
+**修復**：
+- 新增 `dispatchFetchReturns()` 方法
+- 每 5 分鐘 (% 5 == 0) 同時派發 `FETCH_ORDERS` 和 `FETCH_RETURNS`
+
+### K3 修復：TaskBackendListener 無 DLT/failed 路由
+**問題**：handler 拋出 exception 時，`TaskBackendListener` 只記錄 log，不進入 retry 流程，導致任何 backend 任務失敗都靜默消失
+**根本原因**：異常處理代碼有 TODO 評論但未實作
+**修復**：handler 失敗 → 發送到 `task.failed`（進入 retry 流程）；task.failed 發送失敗 → 直接到 `task.dlt`
+
+### 文件整合
+- `docs/3-EVENT-FLOW/event-flows/DB_ENTITY_GAPS.md` — 改為 REF stub，指向 `docs/4-SCHEMA/DB_ENTITY_GAPS.md`（正式文件）
+- `docs/3-EVENT-FLOW/HANDLER_REGISTRY.md` — 更新 Scheduler 派發表，加入 FETCH_RETURNS，修正 STATS_RECALC 記錄
+- `docs/4-SCHEMA/SCHEMA.md` — 同步 channel_sync_logs http_status 欄位
+
+---
+
 ## 🔧 最近的关键修复和新功能 (Feb 24-25, 2026)
 
 ### 修复1：API 端点路由 (Commits 0ed6853, 7f594a7)
