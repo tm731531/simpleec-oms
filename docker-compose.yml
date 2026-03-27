@@ -151,6 +151,7 @@ services:
       JOB_CHANNEL_TOPICS: momo.fast
       JOB_CHANNEL_GROUP_ID: channel-job-momo
       JOB_CHANNEL_CONCURRENCY: '3'
+      JAVA_TOOL_OPTIONS: "-Xmx256m -XX:+ExitOnOutOfMemoryError"
     depends_on:
       postgres:
         condition: service_healthy
@@ -178,6 +179,7 @@ services:
       JOB_CHANNEL_TOPICS: momo.slow
       JOB_CHANNEL_GROUP_ID: channel-job-momo
       JOB_CHANNEL_CONCURRENCY: '3'
+      JAVA_TOOL_OPTIONS: "-Xmx256m -XX:+ExitOnOutOfMemoryError"
     depends_on:
       postgres:
         condition: service_healthy
@@ -205,6 +207,7 @@ services:
       JOB_CHANNEL_TOPICS: shopee.fast
       JOB_CHANNEL_GROUP_ID: channel-job-shopee
       JOB_CHANNEL_CONCURRENCY: '3'
+      JAVA_TOOL_OPTIONS: "-Xmx256m -XX:+ExitOnOutOfMemoryError"
     depends_on:
       postgres:
         condition: service_healthy
@@ -232,6 +235,7 @@ services:
       JOB_CHANNEL_TOPICS: shopee.slow
       JOB_CHANNEL_GROUP_ID: channel-job-shopee
       JOB_CHANNEL_CONCURRENCY: '3'
+      JAVA_TOOL_OPTIONS: "-Xmx256m -XX:+ExitOnOutOfMemoryError"
     depends_on:
       postgres:
         condition: service_healthy
@@ -259,6 +263,7 @@ services:
       JOB_CHANNEL_TOPICS: yahoo.fast
       JOB_CHANNEL_GROUP_ID: channel-job-yahoo
       JOB_CHANNEL_CONCURRENCY: '3'
+      JAVA_TOOL_OPTIONS: "-Xmx256m -XX:+ExitOnOutOfMemoryError"
     depends_on:
       postgres:
         condition: service_healthy
@@ -286,6 +291,7 @@ services:
       JOB_CHANNEL_TOPICS: yahoo.slow
       JOB_CHANNEL_GROUP_ID: channel-job-yahoo
       JOB_CHANNEL_CONCURRENCY: '3'
+      JAVA_TOOL_OPTIONS: "-Xmx256m -XX:+ExitOnOutOfMemoryError"
     depends_on:
       postgres:
         condition: service_healthy
@@ -313,6 +319,7 @@ services:
       JOB_CHANNEL_TOPICS: pchome.fast
       JOB_CHANNEL_GROUP_ID: channel-job-pchome
       JOB_CHANNEL_CONCURRENCY: '3'
+      JAVA_TOOL_OPTIONS: "-Xmx256m -XX:+ExitOnOutOfMemoryError"
     depends_on:
       postgres:
         condition: service_healthy
@@ -340,6 +347,7 @@ services:
       JOB_CHANNEL_TOPICS: pchome.slow
       JOB_CHANNEL_GROUP_ID: channel-job-pchome
       JOB_CHANNEL_CONCURRENCY: '3'
+      JAVA_TOOL_OPTIONS: "-Xmx256m -XX:+ExitOnOutOfMemoryError"
     depends_on:
       postgres:
         condition: service_healthy
@@ -367,6 +375,7 @@ services:
       JOB_CHANNEL_TOPICS: cyberbiz.fast
       JOB_CHANNEL_GROUP_ID: channel-job-cyberbiz
       JOB_CHANNEL_CONCURRENCY: '3'
+      JAVA_TOOL_OPTIONS: "-Xmx256m -XX:+ExitOnOutOfMemoryError"
       CYBERBIZ_API_BASE_URL: https://api.cyberbiz.co
       CYBERBIZ_API_TOKEN: ${CYBERBIZ_API_TOKEN}
     depends_on:
@@ -396,6 +405,7 @@ services:
       JOB_CHANNEL_TOPICS: cyberbiz.slow
       JOB_CHANNEL_GROUP_ID: channel-job-cyberbiz
       JOB_CHANNEL_CONCURRENCY: '3'
+      JAVA_TOOL_OPTIONS: "-Xmx256m -XX:+ExitOnOutOfMemoryError"
       CYBERBIZ_API_BASE_URL: https://api.cyberbiz.co
       CYBERBIZ_API_TOKEN: ${CYBERBIZ_API_TOKEN}
     depends_on:
@@ -425,6 +435,7 @@ services:
       JOB_CHANNEL_TOPICS: shopline.fast
       JOB_CHANNEL_GROUP_ID: channel-job-shopline
       JOB_CHANNEL_CONCURRENCY: '3'
+      JAVA_TOOL_OPTIONS: "-Xmx256m -XX:+ExitOnOutOfMemoryError"
     depends_on:
       postgres:
         condition: service_healthy
@@ -452,6 +463,7 @@ services:
       JOB_CHANNEL_TOPICS: shopline.slow
       JOB_CHANNEL_GROUP_ID: channel-job-shopline
       JOB_CHANNEL_CONCURRENCY: '3'
+      JAVA_TOOL_OPTIONS: "-Xmx256m -XX:+ExitOnOutOfMemoryError"
     depends_on:
       postgres:
         condition: service_healthy
@@ -479,6 +491,7 @@ services:
       JOB_CHANNEL_TOPICS: shopify.fast
       JOB_CHANNEL_GROUP_ID: channel-job-shopify
       JOB_CHANNEL_CONCURRENCY: '3'
+      JAVA_TOOL_OPTIONS: "-Xmx256m -XX:+ExitOnOutOfMemoryError"
     depends_on:
       postgres:
         condition: service_healthy
@@ -506,6 +519,7 @@ services:
       JOB_CHANNEL_TOPICS: shopify.slow
       JOB_CHANNEL_GROUP_ID: channel-job-shopify
       JOB_CHANNEL_CONCURRENCY: '3'
+      JAVA_TOOL_OPTIONS: "-Xmx256m -XX:+ExitOnOutOfMemoryError"
     depends_on:
       postgres:
         condition: service_healthy
@@ -522,6 +536,7 @@ services:
     container_name: simpleec-order-job
     environment:
       SPRING_PROFILES_ACTIVE: docker
+      JAVA_TOOL_OPTIONS: "-Xmx384m -XX:+ExitOnOutOfMemoryError"
       DB_HOST: postgres
       DB_PORT: '5432'
       DB_NAME: simpleec
@@ -546,6 +561,7 @@ services:
     container_name: simpleec-scheduler-job
     environment:
       SPRING_PROFILES_ACTIVE: docker
+      JAVA_TOOL_OPTIONS: "-Xmx192m -XX:+ExitOnOutOfMemoryError"
       DB_HOST: postgres
       DB_PORT: '5432'
       DB_NAME: simpleec
@@ -572,6 +588,7 @@ services:
     container_name: simpleec-backend-job
     environment:
       SPRING_PROFILES_ACTIVE: docker
+      JAVA_TOOL_OPTIONS: "-Xmx384m -XX:+ExitOnOutOfMemoryError"
       DB_HOST: postgres
       DB_PORT: '5432'
       DB_NAME: simpleec
@@ -596,6 +613,7 @@ services:
     container_name: simpleec-frontend-job
     environment:
       SPRING_PROFILES_ACTIVE: docker
+      JAVA_TOOL_OPTIONS: "-Xmx192m -XX:+ExitOnOutOfMemoryError"
       DB_HOST: postgres
       DB_PORT: '5432'
       DB_NAME: simpleec
@@ -620,6 +638,7 @@ services:
     container_name: simpleec-retry-job
     environment:
       SPRING_PROFILES_ACTIVE: docker
+      JAVA_TOOL_OPTIONS: "-Xmx192m -XX:+ExitOnOutOfMemoryError"
       DB_HOST: postgres
       DB_PORT: '5432'
       DB_NAME: simpleec
@@ -646,6 +665,7 @@ services:
     - 8082:8080
     environment:
       SPRING_PROFILES_ACTIVE: docker
+      JAVA_TOOL_OPTIONS: "-Xmx512m -XX:+ExitOnOutOfMemoryError"
       SERVER_PORT: '8080'
       SERVER_SERVLET_CONTEXT_PATH: /
       DB_HOST: postgres
@@ -677,6 +697,7 @@ services:
       - "8081:8081"
     environment:
       SPRING_PROFILES_ACTIVE: docker
+      JAVA_TOOL_OPTIONS: "-Xmx256m -XX:+ExitOnOutOfMemoryError"
       KAFKA_BOOTSTRAP_SERVERS: simpleec-kafka:9092
       WEBHOOK_SECRET_SHOPIFY: ${WEBHOOK_SECRET_SHOPIFY:}
       WEBHOOK_SECRET_SHOPEE: ${WEBHOOK_SECRET_SHOPEE:}
@@ -713,6 +734,19 @@ services:
       simpleec-api:
         condition: service_healthy
     restart: unless-stopped
+  simpleec-test-seeder:
+    image: simpleec-test-seeder
+    build:
+      context: docker/test-data-generator
+      dockerfile: Dockerfile
+    container_name: simpleec-test-seeder
+    environment:
+      PYTHONUNBUFFERED: "1"
+    profiles:
+    - test
+    depends_on:
+      simpleec-api:
+        condition: service_healthy
   simpleec-nginx:
     image: simpleec-nginx
     build:

@@ -49,6 +49,81 @@ public class UserOrderController {
     private final OrderStatusLogRepository statusLogRepository;
     private final OrderShipmentRepository shipmentRepository;
 
+    /**
+     * POST /api/user/orders
+     * 接收訂單並發布 ORDER_UPSERT 到 order.process，走完整事件流：
+     * Kafka → OrderUpsertConsumer → DB → stats dirty marker → DailyStatisticsService
+     */
+    @PostMapping
+    public ResponseEntity<?> receiveOrder(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @RequestBody Map<String, Object> requestBody) {
+
+        String channelId = (String) requestBody.get("channelId");
+        String channelOrderId = (String) requestBody.get("channelOrderId");
+
+        if (channelId == null || channelOrderId == null) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "channelId and channelOrderId are required"));
+        }
+
+        Optional<Channel> channelOpt = channelRepository.findById(channelId);
+        if (channelOpt.isEmpty()) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "Channel not found: " + channelId));
+        }
+        Channel channel = channelOpt.get();
+        if (!principal.getMerchantId().equals(channel.getMerchantId())) {
+            return ResponseEntity.status(403)
+                    .body(Map.of("error", "Channel does not belong to your merchant"));
+        }
+
+        Optional<Platform> platformOpt = platformRepository.findById(channel.getPlatformId());
+        String platformId = platformOpt.map(p -> p.getPlatformName().toLowerCase()).orElse("unknown");
+
+        // Build orderData (strip routing fields)
+        Map<String, Object> orderData = new HashMap<>(requestBody);
+        orderData.remove("channelId");
+        orderData.remove("channelOrderId");
+        String channelOrderNumber = (String) orderData.remove("channelOrderNumber");
+
+        // Deterministic hash for dedup: status + amount change triggers re-process
+        String hashInput = channelOrderId + ":"
+                + orderData.getOrDefault("orderStatus", "") + ":"
+                + orderData.getOrDefault("totalAmount", "");
+        String orderHash = org.apache.commons.codec.digest.DigestUtils.sha256Hex(hashInput);
+
+        Map<String, Object> header = new HashMap<>();
+        header.put("taskType", "ORDER_UPSERT");
+        header.put("merchantId", principal.getMerchantId());
+        header.put("channelId", channelId);
+        header.put("platformId", platformId);
+        header.put("messageId", UUID.randomUUID().toString());
+        header.put("version", 1);
+        header.put("isRollback", false);
+        header.put("timestamp", Instant.now().toString());
+        header.put("source", "api");
+
+        Map<String, Object> body = new HashMap<>();
+        body.put("channelOrderId", channelOrderId);
+        if (channelOrderNumber != null) body.put("channelOrderNumber", channelOrderNumber);
+        body.put("orderHash", orderHash);
+        body.put("orderData", orderData);
+
+        Map<String, Object> message = new HashMap<>();
+        message.put("header", header);
+        message.put("body", body);
+
+        kafkaTemplate.send(TopicConstants.ORDER_PROCESS, channelOrderId, message);
+        log.info("Published ORDER_UPSERT for {} from {} (merchant {})",
+                channelOrderId, channelId, principal.getMerchantId());
+
+        return ResponseEntity.accepted().body(Map.of(
+                "channelOrderId", channelOrderId,
+                "status", "accepted"
+        ));
+    }
+
     @GetMapping
     public ResponseEntity<UserPageResponse<OrderVO>> listOrders(
             @AuthenticationPrincipal UserPrincipal principal,
@@ -139,11 +214,13 @@ public class UserOrderController {
                 order.setOrderStatus(OrderStatusEnum.SHIPPED);
                 order.setShippedAt(LocalDateTime.now());
                 order = orderRepository.save(order);
-                publishOrderEvent(order, "SHIP_ORDER", body.get("trackingNumber"));
+                publishShipOrderEvent(order,
+                        (String) body.get("trackingNumber"),
+                        (String) body.get("carrier"));
             } else if ("cancel".equals(action)) {
                 order.setOrderStatus(OrderStatusEnum.CANCELLED);
                 order = orderRepository.save(order);
-                publishOrderEvent(order, "CANCEL_ORDER", body.get("reason"));
+                publishCancelOrderEvent(order, body.get("reason"));
             } else {
                 return ResponseEntity.badRequest().build();
             }
@@ -221,6 +298,88 @@ public class UserOrderController {
             });
         } catch (Exception e) {
             log.warn("Failed to publish Kafka event for order {}: {}", order.getId(), e.getMessage());
+        }
+    }
+
+    /**
+     * Publishes a SHIP_ORDER event to the platform fast topic.
+     * Body includes channelOrderId, trackingNumber, and carrier so the channel handler
+     * can call the platform shipment confirmation API.
+     */
+    private void publishShipOrderEvent(Order order, String trackingNumber, String carrier) {
+        try {
+            Optional<Channel> channelOpt = channelRepository.findById(order.getChannelId());
+            channelOpt.ifPresent(channel -> {
+                Optional<Platform> platformOpt = platformRepository.findById(channel.getPlatformId());
+                platformOpt.ifPresent(platform -> {
+                    String topic = TopicConstants.platformFastTopic(platform.getPlatformName().toLowerCase());
+
+                    Map<String, Object> header = new HashMap<>();
+                    header.put("taskType", "SHIP_ORDER");
+                    header.put("merchantId", order.getMerchantId());
+                    header.put("platformId", platform.getPlatformName().toLowerCase());
+                    header.put("channelId", order.getChannelId());
+                    header.put("requestId", UUID.randomUUID().toString());
+                    header.put("timestamp", Instant.now().toString());
+                    header.put("source", "api");
+                    header.put("version", 1);
+                    header.put("isRollback", false);
+
+                    Map<String, Object> body = new HashMap<>();
+                    body.put("orderId", order.getId());
+                    body.put("channelOrderId", order.getChannelOrderId());
+                    if (trackingNumber != null) body.put("trackingNumber", trackingNumber);
+                    if (carrier != null) body.put("carrier", carrier);
+
+                    Map<String, Object> message = new HashMap<>();
+                    message.put("header", header);
+                    message.put("body", body);
+
+                    kafkaTemplate.send(topic, order.getId(), message);
+                    log.info("Published SHIP_ORDER to {}", topic);
+                });
+            });
+        } catch (Exception e) {
+            log.warn("Failed to publish SHIP_ORDER for order {}: {}", order.getId(), e.getMessage());
+        }
+    }
+
+    /**
+     * Publishes a CANCEL_ORDER_INTERNAL event to order.process topic so it is handled
+     * by the order state machine (OrderUpsertConsumer / CancelOrderHandler) instead of
+     * being routed to a platform fast topic.
+     */
+    private void publishCancelOrderEvent(Order order, Object reason) {
+        try {
+            Optional<Channel> channelOpt = channelRepository.findById(order.getChannelId());
+            channelOpt.ifPresent(channel -> {
+                Optional<Platform> platformOpt = platformRepository.findById(channel.getPlatformId());
+                platformOpt.ifPresent(platform -> {
+                    Map<String, Object> header = new HashMap<>();
+                    header.put("taskType", "CANCEL_ORDER_INTERNAL");
+                    header.put("merchantId", order.getMerchantId());
+                    header.put("platformId", platform.getPlatformName().toLowerCase());
+                    header.put("channelId", order.getChannelId());
+                    header.put("requestId", UUID.randomUUID().toString());
+                    header.put("timestamp", Instant.now().toString());
+                    header.put("source", "api");
+                    header.put("version", 1);
+                    header.put("isRollback", false);
+
+                    Map<String, Object> body = new HashMap<>();
+                    body.put("orderId", order.getId());
+                    if (reason != null) body.put("reason", reason);
+
+                    Map<String, Object> message = new HashMap<>();
+                    message.put("header", header);
+                    message.put("body", body);
+
+                    kafkaTemplate.send(TopicConstants.ORDER_PROCESS, order.getId(), message);
+                    log.info("Published CANCEL_ORDER_INTERNAL to {}", TopicConstants.ORDER_PROCESS);
+                });
+            });
+        } catch (Exception e) {
+            log.warn("Failed to publish cancel event for order {}: {}", order.getId(), e.getMessage());
         }
     }
 }
