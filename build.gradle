@@ -28,6 +28,11 @@ subprojects {
         compileOnly {
             extendsFrom annotationProcessor
         }
+        // Force jsqlparser 4.9 — mybatis-plus 3.5.5 brings in 4.6, but
+        // spring-data-jpa 3.5.0 requires 4.7+ (Select.getPlainSelect())
+        all {
+            resolutionStrategy.force 'com.github.jsqlparser:jsqlparser:4.9'
+        }
     }
 
     dependencies {
