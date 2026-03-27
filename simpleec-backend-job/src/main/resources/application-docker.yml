@@ -11,3 +11,7 @@ spring:
     bootstrap-servers: kafka:9092
     consumer:
       bootstrap-servers: kafka:9092
+  data:
+    redis:
+      host: redis
+      port: 6379

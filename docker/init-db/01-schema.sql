@@ -287,10 +287,10 @@ CREATE INDEX idx_sellpack_merchant ON public.sell_pack (merchant_id);
 CREATE INDEX idx_sellpack_channel ON public.sell_pack (channel_id);
 CREATE INDEX idx_sellpack_product ON public.sell_pack (product_id);
 CREATE INDEX idx_sellpack_sku ON public.sell_pack (sku);
--- Unique Key: 同一個 channel + 同一個 spec (規格) + 同一個 sku (通路 SKU/賣編)
--- 允許同一個 product 在同一個 channel 上重複上架（不同規格/SKU 組合）
+-- Unique Key: 同一個 channel + 同一個 channel_product + 同一個 channel_spec (規格)
+-- 允許同一個 product 在同一個 channel 上重複上架（不同規格組合）
 CREATE UNIQUE INDEX idx_sellpack_upsert_key
-    ON public.sell_pack (channel_id, channel_spec_id, sku);
+    ON public.sell_pack (channel_id, channel_product_id, COALESCE(channel_spec_id, ''));
 
 -- ---------------------------------------------------------------------------
 -- 13. orders — Orders with JSONB items (FK → channel)
@@ -301,7 +301,7 @@ CREATE TABLE public.orders (
     channel_id         VARCHAR(20)   NOT NULL,
     channel_order_id     VARCHAR(100)  NOT NULL,
     channel_order_number VARCHAR(100),
-    order_status         VARCHAR(20)   NOT NULL DEFAULT 'pending',
+    order_status         VARCHAR(20)   NOT NULL DEFAULT 'PENDING',
     buyer_name         VARCHAR(512),
     buyer_phone        VARCHAR(256),
     buyer_email        VARCHAR(512),
@@ -315,6 +315,8 @@ CREATE TABLE public.orders (
     discount_amount    DECIMAL(12,2) NOT NULL DEFAULT 0,
     items              JSONB         NOT NULL DEFAULT '[]',
     is_rollback        BOOLEAN       NOT NULL DEFAULT false,
+    refund_amount      NUMERIC(15,2) NOT NULL DEFAULT 0,
+    has_refund         BOOLEAN       NOT NULL DEFAULT false,
     channel_created_at TIMESTAMPTZ,
     paid_at            TIMESTAMPTZ,
     shipped_at         TIMESTAMPTZ,
@@ -330,6 +332,7 @@ CREATE INDEX idx_order_merchant_status ON public.orders (merchant_id, order_stat
 CREATE INDEX idx_order_created ON public.orders (created_at DESC);
 CREATE INDEX idx_order_items ON public.orders USING GIN (items);
 CREATE INDEX idx_order_stats ON public.orders (merchant_id, channel_id, channel_created_at);
+CREATE INDEX idx_order_has_refund ON public.orders (merchant_id, has_refund) WHERE has_refund = true;
 
 -- ---------------------------------------------------------------------------
 -- 14. order_status_logs — Order status change history (FK → orders)
@@ -357,7 +360,7 @@ CREATE TABLE public.order_shipments (
     order_id          VARCHAR(20)  NOT NULL,
     tracking_number   VARCHAR(100),
     logistics_company VARCHAR(100),
-    shipping_status   VARCHAR(20)  NOT NULL DEFAULT 'pending',
+    shipping_status   VARCHAR(20)  NOT NULL DEFAULT 'PENDING',
     shipped_at        TIMESTAMPTZ,
     delivered_at      TIMESTAMPTZ,
     created_at        TIMESTAMPTZ  NOT NULL DEFAULT now(),
@@ -377,7 +380,7 @@ CREATE TABLE public.refund_orders (
     order_id          VARCHAR(20)   NOT NULL,
     merchant_id       VARCHAR(20)   NOT NULL,
     channel_refund_id VARCHAR(100),
-    refund_status     VARCHAR(20)   NOT NULL DEFAULT 'pending',
+    refund_status     VARCHAR(20)   NOT NULL DEFAULT 'PENDING',
     refund_amount     DECIMAL(12,2) NOT NULL DEFAULT 0,
     reason            TEXT,
     requested_at      TIMESTAMPTZ,               -- 退貨申請時間（來自通路）
@@ -400,6 +403,7 @@ CREATE TABLE public.channel_sync_logs (
     merchant_id      VARCHAR(20)  NOT NULL,
     channel_id       VARCHAR(20)  NOT NULL,
     sync_type        VARCHAR(50)  NOT NULL,
+    http_status      INTEGER,
     status           VARCHAR(20)  NOT NULL DEFAULT 'success',
     health           VARCHAR(20),
     request_payload  TEXT,
@@ -416,19 +420,31 @@ CREATE INDEX idx_sync_log_merchant ON public.channel_sync_logs (merchant_id, cre
 -- 18. daily_statistics — Daily stats, partitioned by stat_date
 -- ---------------------------------------------------------------------------
 CREATE TABLE public.daily_statistics (
-    id              VARCHAR(20),
-    merchant_id     VARCHAR(20)   NOT NULL,
-    platform_id     VARCHAR(20)   NOT NULL,
-    channel_id      VARCHAR(20)   NOT NULL,
-    stat_date       DATE          NOT NULL,
-    order_count     INTEGER       DEFAULT 0,
-    total_amount    NUMERIC(15,2) DEFAULT 0,
-    shipped_count   INTEGER       DEFAULT 0,
-    completed_count INTEGER       DEFAULT 0,
-    cancelled_count INTEGER       DEFAULT 0,
-    refund_count    INTEGER       DEFAULT 0,
-    created_at      TIMESTAMPTZ   DEFAULT now(),
-    updated_at      TIMESTAMPTZ   DEFAULT now(),
+    id                  VARCHAR(20)    NOT NULL,
+    merchant_id         VARCHAR(20)    NOT NULL,
+    platform_id         VARCHAR(20)    NOT NULL,
+    channel_id          VARCHAR(20)    NOT NULL,
+    stat_date           DATE           NOT NULL,
+    -- 業務視角：當日新增訂單（channel_created_at = statDate）
+    new_order_count     INTEGER        DEFAULT 0,
+    new_order_amount    NUMERIC(15,2)  DEFAULT 0,
+    -- 老闆視角：營業額（排除 cancelled）
+    gross_order_count   INTEGER        DEFAULT 0,
+    gross_amount        NUMERIC(15,2)  DEFAULT 0,
+    -- 財務視角：實收（confirmed 以上狀態）
+    received_count      INTEGER        DEFAULT 0,
+    received_amount     NUMERIC(15,2)  DEFAULT 0,
+    refund_count        INTEGER        DEFAULT 0,
+    refund_amount       NUMERIC(15,2)  DEFAULT 0,
+    net_amount          NUMERIC(15,2)  DEFAULT 0,
+    -- 物流視角
+    shipped_count       INTEGER        DEFAULT 0,
+    completed_count     INTEGER        DEFAULT 0,
+    cancelled_count     INTEGER        DEFAULT 0,
+    -- 商品統計
+    item_sold_count     INTEGER        DEFAULT 0,
+    created_at          TIMESTAMPTZ    DEFAULT now(),
+    updated_at          TIMESTAMPTZ    DEFAULT now(),
     PRIMARY KEY (id, stat_date)
 ) PARTITION BY RANGE (stat_date);
 
@@ -483,6 +499,9 @@ CREATE TABLE public.daily_statistics_2026_11
 CREATE TABLE public.daily_statistics_2026_12
     PARTITION OF public.daily_statistics
     FOR VALUES FROM ('2026-12-01') TO ('2027-01-01');
+
+CREATE TABLE public.daily_statistics_default
+    PARTITION OF public.daily_statistics DEFAULT;
 
 -- ---------------------------------------------------------------------------
 -- 19. failed_task_logs — Kafka failed task logs (independent)
