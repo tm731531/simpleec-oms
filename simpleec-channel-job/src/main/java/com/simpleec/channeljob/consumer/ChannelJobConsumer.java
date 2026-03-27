@@ -3,9 +3,15 @@ package com.simpleec.channeljob.consumer;
 import com.simpleec.channel.adapter.ChannelAdapter;
 import com.simpleec.channel.adapter.CyberbizAdapter;
 import com.simpleec.channeljob.entity.Channel;
+import com.simpleec.channeljob.handler.ApproveReturnHandler;
+import com.simpleec.channeljob.handler.FetchReturnsHandler;
 import com.simpleec.channeljob.handler.ModeAOrderListHandler;
 import com.simpleec.channeljob.handler.ModeBOrderListHandler;
 import com.simpleec.channeljob.handler.ModeBOrderDetailHandler;
+import com.simpleec.channeljob.handler.RejectReturnHandler;
+import com.simpleec.channeljob.handler.ShipOrderHandler;
+import com.simpleec.channeljob.handler.UpdateInventoryHandler;
+import com.simpleec.channeljob.handler.UpdatePriceHandler;
 import com.simpleec.channeljob.service.ChannelService;
 import com.simpleec.channeljob.service.HealthCheckService;
 import com.simpleec.common.constants.TopicConstants;
@@ -46,9 +52,15 @@ import java.util.Arrays;
 @RequiredArgsConstructor
 public class ChannelJobConsumer {
 
+    private final ApproveReturnHandler approveReturnHandler;
+    private final FetchReturnsHandler fetchReturnsHandler;
     private final ModeAOrderListHandler modeAOrderListHandler;
     private final ModeBOrderListHandler modeBOrderListHandler;
     private final ModeBOrderDetailHandler modeBOrderDetailHandler;
+    private final RejectReturnHandler rejectReturnHandler;
+    private final ShipOrderHandler shipOrderHandler;
+    private final UpdateInventoryHandler updateInventoryHandler;
+    private final UpdatePriceHandler updatePriceHandler;
     private final ObjectMapper objectMapper;
     private final ChannelService channelService;
     private final HealthCheckService healthCheckService;
@@ -180,7 +192,13 @@ public class ChannelJobConsumer {
             JsonNode header = json.get("header");
             JsonNode body = json.get("body");
 
-            String taskType = header.get("taskType").asText();
+            if (header == null || body == null) {
+                log.error("Malformed channel message: missing header or body — routing to DLT");
+                kafkaTemplate.send(TopicConstants.TASK_DLT, "ChannelJob", messageJson);
+                return;
+            }
+
+            String taskType = header.path("taskType").asText();
             String platformCode = extractPlatformFromGroupId();
 
             log.debug("Processing {} message for {}", taskType, platformCode);
@@ -193,7 +211,12 @@ public class ChannelJobConsumer {
             }
 
             // 其他 taskType 需要 channelId 和 merchantId
-            String channelId = header.get("channelId").asText();
+            String channelId = header.path("channelId").asText("");
+            if (channelId.isBlank()) {
+                log.error("Channel message missing channelId for taskType={} — routing to DLT", taskType);
+                kafkaTemplate.send(TopicConstants.TASK_DLT, "ChannelJob", messageJson);
+                return;
+            }
 
             // 從數據庫查詢 Channel，獲得真實的 merchantId
             Channel channel = channelService.getChannel(channelId);
@@ -214,16 +237,26 @@ public class ChannelJobConsumer {
             if ("FETCH_ORDERS".equals(taskType)) {
                 handleFetchOrders(platformCode, channelId, merchantId, body, baseTimestamp);
             } else if ("FETCH_ORDER_DETAIL".equals(taskType)) {
-                String channelOrderId = body.get("channelOrderId").asText();
+                String channelOrderId = body.path("channelOrderId").asText();
                 handleFetchOrderDetail(platformCode, channelId, merchantId, channelOrderId);
+            } else if ("FETCH_RETURNS".equals(taskType)) {
+                fetchReturnsHandler.handleFetchReturns(platformCode, channelId, merchantId, baseTimestamp);
             } else if ("CHECK_HEALTH".equals(taskType)) {
                 // 檢查特定通路的 token 健康狀況
                 healthCheckService.performChannelHealthCheck(channelId);
                 log.info("Health check completed for channel {}", channelId);
             } else if ("SYNC_PACK".equals(taskType)) {
                 log.debug("SYNC_PACK not implemented yet");
-            } else if ("SHIP_ORDER".equals(taskType) || "UPDATE_INVENTORY".equals(taskType) || "UPDATE_PRICE".equals(taskType)) {
-                log.debug("{} not implemented yet", taskType);
+            } else if ("SHIP_ORDER".equals(taskType)) {
+                shipOrderHandler.handleShipOrder(platformCode, channelId, merchantId, body);
+            } else if ("UPDATE_INVENTORY".equals(taskType)) {
+                updateInventoryHandler.handleUpdateInventory(platformCode, channelId, merchantId, body);
+            } else if ("UPDATE_PRICE".equals(taskType)) {
+                updatePriceHandler.handleUpdatePrice(platformCode, channelId, merchantId, body);
+            } else if ("APPROVE_RETURN".equals(taskType)) {
+                approveReturnHandler.handleApproveReturn(platformCode, channelId, merchantId, body);
+            } else if ("REJECT_RETURN".equals(taskType)) {
+                rejectReturnHandler.handleRejectReturn(platformCode, channelId, merchantId, body);
             } else {
                 log.warn("Unknown taskType: {}", taskType);
             }

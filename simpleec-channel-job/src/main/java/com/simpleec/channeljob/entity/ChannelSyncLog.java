@@ -44,6 +44,12 @@ public class ChannelSyncLog {
     @Column(nullable = true)
     private String health; // "healthy" or "unhealthy"
 
+    @Column(name = "request_payload", columnDefinition = "TEXT")
+    private String requestPayload;
+
+    @Column(name = "response_payload", columnDefinition = "TEXT")
+    private String responsePayload;
+
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
