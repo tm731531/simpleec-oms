@@ -136,8 +136,11 @@ public class RetryJobConsumer {
     private void scheduleRetry(JsonNode message, int newRetryCount, long delayMs, String taskId) throws Exception {
         ObjectNode updatedMessage = message.deepCopy();
 
-        // Update retryCount inside body.errorInfo
-        ObjectNode errorInfo = (ObjectNode) updatedMessage.path("body").path("errorInfo");
+        // Update retryCount inside body.errorInfo — ensure body and errorInfo exist as ObjectNodes
+        JsonNode bodyNode = updatedMessage.path("body");
+        ObjectNode body = bodyNode.isObject() ? (ObjectNode) bodyNode : updatedMessage.putObject("body");
+        JsonNode errorInfoNode = body.path("errorInfo");
+        ObjectNode errorInfo = errorInfoNode.isObject() ? (ObjectNode) errorInfoNode : body.putObject("errorInfo");
         errorInfo.put("retryCount", newRetryCount);
         errorInfo.put("lastRetryTime", Instant.now().toString());
 
@@ -167,16 +170,41 @@ public class RetryJobConsumer {
 
     /**
      * Route a taskType to its target Kafka topic for retry re-publishing.
-     * Unknown task types route to DLT (should not reach here due to earlier check).
+     * Channel-specific tasks require platformId to resolve the platform slow/fast topic.
+     * Unknown task types route to DLT.
+     *
+     * @param taskType   the task type from the message header
+     * @param platformId the platform from the message header (e.g. "shopee", "momo"),
+     *                   or null/blank for non-channel tasks
      */
-    public String routeTaskToTopic(String taskType) {
+    public String routeTaskToTopic(String taskType, String platformId) {
+        boolean hasPlatform = platformId != null && !platformId.isBlank();
+
         return switch (taskType) {
-            case "FETCH_ORDERS", "FETCH_ORDER_DETAIL" -> TopicConstants.ORDER_PROCESS;
+            // Channel slow tasks → retry to the same platform slow topic
+            case "FETCH_ORDERS", "FETCH_ORDER_DETAIL", "FETCH_RETURNS", "FETCH_RETURN_DETAIL" -> {
+                if (!hasPlatform) {
+                    log.warn("routeTaskToTopic: {} has no platformId, routing to DLT", taskType);
+                    yield TopicConstants.TASK_DLT;
+                }
+                yield TopicConstants.platformSlowTopic(platformId.toLowerCase());
+            }
+            // SYNC_PACK: channel job uses platformId → slow topic; backend job has no platformId → task.backend
+            case "SYNC_PACK" -> hasPlatform
+                    ? TopicConstants.platformSlowTopic(platformId.toLowerCase())
+                    : TopicConstants.TASK_BACKEND;
+            // Channel fast tasks → retry to the same platform fast topic
+            case "SHIP_ORDER", "UPDATE_INVENTORY", "UPDATE_PRICE", "APPROVE_RETURN", "REJECT_RETURN" -> {
+                if (!hasPlatform) {
+                    log.warn("routeTaskToTopic: {} has no platformId, routing to DLT", taskType);
+                    yield TopicConstants.TASK_DLT;
+                }
+                yield TopicConstants.platformFastTopic(platformId.toLowerCase());
+            }
             case "ORDER_UPSERT", "ORDER_STATUS_CHANGE", "CANCEL_ORDER_INTERNAL" -> TopicConstants.ORDER_PROCESS;
-            case "RETURN_UPSERT", "APPROVE_RETURN_INTERNAL", "REJECT_RETURN" -> TopicConstants.RETURN_PROCESS;
-            case "SYNC_PRODUCT", "SYNC_PACK" -> TopicConstants.TASK_BACKEND;
-            case "ORDER_REPORT", "INVENTORY_REPORT", "SALES_REPORT", "RETURN_REPORT", "DAILY_REPORT" -> TopicConstants.TASK_BACKEND;
-            case "KAFKA_HEALTH_CHECK", "HEARTBEAT" -> TopicConstants.TASK_BACKEND;
+            case "RETURN_UPSERT", "APPROVE_RETURN_INTERNAL" -> TopicConstants.RETURN_PROCESS;
+            case "SYNC_PRODUCT", "ORDER_REPORT", "INVENTORY_REPORT", "SALES_REPORT",
+                 "RETURN_REPORT", "DAILY_REPORT", "KAFKA_HEALTH_CHECK", "HEARTBEAT" -> TopicConstants.TASK_BACKEND;
             default -> TopicConstants.TASK_DLT;
         };
     }

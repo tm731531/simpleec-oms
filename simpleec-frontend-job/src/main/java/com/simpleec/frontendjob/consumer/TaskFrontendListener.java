@@ -7,7 +7,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
-import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Component;
 import java.time.LocalDateTime;
@@ -22,7 +21,7 @@ public class TaskFrontendListener {
     private static final DateTimeFormatter ISO_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'");
 
     @KafkaListener(topics = "task.frontend", groupId = "frontend-job-group", concurrency = "4")
-    public void consumeFrontendTask(@Payload String message, Acknowledgment acknowledgment) {
+    public void consumeFrontendTask(@Payload String message) {
         try {
             JsonNode json = objectMapper.readTree(message);
             JsonNode header = json.get("header");
@@ -30,7 +29,6 @@ public class TaskFrontendListener {
 
             if (header == null || body == null) {
                 log.warn("Invalid message format: missing header or body");
-                acknowledgment.acknowledge();
                 return;
             }
 
@@ -52,11 +50,9 @@ public class TaskFrontendListener {
                 .build();
 
             eventBroadcaster.broadcastToMerchant(event.getMerchantId(), event);
-            acknowledgment.acknowledge();
             log.debug("Successfully processed frontend task: {}", event.getRequestId());
         } catch (Exception e) {
             log.error("Error processing frontend task message", e);
-            acknowledgment.acknowledge();
         }
     }
 

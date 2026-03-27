@@ -54,8 +54,9 @@ public class RetrySchedulerJob {
                 try {
                     JsonNode msg = objectMapper.readTree(msgJson);
                     String taskType = msg.path("header").path("taskType").asText("");
+                    String platformId = msg.path("header").path("platformId").asText("");
                     String taskId = msg.path("header").path("messageId").asText("unknown");
-                    String targetTopic = retryJobConsumer.routeTaskToTopic(taskType);
+                    String targetTopic = retryJobConsumer.routeTaskToTopic(taskType, platformId);
 
                     // Re-publish the message (with header/body intact, including originalHeader/originalBody)
                     kafkaTemplate.send(targetTopic, taskId, msgJson);

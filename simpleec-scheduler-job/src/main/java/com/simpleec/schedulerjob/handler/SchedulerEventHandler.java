@@ -62,6 +62,7 @@ public class SchedulerEventHandler {
             // :00, :05, :10, :15 ...
             if (mod5 == 0) {
                 dispatchFetchOrders(timestamp);
+                dispatchFetchReturns(timestamp);
             }
 
             // :01, :06, :11 ...
@@ -131,6 +132,39 @@ public class SchedulerEventHandler {
 
         } catch (Exception e) {
             log.error("Error in dispatchFetchOrders", e);
+        }
+    }
+
+    /**
+     * 派發 FETCH_RETURNS 到已啟用通路的 slow topic
+     * 與 FETCH_ORDERS 同時觸發（每 5 分鐘）
+     */
+    private void dispatchFetchReturns(long timestamp) {
+        try {
+            log.info("Dispatching FETCH_RETURNS at {}", DateUtil.toIsoString(timestamp));
+
+            List<Channel> enabledChannels = channelRepository.findByActivedTrueAndEnableSyncTrue();
+
+            if (enabledChannels.isEmpty()) {
+                log.warn("No enabled channels found for FETCH_RETURNS dispatch");
+                return;
+            }
+
+            for (Channel channel : enabledChannels) {
+                try {
+                    String platformId = channel.getPlatformId().toLowerCase();
+                    String topic = TopicConstants.platformSlowTopic(platformId);
+                    ObjectNode message = buildFetchOrdersMessage(TaskTypeEnum.FETCH_RETURNS, timestamp, channel);
+
+                    kafkaTemplate.send(topic, message.get("header").get("requestId").asText(), message);
+                    log.debug("Sent FETCH_RETURNS to {} topic for channel {}", topic, channel.getId());
+                } catch (Exception e) {
+                    log.error("Error dispatching FETCH_RETURNS for channel {}", channel.getId(), e);
+                }
+            }
+
+        } catch (Exception e) {
+            log.error("Error in dispatchFetchReturns", e);
         }
     }
 
