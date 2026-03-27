@@ -11,18 +11,14 @@ import com.simpleec.common.util.RedisKeyUtil;
 import com.simpleec.common.util.NanoIdUtil;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.kafka.support.Acknowledgment;
-import org.springframework.kafka.support.KafkaHeaders;
-import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -51,16 +47,19 @@ public class OrderUpsertConsumer {
      * 消費 order.process topic
      */
     @KafkaListener(topics = "order.process", groupId = "order-job-group", concurrency = "3")
-    @Transactional
-    public void consumeOrderUpsert(@Payload JsonNode json,
-                                   @Header(name = "kafka_receivedPartitionId") int partition,
-                                   Acknowledgment acknowledgment) {
+    public void consumeOrderUpsert(@Payload String messageJson) {
+        JsonNode json;
+        try {
+            json = objectMapper.readTree(messageJson);
+        } catch (Exception e) {
+            log.error("Failed to parse ORDER_UPSERT message as JSON: {}", e.getMessage());
+            return;
+        }
         try {
             SchemaVersionHandler.validate(json);
         } catch (UnsupportedSchemaVersionException e) {
             log.error("Unsupported schema version in ORDER_UPSERT message: {}", e.getMessage());
             kafkaTemplate.send("task.dlt", "OrderUpsert", json);
-            acknowledgment.acknowledge();
             return;
         }
 
@@ -69,24 +68,37 @@ public class OrderUpsertConsumer {
             JsonNode header = json.get("header");
             JsonNode body = json.get("body");
 
-            String taskType = header.get("taskType").asText();
-
-            if (!taskType.equals("ORDER_UPSERT")) {
-                log.warn("Unexpected taskType: {} in OrderUpsertConsumer", taskType);
-                acknowledgment.acknowledge();
+            if (header == null || body == null) {
+                log.error("Malformed ORDER_UPSERT message: missing header or body, routing to DLT");
+                kafkaTemplate.send("task.dlt", "OrderUpsert", json.toString());
                 return;
             }
 
-            // 解析訊息
-            String merchantId = header.get("merchantId").asText();
-            String channelId = header.get("channelId").asText();
-            String platformId = header.has("platformId") ? header.get("platformId").asText() : "unknown";
-            String channelOrderId = body.get("channelOrderId").asText();
+            String taskType = header.path("taskType").asText();
+
+            if (!taskType.equals("ORDER_UPSERT")) {
+                log.warn("Unexpected taskType: {} in OrderUpsertConsumer", taskType);
+                return;
+            }
+
+            // 解析訊息 — 使用 path() 防禦缺欄位
+            String merchantId = header.path("merchantId").asText();
+            String channelId = header.path("channelId").asText();
+            String platformId = header.path("platformId").asText("unknown");
+            String channelOrderId = body.path("channelOrderId").asText();
             String channelOrderNumber = body.has("channelOrderNumber")
                 ? body.get("channelOrderNumber").asText() : null;
-            String orderHash = body.get("orderHash").asText();
+            String orderHash = body.path("orderHash").asText();
             JsonNode orderDataJson = body.get("orderData");
-            boolean isRollback = header.has("isRollback") ? header.get("isRollback").asBoolean() : false;
+            boolean isRollback = header.path("isRollback").asBoolean(false);
+
+            // 守衛必要欄位
+            if (merchantId.isBlank() || channelId.isBlank() || channelOrderId.isBlank()
+                    || orderHash.isBlank() || orderDataJson == null || orderDataJson.isNull()) {
+                log.error("ORDER_UPSERT missing required fields (merchantId/channelId/channelOrderId/orderHash/orderData) — routing to DLT");
+                kafkaTemplate.send("task.dlt", "OrderUpsert", json.toString());
+                return;
+            }
 
             log.info("Processing ORDER_UPSERT: {} from {} (hash: {}, isRollback: {})",
                 channelOrderId, channelId, orderHash.substring(0, 8) + "...", isRollback);
@@ -100,22 +112,27 @@ public class OrderUpsertConsumer {
                 EncryptionContext.clear();
             }
 
-            // 手動提交 offset（確保訂單已入庫）
-            acknowledgment.acknowledge();
-
             log.info("Successfully processed ORDER_UPSERT: {}", channelOrderId);
 
         } catch (Exception e) {
             log.error("Error processing ORDER_UPSERT: {}", e.getMessage(), e);
             try {
-                // 發送到失敗隊列供人工處理或異步重試
-                kafkaTemplate.send("task.failed", "OrderUpsert", json);
+                // Wrap message with errorInfo envelope for RetryJobConsumer
+                ObjectNode wrappedMessage = json.deepCopy();
+                ObjectNode body = wrappedMessage.has("body") && wrappedMessage.get("body").isObject()
+                    ? (ObjectNode) wrappedMessage.get("body")
+                    : objectMapper.createObjectNode();
+                ObjectNode errorInfo = objectMapper.createObjectNode();
+                errorInfo.put("errorType", "SERVER_ERROR_5XX");
+                errorInfo.put("errorMessage", e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
+                errorInfo.put("retryCount", 0);
+                body.set("errorInfo", errorInfo);
+                wrappedMessage.set("body", body);
+                kafkaTemplate.send("task.failed", "OrderUpsert", wrappedMessage.toString());
                 log.info("Message sent to task.failed topic");
             } catch (Exception sendError) {
                 log.error("Failed to send message to task.failed", sendError);
             }
-            // 確認消息 - 避免無限重複
-            acknowledgment.acknowledge();
         } finally {
             TaskMdcHelper.clear();
         }

@@ -5,19 +5,17 @@ import com.simpleec.orderjob.handler.ReturnUpsertHandler;
 import com.simpleec.common.kafka.SchemaVersionHandler;
 import com.simpleec.common.kafka.TaskMdcHelper;
 import com.simpleec.common.kafka.UnsupportedSchemaVersionException;
+import com.simpleec.common.util.RedisKeyUtil;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.kafka.support.Acknowledgment;
-import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
-
 /**
  * ReturnUpsert Consumer — 退貨入庫的 Kafka 監聽器
  *
@@ -32,6 +30,7 @@ public class ReturnUpsertConsumer {
     private final ReturnUpsertHandler returnUpsertHandler;
     private final ObjectMapper objectMapper;
     private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final StringRedisTemplate redisTemplate;
 
     /**
      * 提取並驗證字串欄位 — 確保欄位存在、非空且非 null
@@ -51,16 +50,19 @@ public class ReturnUpsertConsumer {
      * Consume return.process topic
      */
     @KafkaListener(topics = "return.process", groupId = "return-job-group", concurrency = "3")
-    @Transactional
-    public void consumeReturnUpsert(@Payload JsonNode json,
-                                    @Header(name = "kafka_receivedPartitionId") int partition,
-                                    Acknowledgment acknowledgment) {
+    public void consumeReturnUpsert(@Payload String messageJson) {
+        JsonNode json;
+        try {
+            json = objectMapper.readTree(messageJson);
+        } catch (Exception e) {
+            log.error("Failed to parse RETURN_UPSERT message as JSON: {}", e.getMessage());
+            return;
+        }
         try {
             SchemaVersionHandler.validate(json);
         } catch (UnsupportedSchemaVersionException e) {
             log.error("Unsupported schema version in RETURN_UPSERT message: {}", e.getMessage());
             kafkaTemplate.send("task.dlt", "ReturnUpsert", json);
-            acknowledgment.acknowledge();
             return;
         }
 
@@ -74,12 +76,12 @@ public class ReturnUpsertConsumer {
 
                 if (!taskType.equals("RETURN_UPSERT")) {
                     log.warn("Unexpected taskType: {} in ReturnUpsertConsumer", taskType);
-                    acknowledgment.acknowledge();
                     return;
                 }
 
                 String merchantId = extractAndValidateString(header, "merchantId");
                 String channelId = extractAndValidateString(header, "channelId");
+                String platformId = header.path("platformId").asText("unknown");
                 String channelRefundId = extractAndValidateString(body, "channelRefundId");
                 String returnHash = extractAndValidateString(body, "returnHash");
 
@@ -95,7 +97,15 @@ public class ReturnUpsertConsumer {
                 EncryptionContext.setMerchantId(merchantId);
                 try {
                     returnUpsertHandler.handleReturnUpsert(merchantId, channelId, channelRefundId, returnHash, returnDataJson);
-                    acknowledgment.acknowledge();
+                    // Mark stats dirty so refund count/amount changes trigger recalculation
+                    try {
+                        String statDate = java.time.LocalDate.now().toString();
+                        String member = RedisKeyUtil.statsDirtyMember(merchantId, platformId, channelId, statDate);
+                        redisTemplate.opsForZSet().add(RedisKeyUtil.STATS_DIRTY_KEY, member, System.currentTimeMillis());
+                        log.debug("Marked stats dirty for return: {}", member);
+                    } catch (Exception redisEx) {
+                        log.warn("Failed to write stats dirty marker for return {}", channelRefundId, redisEx);
+                    }
                     log.info("Successfully processed RETURN_UPSERT: {}", channelRefundId);
                 } catch (Exception e) {
                     log.error("Error processing RETURN_UPSERT for {}: {}", channelRefundId, e.getMessage(), e);
@@ -116,15 +126,12 @@ public class ReturnUpsertConsumer {
                     } catch (Exception sendError) {
                         log.error("Failed to send message to task.failed", sendError);
                     }
-                    // Always acknowledge to avoid infinite reprocessing
-                    acknowledgment.acknowledge();
                 } finally {
                     EncryptionContext.clear();
                 }
 
             } catch (IllegalArgumentException e) {
                 log.error("Invalid message structure: {}", e.getMessage());
-                acknowledgment.acknowledge();
             }
 
         } catch (Exception e) {
@@ -145,12 +152,6 @@ public class ReturnUpsertConsumer {
                 log.info("Message sent to task.failed topic");
             } catch (Exception sendError) {
                 log.error("Failed to send message to task.failed", sendError);
-            }
-            // Always acknowledge to avoid infinite reprocessing
-            try {
-                acknowledgment.acknowledge();
-            } catch (Exception ackError) {
-                log.error("Failed to acknowledge message during error handling", ackError);
             }
         } finally {
             TaskMdcHelper.clear();

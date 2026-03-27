@@ -13,9 +13,12 @@ spring:
     consumer:
       group-id: order-job-group
       auto-offset-reset: earliest
-  redis:
-    host: simpleec-redis
-    port: 6379
+    listener:
+      ack-mode: manual_immediate
+  data:
+    redis:
+      host: simpleec-redis
+      port: 6379
 
 server:
   port: 8085

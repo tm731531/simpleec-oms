@@ -8,11 +8,12 @@ spring:
     consumer:
       group-id: ${JOB_CHANNEL_GROUP_ID:channel-job-group}
       auto-offset-reset: earliest
-  redis:
-    host: ${REDIS_HOST:localhost}
-    port: ${REDIS_PORT:6379}
-    database: 0
-    timeout: 2000
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      database: 0
+      timeout: 2000
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:simpleec_oms}
     username: ${DB_USER:postgres}

@@ -16,9 +16,10 @@ spring:
     consumer:
       group-id: order-job-group
       auto-offset-reset: earliest
-  redis:
-    host: redis
-    port: 6379
+  data:
+    redis:
+      host: redis
+      port: 6379
 
 server:
   port: 8085
