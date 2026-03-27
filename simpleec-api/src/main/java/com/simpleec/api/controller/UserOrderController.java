@@ -8,9 +8,13 @@ import com.simpleec.common.constants.TopicConstants;
 import com.simpleec.common.enums.OrderStatusEnum;
 import com.simpleec.core.entity.Channel;
 import com.simpleec.core.entity.Order;
+import com.simpleec.core.entity.OrderShipment;
+import com.simpleec.core.entity.OrderStatusLog;
 import com.simpleec.core.entity.Platform;
 import com.simpleec.core.repository.ChannelRepository;
 import com.simpleec.core.repository.OrderRepository;
+import com.simpleec.core.repository.OrderShipmentRepository;
+import com.simpleec.core.repository.OrderStatusLogRepository;
 import com.simpleec.core.repository.PlatformRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -42,6 +46,8 @@ public class UserOrderController {
     private final ChannelRepository channelRepository;
     private final PlatformRepository platformRepository;
     private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final OrderStatusLogRepository statusLogRepository;
+    private final OrderShipmentRepository shipmentRepository;
 
     @GetMapping
     public ResponseEntity<UserPageResponse<OrderVO>> listOrders(
@@ -145,6 +151,41 @@ public class UserOrderController {
         } finally {
             EncryptionContext.clear();
         }
+    }
+
+    /**
+     * GET /api/user/orders/{orderId}/shipments
+     * Returns all shipment records for a specific order.
+     */
+    @GetMapping("/{orderId}/shipments")
+    public ResponseEntity<List<OrderShipment>> listShipmentsForOrder(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable String orderId) {
+
+        Optional<Order> orderOpt = orderRepository.findById(orderId);
+        if (orderOpt.isEmpty() || !principal.getMerchantId().equals(orderOpt.get().getMerchantId())) {
+            return ResponseEntity.notFound().build();
+        }
+        List<OrderShipment> shipments = shipmentRepository.findByOrderId(orderId);
+        return ResponseEntity.ok(shipments);
+    }
+
+    /**
+     * GET /api/user/orders/{id}/status-logs
+     * Returns the full status change history for an order, oldest-first.
+     * Use this to render a timeline in the UI.
+     */
+    @GetMapping("/{id}/status-logs")
+    public ResponseEntity<List<OrderStatusLog>> getStatusLogs(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable String id) {
+
+        Optional<Order> orderOpt = orderRepository.findById(id);
+        if (orderOpt.isEmpty() || !principal.getMerchantId().equals(orderOpt.get().getMerchantId())) {
+            return ResponseEntity.notFound().build();
+        }
+        List<OrderStatusLog> logs = statusLogRepository.findByOrderIdOrderByCreatedAtAsc(id);
+        return ResponseEntity.ok(logs);
     }
 
     private void publishOrderEvent(Order order, String taskType, Object metadata) {

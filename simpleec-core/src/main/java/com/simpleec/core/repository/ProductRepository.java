@@ -4,6 +4,8 @@ import com.simpleec.core.entity.Product;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
@@ -38,4 +40,11 @@ public interface ProductRepository extends JpaRepository<Product, String> {
      * 查詢庫存低於安全值的商品
      */
     Page<Product> findByMerchantIdAndQuantityLessThan(String merchantId, Integer safetyQuantity, Pageable pageable);
+
+    /**
+     * Find products where quantity <= safety_quantity (low-stock alert).
+     * Uses a JPQL column-vs-column comparison which Spring Data derived queries cannot express.
+     */
+    @Query("SELECT p FROM Product p WHERE p.merchantId = :merchantId AND p.quantity <= p.safetyQuantity")
+    Page<Product> findLowStockByMerchantId(@Param("merchantId") String merchantId, Pageable pageable);
 }
