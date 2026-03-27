@@ -75,6 +75,7 @@ done
 echo ""
 echo "[$(date '+%H:%M:%S')] Creating Order Processing Topics..."
 create_topic "order.process" "$PARTITIONS"
+create_topic "return.process" "$PARTITIONS"
 
 # System Topics (scheduler, task management) - 1 partition (low volume)
 echo ""

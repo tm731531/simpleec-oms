@@ -11,17 +11,17 @@ spring:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
   datasource:
-    url: jdbc:postgresql://localhost:5433/simpleec
+    url: jdbc:postgresql://${DB_HOST:simpleec-postgres}:${DB_PORT:5432}/simpleec
     username: simpleec
     password: simpleec123
     driver-class-name: org.postgresql.Driver
   kafka:
-    bootstrap-servers: localhost:9092
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:simpleec-kafka:9092}
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
     consumer:
-      bootstrap-servers: localhost:9092
+      bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:simpleec-kafka:9092}
       group-id: api-consumer-group
       auto-offset-reset: earliest
 

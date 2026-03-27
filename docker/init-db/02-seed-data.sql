@@ -58,10 +58,10 @@ INSERT INTO public.account (
     account_tel, is_main_account, access_level, merchant_id, status
 ) VALUES
 ('a_main_001', '王大明', 'wang@health-food.com.tw',
- '$2a$10$dummyhashfordevonly000000000000000000000000000000',
+ 'password',
  '0912345678', true, 9, 'm_test_001', 'enable'),
 ('a_sub_001', '李小華', 'lee@health-food.com.tw',
- '$2a$10$dummyhashfordevonly000000000000000000000000000000',
+ 'password',
  '0923456789', false, 5, 'm_test_001', 'enable');
 
 -- ---------------------------------------------------------------------------
@@ -170,19 +170,19 @@ INSERT INTO public.orders (
     items, channel_created_at, paid_at, shipped_at
 ) VALUES
 -- Order 1: completed
-('ord_001', 'm_test_001', 'ch_momo_001', 'MOMO-ORD-20260201-001', 'completed',
+('ord_001', 'm_test_001', 'ch_momo_001', 'MOMO-ORD-20260201-001', 'COMPLETED',
  '陳小明', '0911222333', 'chen@example.com', '台北市信義區松高路1號',
  '宅配', '信用卡', 1580.00, 0.00, 0.00,
  '[{"sku":"HGJ-60-12","channelProductId":"MOMO-SKU-98765","channelSpecId":"MOMO-SPEC-98765-A","channelProductName":"MOMO養生雞精禮盒限定組","channelSpecName":"60ml×12入(單盒)","productName":"養生雞精禮盒 60ml×12入","quantity":2,"unitPrice":790.00,"subtotal":1580.00,"sellPackId":"sp_momo_001","productId":"pd_hgj6012"}]'::jsonb,
  '2026-02-01 10:30:00+08', '2026-02-01 10:35:00+08', '2026-02-02 14:00:00+08'),
 -- Order 2: shipped
-('ord_002', 'm_test_001', 'ch_momo_001', 'MOMO-ORD-20260205-002', 'shipped',
+('ord_002', 'm_test_001', 'ch_momo_001', 'MOMO-ORD-20260205-002', 'SHIPPED',
  '林美麗', '0922333444', 'lin@example.com', '新北市板橋區中山路100號',
  '宅配', '貨到付款', 770.00, 60.00, 0.00,
  '[{"sku":"HGJ-60-6","channelProductId":"MOMO-SKU-98766","channelSpecId":null,"channelProductName":"MOMO養生雞精隨身組","channelSpecName":null,"productName":"養生雞精禮盒 60ml×6入","quantity":1,"unitPrice":420.00,"subtotal":420.00,"sellPackId":"sp_momo_002","productId":"pd_hgj606"},{"sku":"GTP-100","channelProductId":"MOMO-SKU-55555","channelSpecId":null,"channelProductName":"MOMO有機綠茶粉嚴選","channelSpecName":null,"productName":"有機綠茶粉 100g","quantity":1,"unitPrice":350.00,"subtotal":350.00,"sellPackId":"sp_momo_003","productId":"pd_greentea"}]'::jsonb,
  '2026-02-05 15:20:00+08', '2026-02-05 15:25:00+08', '2026-02-06 09:00:00+08'),
 -- Order 3: pending
-('ord_003', 'm_test_001', 'ch_shopee_001', 'SHOPEE-ORD-20260208-001', 'pending',
+('ord_003', 'm_test_001', 'ch_shopee_001', 'SHOPEE-ORD-20260208-001', 'PENDING',
  '張大華', '0933444555', 'chang@example.com', '台中市西屯區台灣大道四段200號',
  '超商取貨', '信用卡', 820.00, 0.00, 0.00,
  '[{"sku":"HGJ-60-12","channelProductId":"SHOPEE-ITEM-112233","channelSpecId":"SHOPEE-VAR-A1","channelProductName":"養生堂滴雞精12入經典組","channelSpecName":"經典12入","productName":"養生雞精禮盒 60ml×12入","quantity":1,"unitPrice":820.00,"subtotal":820.00,"sellPackId":"sp_shopee_001","productId":"pd_hgj6012"}]'::jsonb,
@@ -215,7 +215,7 @@ INSERT INTO public.refund_orders (
     refund_status, refund_amount, reason, items
 ) VALUES (
     'rf_001', 'ord_001', 'm_test_001', 'MOMO-REFUND-001',
-    'approved', 790.00, '商品瑕疵，退一盒',
+    'APPROVED', 790.00, '商品瑕疵，退一盒',
     '[{"sku":"HGJ-60-12","channelProductId":"MOMO-SKU-98765","channelSpecId":"MOMO-SPEC-98765-A","productName":"MOMO養生雞精禮盒限定組","quantity":1,"refundAmount":790.00,"sellPackId":"sp_momo_001","productId":"pd_hgj6012"}]'::jsonb
 );
 
@@ -233,11 +233,16 @@ INSERT INTO public.channel_sync_logs (
 -- ---------------------------------------------------------------------------
 INSERT INTO public.daily_statistics (
     id, merchant_id, platform_id, channel_id, stat_date,
-    order_count, total_amount, shipped_count, completed_count, cancelled_count, refund_count
+    new_order_count, new_order_amount,
+    gross_order_count, gross_amount,
+    received_count, received_amount,
+    refund_count, refund_amount, net_amount,
+    shipped_count, completed_count, cancelled_count
 ) VALUES
-('ds_001', 'm_test_001', 'momo',   'ch_momo_001',   '2026-02-08', 2, 2350.00, 1, 1, 0, 1),
-('ds_002', 'm_test_001', 'shopee', 'ch_shopee_001', '2026-02-08', 1, 820.00,  0, 0, 0, 0),
-('ds_003', 'm_test_001', '_ALL_',  '_ALL_',         '2026-02-08', 3, 3170.00, 1, 1, 0, 1);
+('ds_001', 'm_test_001', 'momo',   'ch_momo_001',   '2026-02-08',
+ 2, 2350.00, 2, 2350.00, 2, 2350.00, 1, 790.00, 1560.00, 1, 1, 0),
+('ds_002', 'm_test_001', 'shopee', 'ch_shopee_001', '2026-02-08',
+ 1, 820.00,  1, 820.00,  0, 0.00,    0, 0.00,   820.00,  0, 0, 0);
 
 -- ---------------------------------------------------------------------------
 -- channel_shipping_mapping
