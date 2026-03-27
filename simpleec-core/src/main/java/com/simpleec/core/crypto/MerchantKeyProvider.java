@@ -1,58 +1,64 @@
 package com.simpleec.core.crypto;
 
-import org.springframework.beans.factory.annotation.Value;
+import com.simpleec.core.repository.GlobalConfigRepository;
 import org.springframework.stereotype.Component;
 
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.PBEKeySpec;
 import java.nio.charset.StandardCharsets;
-import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
+import java.security.spec.InvalidKeySpecException;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Derives per-merchant AES-256 keys from a master key using HKDF (RFC 5869).
+ * Derives per-merchant AES-256 keys from a master key stored in global_config.
  *
- * Key derivation: HKDF(masterKey, salt=merchantId, info="simpleec-pii-v1", length=32)
- * This ensures each merchant's data is encrypted with a unique key.
+ * Key derivation:
+ *   1. Read global_config.data where id='encryption_master_key'
+ *   2. Triple Base64 decode → raw masterKey bytes
+ *   3. PBKDF2WithHmacSHA256(password=masterKey, salt=merchantId, iterations=210_000, keyLen=256)
  *
- * Configure via: ENCRYPTION_MASTER_KEY env var (32 bytes, base64-encoded).
- * Generate a key: openssl rand -base64 32
+ * The master key is stored triple-encoded for transport safety.
+ * Per-merchant keys are cached after first derivation.
  *
- * WARNING: If ENCRYPTION_MASTER_KEY changes, all existing encrypted data becomes unreadable.
- * A key rotation strategy must be implemented before changing the master key in production.
+ * WARNING: Changing the master key in global_config makes all existing encrypted data unreadable.
  */
 @Component
 public class MerchantKeyProvider {
 
-    private static final String HMAC_ALGO = "HmacSHA256";
-    private static final byte[] HKDF_INFO = "simpleec-pii-v1".getBytes(StandardCharsets.UTF_8);
-    private static final int KEY_LENGTH = 32; // 256 bits for AES-256
+    private static final String KDF_ALGO = "PBKDF2WithHmacSHA256";
+    private static final int PBKDF2_ITERATIONS = 210_000;
+    private static final int AES_KEY_BITS = 256;
+    private static final String GLOBAL_CONFIG_KEY_ID = "encryption_master_key";
 
     private final byte[] masterKey;
-    // Cache derived keys to avoid repeated HKDF computation (bounded by merchant count)
     private final ConcurrentHashMap<String, byte[]> keyCache = new ConcurrentHashMap<>(64);
 
-    public MerchantKeyProvider(@Value("${encryption.master-key:}") String masterKeyBase64) {
-        if (masterKeyBase64 == null || masterKeyBase64.isBlank()) {
-            throw new IllegalStateException(
-                "ENCRYPTION_MASTER_KEY is not configured. " +
-                "Set 'encryption.master-key' or the ENCRYPTION_MASTER_KEY environment variable. " +
-                "Generate with: openssl rand -base64 32");
-        }
-        byte[] decoded = Base64.getDecoder().decode(masterKeyBase64.trim());
+    public MerchantKeyProvider(GlobalConfigRepository globalConfigRepository) {
+        String tripleEncoded = globalConfigRepository
+                .findById(GLOBAL_CONFIG_KEY_ID)
+                .orElseThrow(() -> new IllegalStateException(
+                        "encryption_master_key not found in global_config table. " +
+                        "Ensure the DB seed data (02-seed-data.sql) has been applied."))
+                .getData();
+
+        // Triple Base64 decode
+        byte[] decoded = Base64.getDecoder().decode(tripleEncoded.trim());
+        decoded = Base64.getDecoder().decode(decoded);
+        decoded = Base64.getDecoder().decode(decoded);
+
         if (decoded.length < 32) {
             throw new IllegalStateException(
-                "ENCRYPTION_MASTER_KEY must be at least 32 bytes (256 bits). Got: " + decoded.length);
+                "encryption_master_key decoded to " + decoded.length + " bytes; expected >= 32.");
         }
-        this.masterKey = Arrays.copyOf(decoded, KEY_LENGTH);
+        this.masterKey = Arrays.copyOf(decoded, 32);
     }
 
     /**
      * Returns the AES-256 key for the given merchantId.
-     * Result is cached. Cache is never evicted (merchant count is bounded).
+     * Result is cached. Safe for concurrent use.
      */
     public byte[] getKeyForMerchant(String merchantId) {
         if (merchantId == null || merchantId.isBlank()) {
@@ -61,24 +67,17 @@ public class MerchantKeyProvider {
         return keyCache.computeIfAbsent(merchantId, this::deriveKey);
     }
 
-    /** HKDF (RFC 5869) using HmacSHA256. Java 17 compatible (no BouncyCastle needed). */
     private byte[] deriveKey(String merchantId) {
         try {
+            char[] password = Base64.getEncoder().encodeToString(masterKey).toCharArray();
             byte[] salt = merchantId.getBytes(StandardCharsets.UTF_8);
-            // Step 1: HKDF-Extract — PRK = HMAC-SHA256(salt, IKM)
-            Mac mac = Mac.getInstance(HMAC_ALGO);
-            mac.init(new SecretKeySpec(salt, HMAC_ALGO));
-            byte[] prk = mac.doFinal(masterKey);
-
-            // Step 2: HKDF-Expand — OKM = HMAC-SHA256(PRK, info || 0x01)
-            mac.init(new SecretKeySpec(prk, HMAC_ALGO));
-            mac.update(HKDF_INFO);
-            mac.update((byte) 0x01); // counter = 1 (sufficient for 32 bytes)
-            byte[] okm = mac.doFinal();
-
-            return Arrays.copyOf(okm, KEY_LENGTH);
-        } catch (NoSuchAlgorithmException | InvalidKeyException e) {
-            throw new IllegalStateException("HKDF key derivation failed for merchant: " + merchantId, e);
+            PBEKeySpec spec = new PBEKeySpec(password, salt, PBKDF2_ITERATIONS, AES_KEY_BITS);
+            SecretKeyFactory skf = SecretKeyFactory.getInstance(KDF_ALGO);
+            byte[] derived = skf.generateSecret(spec).getEncoded();
+            spec.clearPassword();
+            return derived;
+        } catch (NoSuchAlgorithmException | InvalidKeySpecException e) {
+            throw new IllegalStateException("PBKDF2 key derivation failed for merchant: " + merchantId, e);
         }
     }
 }

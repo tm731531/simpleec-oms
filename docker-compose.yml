@@ -667,6 +667,24 @@ services:
       retries: 30
       start_period: 60s
     restart: unless-stopped
+  simpleec-gateway:
+    image: simpleec-gateway
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.gateway
+    container_name: simpleec-gateway
+    ports:
+      - "8081:8081"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      KAFKA_BOOTSTRAP_SERVERS: simpleec-kafka:9092
+      WEBHOOK_SECRET_SHOPIFY: ${WEBHOOK_SECRET_SHOPIFY:}
+      WEBHOOK_SECRET_SHOPEE: ${WEBHOOK_SECRET_SHOPEE:}
+      WEBHOOK_SECRET_EASYSTORE: ${WEBHOOK_SECRET_EASYSTORE:}
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
   simpleec-user-app:
     image: simpleec-user-app
     build:

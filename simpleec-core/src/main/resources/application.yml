@@ -1,2 +1,0 @@
-encryption:
-  master-key: ${ENCRYPTION_MASTER_KEY:}

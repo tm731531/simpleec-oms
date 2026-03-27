@@ -7,6 +7,7 @@ import com.simpleec.common.kafka.TaskMdcHelper;
 import com.simpleec.common.kafka.UnsupportedSchemaVersionException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -99,8 +100,18 @@ public class ReturnUpsertConsumer {
                 } catch (Exception e) {
                     log.error("Error processing RETURN_UPSERT for {}: {}", channelRefundId, e.getMessage(), e);
                     try {
-                        // Send to failed queue for async retry or manual intervention
-                        kafkaTemplate.send("task.failed", "ReturnUpsert", json);
+                        // Wrap message with errorInfo envelope for RetryJobConsumer
+                        ObjectNode wrappedMessage = json.deepCopy();
+                        ObjectNode errorBody = wrappedMessage.has("body") && wrappedMessage.get("body").isObject()
+                            ? (ObjectNode) wrappedMessage.get("body")
+                            : objectMapper.createObjectNode();
+                        ObjectNode errorInfo = objectMapper.createObjectNode();
+                        errorInfo.put("errorType", "SERVER_ERROR_5XX");
+                        errorInfo.put("errorMessage", e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
+                        errorInfo.put("retryCount", 0);
+                        errorBody.set("errorInfo", errorInfo);
+                        wrappedMessage.set("body", errorBody);
+                        kafkaTemplate.send("task.failed", "ReturnUpsert", wrappedMessage.toString());
                         log.info("Message sent to task.failed topic");
                     } catch (Exception sendError) {
                         log.error("Failed to send message to task.failed", sendError);
@@ -119,8 +130,18 @@ public class ReturnUpsertConsumer {
         } catch (Exception e) {
             log.error("Error processing RETURN_UPSERT message: {}", e.getMessage(), e);
             try {
-                // Send to failed queue for async retry or manual intervention
-                kafkaTemplate.send("task.failed", "ReturnUpsert", json);
+                // Wrap message with errorInfo envelope for RetryJobConsumer
+                ObjectNode wrappedMessage = json.deepCopy();
+                ObjectNode errorBody2 = wrappedMessage.has("body") && wrappedMessage.get("body").isObject()
+                    ? (ObjectNode) wrappedMessage.get("body")
+                    : objectMapper.createObjectNode();
+                ObjectNode errorInfo = objectMapper.createObjectNode();
+                errorInfo.put("errorType", "SERVER_ERROR_5XX");
+                errorInfo.put("errorMessage", e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
+                errorInfo.put("retryCount", 0);
+                errorBody2.set("errorInfo", errorInfo);
+                wrappedMessage.set("body", errorBody2);
+                kafkaTemplate.send("task.failed", "ReturnUpsert", wrappedMessage.toString());
                 log.info("Message sent to task.failed topic");
             } catch (Exception sendError) {
                 log.error("Failed to send message to task.failed", sendError);
