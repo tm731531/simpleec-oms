@@ -52,8 +52,8 @@ Handler 2: FetchOrderDetailHandler
 | 平台 | 模式 | Handler 數 | 詳情 | 參考文檔 |
 |------|------|-----------|------|---------|
 | **Shopee** | Mode B | 2 | 列表 API 不含 items/payment/shipping；需二次詳情呼叫 | CHANNEL_IMPLEMENTATION_GUIDE §2.0 |
-| **Shopify** | Mode A | 1 | 列表 API 已含完整訊息；直接轉 PROCESS_ORDER | CHANNEL_IMPLEMENTATION_GUIDE §2.0 |
-| **easystore** | Mode A | 1 | 列表 API 含 50 張完整訂單；直接轉 PROCESS_ORDER | CHANNEL_IMPLEMENTATION_GUIDE §2.0 |
+| **Shopify** | Mode A | 1 | 列表 API 已含完整訊息；直接轉 ORDER_UPSERT | CHANNEL_IMPLEMENTATION_GUIDE §2.0 |
+| **easystore** | Mode A | 1 | 列表 API 含 50 張完整訂單；直接轉 ORDER_UPSERT | CHANNEL_IMPLEMENTATION_GUIDE §2.0 |
 
 #### ⏳ 待確認
 
@@ -87,13 +87,13 @@ Channel Job Handlers / Backend Handlers
 
 | 分鐘位 | 派發目標 | Handler 類型 | 範例 |
 |--------|---------|------------|------|
-| :00, :05, :10... (% 5 == 0) | All {platform}.slow | Channel Job | FETCH_ORDERS, FETCH_RETURNS |
-| :01, :06, :11... (% 5 == 1) | task.backend | Backend Job | Order Report Generation |
-| :02, :07, :12... (% 5 == 2) | task.backend | Backend Job | Inventory Report Generation |
-| :03, :08, :13... (% 5 == 3) | task.backend | Backend Job | Sales Report Generation |
-| :04, :09, :14... (% 5 == 4) | task.backend | Backend Job | Return Report Generation |
-| :05, :15, :25... (% 10 == 5) | task.backend | Backend Job | Kafka Health Check |
-| :00, :30 | task.backend | Backend Job | Daily Report Generation |
+| :00, :05, :10... (% 5 == 0) | All {platform}.slow | Channel Job | FETCH_ORDERS + FETCH_RETURNS（兩者同時派發） |
+| :01, :06, :11... (% 5 == 1) | task.backend | Backend Job | ORDER_REPORT, STATS_RECALC |
+| :02, :07, :12... (% 5 == 2) | task.backend | Backend Job | INVENTORY_REPORT |
+| :03, :08, :13... (% 5 == 3) | task.backend | Backend Job | SALES_REPORT |
+| :04, :09, :14... (% 5 == 4) | task.backend | Backend Job | RETURN_REPORT |
+| :05, :15, :25... (% 10 == 5) | task.backend | Backend Job | KAFKA_HEALTH_CHECK |
+| :00, :30 (hourly) | task.backend | Backend Job | DAILY_REPORT |
 
 **重點**：
 - Scheduler 只派發「時間驅動」的任務（FETCH_ORDERS, FETCH_RETURNS, 報表生成）
@@ -143,7 +143,7 @@ public class HandlerRegistry {
 
 #### 🟢 Mode A 平台（直接模式） — 單一 Handler
 
-**特點**：列表 API 已完整 → FETCH_ORDERS → orderData 完整 → PROCESS_ORDER（一次性）
+**特點**：列表 API 已完整 → FETCH_ORDERS → orderData 完整 → ORDER_UPSERT（一次性）
 
 #### Shopify Channel Job（Mode A）
 
@@ -173,7 +173,7 @@ public class HandlerRegistry {
 
 #### 🔴 Mode B 平台（列表+詳情模式） — 兩個 Handler
 
-**特點**：列表 API 不完整 → FETCH_ORDERS → FETCH_ORDER_DETAIL → orderData 完整 → PROCESS_ORDER（兩步）
+**特點**：列表 API 不完整 → FETCH_ORDERS → FETCH_ORDER_DETAIL → orderData 完整 → ORDER_UPSERT（兩步）
 
 #### Shopee Channel Job（Mode B）
 | TaskType | Handler Class | Topic | 說明 |

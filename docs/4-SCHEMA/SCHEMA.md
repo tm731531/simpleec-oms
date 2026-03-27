@@ -535,6 +535,7 @@ CREATE TABLE public.channel_sync_logs (
     merchant_id      VARCHAR(20)  NOT NULL,
     channel_id       VARCHAR(20)  NOT NULL,
     sync_type        VARCHAR(50)  NOT NULL,
+    http_status      INTEGER,                    -- HTTP response code from channel API
     status           VARCHAR(20)  NOT NULL DEFAULT 'success',
     health           VARCHAR(20),
     request_payload  TEXT,

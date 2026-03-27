@@ -108,7 +108,7 @@
 - `requestId`: 唯一識別碼，用於追蹤和冪等性（必填）
 - `timestamp`: 訊息時間戳（ISO-8601），用於追蹤和業務判斷（如 FETCH_ORDERS 的基準時間）（必填）
 - `version`: 訊息協議版本，用於向後相容判斷（必填）
-- `correlationId`: 串連相關訊息，如 FETCH_ORDERS → FETCH_ORDER_DETAIL → PROCESS_ORDER 的關聯（選填）
+- `correlationId`: 串連相關訊息，如 FETCH_ORDERS → FETCH_ORDER_DETAIL → ORDER_UPSERT 的關聯（選填）
 - `retryCount`: 重試次數（選填）
 - `priority`: 優先度 HIGH/NORMAL/LOW（選填）
 - `isRollback`: 是否為回補訂單（遺漏的過往訂單）（選填，預設 false）
@@ -120,8 +120,8 @@
 ### 4.0 Channel Job 角色：數據適配層 & isRollback 標籤
 
 **isRollback 適用範圍**：
-- ✅ **訂單相關**：FETCH_ORDERS, FETCH_ORDER_DETAIL, PROCESS_ORDER, SHIP_ORDER
-- ✅ **退貨相關**：FETCH_RETURNS, FETCH_RETURN_DETAIL, PROCESS_RETURN, APPROVE_RETURN
+- ✅ **訂單相關**：FETCH_ORDERS, FETCH_ORDER_DETAIL, ORDER_UPSERT, SHIP_ORDER
+- ✅ **退貨相關**：FETCH_RETURNS, FETCH_RETURN_DETAIL, RETURN_UPSERT, APPROVE_RETURN
 - ❌ **套包/庫存/價格相關**：SYNC_PACK, UPDATE_INVENTORY, UPDATE_PRICE, SYNC_PRODUCT（無需 isRollback）
 
 **Channel Job 角色**：
@@ -149,8 +149,8 @@
 
 | 模式 | 平台特性 | 流程 | 範例 |
 |------|--------|------|------|
-| **Mode A** | 訂單列表 API 已包含完整資訊（items、payment、shipping 等） | FETCH_ORDERS (list) → orderData 完整 → PROCESS_ORDER | Shopify、easystore |
-| **Mode B** | 訂單列表 API 只有概要資訊 | FETCH_ORDERS (list) → 判斷需要詳情 → FETCH_ORDER_DETAIL → 詳情完整 → PROCESS_ORDER | Shopee、Momo（需按訂單號聚合） |
+| **Mode A** | 訂單列表 API 已包含完整資訊（items、payment、shipping 等） | FETCH_ORDERS (list) → orderData 完整 → ORDER_UPSERT | Shopify、easystore |
+| **Mode B** | 訂單列表 API 只有概要資訊 | FETCH_ORDERS (list) → 判斷需要詳情 → FETCH_ORDER_DETAIL → 詳情完整 → ORDER_UPSERT | Shopee、Momo（需按訂單號聚合） |
 
 #### TaskType 定義
 
@@ -158,7 +158,7 @@
 |----------|-----------|------------|------|
 | FETCH_ORDERS | scheduler | {platform}.slow | Scheduler 接收 Heartbeat 脈搏，根據分鐘位判斷派發，Channel Job 根據 timestamp 決策是否呼叫 API |
 | FETCH_ORDER_DETAIL | {platform}.slow | order.process | **Mode B only**：Channel Job 判斷某訂單需詳情，fetch detail API 後發到 order.process。Mode A 平台無此步驟。 |
-| PROCESS_ORDER | order.process | (內部消費) | Handler 查詢 DB 決定 INSERT 或 UPDATE，執行業務邏輯。orderData 必須是**完整資料**（Mode A 來自 list API，Mode B 來自 detail API） |
+| ORDER_UPSERT | order.process | (內部消費) | Handler 查詢 DB 決定 INSERT 或 UPDATE，執行業務邏輯。orderData 必須是**完整資料**（Mode A 來自 list API，Mode B 來自 detail API） |
 | SHIP_ORDER | {platform}.fast | task.backend | 出貨作業 |
 
 ### 4.2 退貨相關
@@ -166,10 +166,10 @@
 |----------|-----------|------------|------|
 | FETCH_RETURNS | {platform}.slow | return.process | 抓取退貨列表 |
 | FETCH_RETURN_DETAIL | {platform}.slow | return.process | 抓取退貨詳情 |
-| PROCESS_RETURN | return.process | (內部消費) | 退貨入庫（Handler 查詢 DB 決定 INSERT 或 UPDATE） |
+| RETURN_UPSERT | return.process | (內部消費) | 退貨入庫（Handler 查詢 DB 決定 INSERT 或 UPDATE） |
 | APPROVE_RETURN | {platform}.fast | return.process | 同意退貨 |
 
-**備註**: PROCESS_RETURN 也遵循 isRollback 邏輯（與 PROCESS_ORDER 相同）
+**備註**: RETURN_UPSERT 也遵循 isRollback 邏輯（與 ORDER_UPSERT 相同）
 
 ### 4.3 套包相關（來自通路）
 | TaskType | 來源 Topic | 目標 Topic | 說明 |
@@ -226,9 +226,18 @@
 ### 5.1 FETCH_ORDERS：Heartbeat 驅動
 
 **架構原則**：
-- **Heartbeat Job** 每秒發脈搏到 `scheduler` topic，攜帶當前 timestamp
+- **Heartbeat Job** 每秒發脈搏到 `scheduler` topic，body 含整數欄位供 Scheduler Consumer 判斷派發時機：
+  ```json
+  {
+    "header": { "taskType": "HEARTBEAT", "timestamp": "2026-02-13T09:00:00Z", ... },
+    "body": {
+      "minuteOfHour": 5,
+      "secondOfMinute": 0
+    }
+  }
+  ```
 - **Scheduler Consumer** 接收脈搏，檢查分鐘位：
-  - 當分鐘 % 5 == 0（:00, :05, :10...）時 → 派發 ORDERS_SLOW 到所有 {platform}.slow
+  - 當 `minuteOfHour % 5 == 0` 且 `secondOfMinute == 0` 時 → 派發 ORDERS_SLOW 到所有 {platform}.slow
 - **Channel Job** 根據 timestamp + 通路 API 規則**自行決策**是否呼叫 API，包括：
   - 如何打 API（各通路規則不同）
   - 是否需要 FETCH_ORDER_DETAIL（取決於 API 能力和 rate limit）
@@ -315,7 +324,7 @@ easystore 訂單 API：
 
 **第 4 步：組成 OMS 統一結構並發送**
 
-若無需 DETAIL，直接發 PROCESS_ORDER；若需 DETAIL，先發 FETCH_ORDER_DETAIL 到 {platform}.slow。
+若無需 DETAIL，直接發 ORDER_UPSERT；若需 DETAIL，先發 FETCH_ORDER_DETAIL 到 {platform}.slow。
 
 ---
 
@@ -353,11 +362,11 @@ easystore 訂單 API：
 }
 ```
 
-**Channel Job 根據通路規則打 DETAIL API 後，發送 PROCESS_ORDER 到 order.process:**
+**Channel Job 根據通路規則打 DETAIL API 後，發送 ORDER_UPSERT 到 order.process:**
 ```json
 {
   "header": {
-    "taskType": "PROCESS_ORDER",
+    "taskType": "ORDER_UPSERT",
     "source": "channel_job",
     "merchantId": "merchant_001",
     "platformId": "shopee",
@@ -416,7 +425,7 @@ easystore 訂單 API：
 
 ---
 
-### 5.3 PROCESS_ORDER：Handler 執行業務邏輯
+### 5.3 ORDER_UPSERT：Handler 執行業務邏輯
 
 **Handler 的責任**：
 - 查詢 DB，決定是否已存在該訂單（根據 merchantId:channelId:orderId）
@@ -465,7 +474,7 @@ easystore 訂單 API：
   },
   "body": {
     "originalHeader": {
-      "taskType": "PROCESS_ORDER",
+      "taskType": "ORDER_UPSERT",
       "merchantId": "merchant_001",
       "platformId": "shopee",
       "channelId": "SHOPEE_001",
