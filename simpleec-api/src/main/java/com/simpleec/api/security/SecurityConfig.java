@@ -37,7 +37,7 @@ public class SecurityConfig {
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .anonymous(a -> a.principal("anonymousUser"))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/health", "/api/health/**", "/api/version",
+                .requestMatchers("/api/health", "/api/version",
                     "/actuator/**", "/api/actuator/**",
                     "/api/auth/**", "/api/admin/auth/**",
                     "/api/user/channels/platforms", "/api/enums/**").permitAll()
@@ -56,10 +56,10 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         var config = new CorsConfiguration();
-        List<String> origins = Arrays.asList(allowedOriginsConfig.split(","));
+        List<String> origins = Arrays.asList(allowedOriginsConfig.split("\\s*,\\s*"));
         config.setAllowedOrigins(origins);
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        config.setAllowedHeaders(List.of("*"));
+        config.setAllowedHeaders(List.of("Content-Type", "Authorization", "Accept", "X-Requested-With"));
         config.setAllowCredentials(true);
         var source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);

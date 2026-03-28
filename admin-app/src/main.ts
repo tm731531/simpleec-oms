@@ -8,11 +8,9 @@ import { router } from './router'
 let app: any
 
 export async function bootstrap() {
-  console.log('[Admin App] bootstrap')
 }
 
 export async function mount(props: any) {
-  console.log('[Admin App] mount', props)
   app = createApp(App)
   app.use(createPinia())
   app.use(router)
@@ -21,7 +19,6 @@ export async function mount(props: any) {
 }
 
 export async function unmount() {
-  console.log('[Admin App] unmount')
   app?.unmount()
   app = null
 }

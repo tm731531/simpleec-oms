@@ -10,8 +10,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
+import org.springframework.util.AntPathMatcher;
 import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
+import java.util.List;
 
 /**
  * JWT 認證過濾器
@@ -21,6 +23,20 @@ import java.io.IOException;
 @RequiredArgsConstructor
 public class JwtAuthFilter extends OncePerRequestFilter {
     private final JwtUtil jwtUtil;
+
+    private static final AntPathMatcher PATH_MATCHER = new AntPathMatcher();
+    private static final List<String> PUBLIC_PATHS = List.of(
+        "/api/health", "/api/version",
+        "/actuator/**", "/api/actuator/**",
+        "/api/auth/**", "/api/admin/auth/**",
+        "/api/user/channels/platforms", "/api/enums/**"
+    );
+
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        String path = request.getServletPath();
+        return PUBLIC_PATHS.stream().anyMatch(p -> PATH_MATCHER.match(p, path));
+    }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,

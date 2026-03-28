@@ -15,6 +15,7 @@ CREATE TABLE public.platform_account (
     name            VARCHAR(50)   NOT NULL,
     email           VARCHAR(256)  NOT NULL,
     password        VARCHAR(512)  NOT NULL,
+    status          VARCHAR(20)   NOT NULL DEFAULT 'enable',
     created_at      TIMESTAMPTZ   NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ   NOT NULL DEFAULT now(),
     PRIMARY KEY (id),
@@ -160,6 +161,9 @@ CREATE TABLE public.channel (
     CONSTRAINT fk_channel_merchant FOREIGN KEY (merchant_id)
         REFERENCES public.merchant (id) ON UPDATE CASCADE ON DELETE NO ACTION
 );
+
+CREATE INDEX idx_channel_platform ON public.channel (platform_id);
+CREATE INDEX idx_channel_merchant ON public.channel (merchant_id);
 
 -- ---------------------------------------------------------------------------
 -- 8b. channel_shipping_mapping — Shipping method mapping per channel
@@ -396,6 +400,7 @@ CREATE TABLE public.refund_orders (
 
 CREATE INDEX idx_refund_order ON public.refund_orders (order_id);
 CREATE INDEX idx_refund_merchant ON public.refund_orders (merchant_id);
+CREATE INDEX idx_refund_stats ON public.refund_orders (merchant_id, requested_at);
 
 -- ---------------------------------------------------------------------------
 -- 17. channel_sync_logs — Sync / health check logs (independent)

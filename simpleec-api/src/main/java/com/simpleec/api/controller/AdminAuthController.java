@@ -43,9 +43,10 @@ public class AdminAuthController {
         }
         PlatformAccount account = accountOpt.get();
 
-        boolean passwordMatches = passwordEncoder.matches(password, account.getPassword())
-            || password.equals(account.getPassword());
-        if (!passwordMatches) {
+        if (!"enable".equals(account.getStatus())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", "帳號已停用"));
+        }
+        if (!passwordEncoder.matches(password, account.getPassword())) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "帳號或密碼錯誤"));
         }
 

@@ -2,6 +2,7 @@ package com.simpleec.api.controller;
 
 import com.simpleec.core.entity.ReturnOrder;
 import com.simpleec.core.service.ReturnOrderService;
+import com.simpleec.api.security.UserPrincipal;
 import com.simpleec.common.enums.ReturnStatusEnum;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -10,6 +11,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -26,17 +28,24 @@ public class ReturnController {
 
     private final ReturnOrderService returnOrderService;
 
+    private static final int MAX_PAGE_SIZE = 100;
+
     /**
      * 查詢退貨列表（分頁）
-     * GET /api/returns?merchantId=M001&page=0&size=10
+     * GET /api/returns?page=0&size=10
      */
     @GetMapping
     public ResponseEntity<Page<ReturnOrder>> listReturns(
-            @RequestParam String merchantId,
+            @AuthenticationPrincipal UserPrincipal principal,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(required = false) String status) {
 
+        if (page < 0) page = 0;
+        if (size < 1) size = 1;
+        if (size > MAX_PAGE_SIZE) size = MAX_PAGE_SIZE;
+
+        String merchantId = principal.getMerchantId();
         Pageable pageable = PageRequest.of(page, size);
 
         Page<ReturnOrder> returns;
@@ -60,14 +69,16 @@ public class ReturnController {
      * GET /api/returns/{returnId}
      */
     @GetMapping("/{returnId}")
-    public ResponseEntity<ReturnOrder> getReturn(@PathVariable String returnId) {
+    public ResponseEntity<ReturnOrder> getReturn(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable String returnId) {
         Optional<ReturnOrder> returnOrder = returnOrderService.findById(returnId);
 
-        if (returnOrder.isPresent()) {
+        if (returnOrder.isPresent() && principal.getMerchantId().equals(returnOrder.get().getMerchantId())) {
             log.info("Retrieved return: {}", returnId);
             return ResponseEntity.ok(returnOrder.get());
         } else {
-            log.warn("Return not found: {}", returnId);
+            log.warn("Return not found or access denied: {}", returnId);
             return ResponseEntity.notFound().build();
         }
     }
@@ -77,8 +88,14 @@ public class ReturnController {
      * GET /api/returns/order/{orderId}
      */
     @GetMapping("/order/{orderId}")
-    public ResponseEntity<List<ReturnOrder>> getReturnsByOrder(@PathVariable String orderId) {
+    public ResponseEntity<List<ReturnOrder>> getReturnsByOrder(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable String orderId) {
         List<ReturnOrder> returns = returnOrderService.findByOrderId(orderId);
+        // Filter to only returns belonging to this merchant
+        returns = returns.stream()
+            .filter(r -> principal.getMerchantId().equals(r.getMerchantId()))
+            .toList();
 
         log.info("Retrieved {} returns for order {}", returns.size(), orderId);
         return ResponseEntity.ok(returns);
@@ -89,8 +106,11 @@ public class ReturnController {
      * POST /api/returns
      */
     @PostMapping
-    public ResponseEntity<ReturnOrder> createReturn(@RequestBody ReturnOrder returnOrder) {
+    public ResponseEntity<ReturnOrder> createReturn(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @RequestBody ReturnOrder returnOrder) {
         try {
+            returnOrder.setMerchantId(principal.getMerchantId());
             ReturnOrder created = returnOrderService.createReturn(returnOrder);
             log.info("Created return: {} for order {}", created.getId(), created.getOrderId());
             return ResponseEntity.status(HttpStatus.CREATED).body(created);
@@ -106,27 +126,28 @@ public class ReturnController {
      */
     @PatchMapping("/{returnId}")
     public ResponseEntity<ReturnOrder> updateReturn(
+            @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable String returnId,
             @RequestBody ReturnOrder returnUpdate) {
 
         Optional<ReturnOrder> existing = returnOrderService.findById(returnId);
 
-        if (existing.isPresent()) {
-            ReturnOrder returnOrder = existing.get();
-
-            if (returnUpdate.getReturnStatus() != null) {
-                returnOrder.setReturnStatus(returnUpdate.getReturnStatus());
-            }
-            if (returnUpdate.getReason() != null) {
-                returnOrder.setReason(returnUpdate.getReason());
-            }
-
-            ReturnOrder updated = returnOrderService.updateReturn(returnOrder);
-            log.info("Updated return: {}", returnId);
-            return ResponseEntity.ok(updated);
-        } else {
+        if (existing.isEmpty() || !principal.getMerchantId().equals(existing.get().getMerchantId())) {
             return ResponseEntity.notFound().build();
         }
+
+        ReturnOrder returnOrder = existing.get();
+
+        if (returnUpdate.getReturnStatus() != null) {
+            returnOrder.setReturnStatus(returnUpdate.getReturnStatus());
+        }
+        if (returnUpdate.getReason() != null) {
+            returnOrder.setReason(returnUpdate.getReason());
+        }
+
+        ReturnOrder updated = returnOrderService.updateReturn(returnOrder);
+        log.info("Updated return: {}", returnId);
+        return ResponseEntity.ok(updated);
     }
 
     /**
@@ -134,19 +155,21 @@ public class ReturnController {
      * POST /api/returns/{returnId}/approve
      */
     @PostMapping("/{returnId}/approve")
-    public ResponseEntity<ReturnOrder> approveReturn(@PathVariable String returnId) {
+    public ResponseEntity<ReturnOrder> approveReturn(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable String returnId) {
         Optional<ReturnOrder> existing = returnOrderService.findById(returnId);
 
-        if (existing.isPresent()) {
-            ReturnOrder returnOrder = existing.get();
-            returnOrder.setReturnStatus(ReturnStatusEnum.APPROVED);
-            ReturnOrder updated = returnOrderService.updateReturn(returnOrder);
-
-            log.info("Approved return: {}", returnId);
-            return ResponseEntity.ok(updated);
-        } else {
+        if (existing.isEmpty() || !principal.getMerchantId().equals(existing.get().getMerchantId())) {
             return ResponseEntity.notFound().build();
         }
+
+        ReturnOrder returnOrder = existing.get();
+        returnOrder.setReturnStatus(ReturnStatusEnum.APPROVED);
+        ReturnOrder updated = returnOrderService.updateReturn(returnOrder);
+
+        log.info("Approved return: {}", returnId);
+        return ResponseEntity.ok(updated);
     }
 
     /**
@@ -154,18 +177,20 @@ public class ReturnController {
      * POST /api/returns/{returnId}/reject
      */
     @PostMapping("/{returnId}/reject")
-    public ResponseEntity<ReturnOrder> rejectReturn(@PathVariable String returnId) {
+    public ResponseEntity<ReturnOrder> rejectReturn(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable String returnId) {
         Optional<ReturnOrder> existing = returnOrderService.findById(returnId);
 
-        if (existing.isPresent()) {
-            ReturnOrder returnOrder = existing.get();
-            returnOrder.setReturnStatus(ReturnStatusEnum.REJECTED);
-            ReturnOrder updated = returnOrderService.updateReturn(returnOrder);
-
-            log.info("Rejected return: {}", returnId);
-            return ResponseEntity.ok(updated);
-        } else {
+        if (existing.isEmpty() || !principal.getMerchantId().equals(existing.get().getMerchantId())) {
             return ResponseEntity.notFound().build();
         }
+
+        ReturnOrder returnOrder = existing.get();
+        returnOrder.setReturnStatus(ReturnStatusEnum.REJECTED);
+        ReturnOrder updated = returnOrderService.updateReturn(returnOrder);
+
+        log.info("Rejected return: {}", returnId);
+        return ResponseEntity.ok(updated);
     }
 }

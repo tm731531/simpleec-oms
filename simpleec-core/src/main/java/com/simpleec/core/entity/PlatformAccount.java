@@ -34,6 +34,10 @@ public class PlatformAccount {
     @Column(name = "password", length = 512, nullable = false)
     private String password;
 
+    @Column(name = "status", length = 20, nullable = false)
+    @Builder.Default
+    private String status = "enable";
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
