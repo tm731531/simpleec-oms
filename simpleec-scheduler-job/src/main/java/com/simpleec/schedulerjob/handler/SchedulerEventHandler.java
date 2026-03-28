@@ -96,6 +96,11 @@ public class SchedulerEventHandler {
                 dispatchTask(TaskTypeEnum.DAILY_REPORT, timestamp);
             }
 
+            // 每小時整點注入假訂單（僅測試用，受 global_config.test_seeder_enabled 控管）
+            if (minuteOfHour == 0) {
+                dispatchTask(TaskTypeEnum.SEED_TEST_ORDERS, timestamp);
+            }
+
         } catch (Exception e) {
             log.error("Error handling heartbeat event", e);
         }

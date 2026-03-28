@@ -31,7 +31,8 @@ INSERT INTO public.global_config (id, data, description) VALUES
 ('vip_0_limits',  '{"max_channels": 3, "max_products": 100}',    'Free tier resource limits'),
 ('encryption_master_key',
  'ZVNzMksyaDVNWGR2ZVZSc1ZVSnJUVWxTVjFJdk9Xb3hhVUUwV0dkNE9FMTRjM3B1Y0hKbE5saFpSVDA5',
- 'AES-256-GCM master key (3xBase64). DEV ONLY — replace in production.');
+ 'AES-256-GCM master key (3xBase64). DEV ONLY — replace in production.'),
+('test_seeder_enabled', 'true', '每小時自動注入假測試訂單 (true/false)，重新啟動服務後生效');
 
 -- ---------------------------------------------------------------------------
 -- merchant
@@ -79,17 +80,19 @@ INSERT INTO public.merchant_options (id, merchant_id, name, type, status) VALUES
 -- platform
 -- ---------------------------------------------------------------------------
 INSERT INTO public.platform (id, platform_name, actived, queue_topic, currency) VALUES
-('momo',    'momo購物',     true,  'momo',    'TWD'),
-('shopee',  'Shopee蝦皮',   true,  'shopee',  'TWD'),
-('yahoo',   'Yahoo奇摩',    true,  'yahoo',   'TWD'),
-('pchome',  'PChome商店街', false, 'pchome',  'TWD');
+('momo',      'momo購物',     true,  'momo',      'TWD'),
+('shopee',    'Shopee蝦皮',   true,  'shopee',    'TWD'),
+('yahoo',     'Yahoo奇摩',    true,  'yahoo',     'TWD'),
+('pchome',    'PChome商店街', false, 'pchome',    'TWD'),
+('cyberbiz',  'Cyberbiz',     true,  'cyberbiz',  'TWD');
 
 -- ---------------------------------------------------------------------------
 -- channel_api_versions
 -- ---------------------------------------------------------------------------
 INSERT INTO public.channel_api_versions (id, platform_id, api_version, is_active, effective_date, description) VALUES
-('cav_momo_v3',   'momo',   'v3', true,  '2026-01-01', 'momo API v3 (current)'),
-('cav_shopee_v2', 'shopee', 'v2', true,  '2025-06-01', 'Shopee Open Platform v2');
+('cav_momo_v3',      'momo',      'v3', true,  '2026-01-01', 'momo API v3 (current)'),
+('cav_shopee_v2',    'shopee',    'v2', true,  '2025-06-01', 'Shopee Open Platform v2'),
+('cav_cyberbiz_v1',  'cyberbiz',  'v1', true,  '2026-01-01', 'Cyberbiz REST API v1');
 
 -- ---------------------------------------------------------------------------
 -- channel
@@ -100,10 +103,18 @@ INSERT INTO public.channel (
 ) VALUES
 ('ch_momo_001', 'momo', 'm_test_001', 'MOMO-FROZEN-2024',
  'momo 冷凍養生館', false,
- 'momo-api-token-placeholder-dev', true, true, true),
+ 'momo-api-token-placeholder-dev', true, true, false),
 ('ch_shopee_001', 'shopee', 'm_test_001', 'SHOPEE-HEALTH-2024',
  'Shopee 保健品旗艦店', true,
- 'shopee-api-token-placeholder-dev', true, false, true);
+ 'shopee-api-token-placeholder-dev', true, false, false);
+
+INSERT INTO public.channel (
+    id, platform_id, merchant_id, channel_sn, channel_name,
+    multi_spec, token, token2, actived, write_actived, enable_sync
+) VALUES
+('ch_cyberbiz_001', 'cyberbiz', 'm_test_001', 'CYBERBIZ-HEALTH-2024',
+ 'Cyberbiz 健康食品館', false,
+ 'apidemo', 'apidemo', true, true, true);
 
 -- ---------------------------------------------------------------------------
 -- product_group

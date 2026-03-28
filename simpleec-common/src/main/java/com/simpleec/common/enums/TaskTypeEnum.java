@@ -41,6 +41,7 @@ public enum TaskTypeEnum {
     RETURN_REPORT("RETURN_REPORT", "退貨報表", false),
     KAFKA_HEALTH_CHECK("KAFKA_HEALTH_CHECK", "Kafka 健康檢查", false),
     DAILY_REPORT("DAILY_REPORT", "每日報表", false),
+    SEED_TEST_ORDERS("SEED_TEST_ORDERS", "每小時假訂單注入（測試用）", false),
 
     // ========== System (系統) ==========
     HEARTBEAT("HEARTBEAT", "系統心臟脈搏", true),
