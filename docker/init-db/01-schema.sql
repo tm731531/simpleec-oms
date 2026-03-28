@@ -323,6 +323,8 @@ CREATE TABLE public.orders (
     created_at         TIMESTAMPTZ   NOT NULL DEFAULT now(),
     updated_at         TIMESTAMPTZ   NOT NULL DEFAULT now(),
     PRIMARY KEY (id),
+    CONSTRAINT fk_order_merchant FOREIGN KEY (merchant_id)
+        REFERENCES public.merchant (id) ON UPDATE CASCADE ON DELETE NO ACTION,
     CONSTRAINT fk_order_channel FOREIGN KEY (channel_id)
         REFERENCES public.channel (id) ON UPDATE CASCADE ON DELETE NO ACTION
 );
@@ -445,7 +447,13 @@ CREATE TABLE public.daily_statistics (
     item_sold_count     INTEGER        DEFAULT 0,
     created_at          TIMESTAMPTZ    DEFAULT now(),
     updated_at          TIMESTAMPTZ    DEFAULT now(),
-    PRIMARY KEY (id, stat_date)
+    PRIMARY KEY (id, stat_date),
+    CONSTRAINT fk_daily_stats_merchant FOREIGN KEY (merchant_id)
+        REFERENCES public.merchant (id) ON UPDATE CASCADE ON DELETE NO ACTION,
+    CONSTRAINT fk_daily_stats_platform FOREIGN KEY (platform_id)
+        REFERENCES public.platform (id) ON UPDATE CASCADE ON DELETE NO ACTION,
+    CONSTRAINT fk_daily_stats_channel FOREIGN KEY (channel_id)
+        REFERENCES public.channel (id) ON UPDATE CASCADE ON DELETE NO ACTION
 ) PARTITION BY RANGE (stat_date);
 
 CREATE UNIQUE INDEX idx_daily_stats_unique

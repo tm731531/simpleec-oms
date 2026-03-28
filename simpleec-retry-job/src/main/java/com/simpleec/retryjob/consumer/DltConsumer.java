@@ -2,6 +2,9 @@ package com.simpleec.retryjob.consumer;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.simpleec.core.entity.FailedTaskLog;
+import com.simpleec.core.repository.FailedTaskLogRepository;
+import com.simpleec.common.util.NanoIdUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -22,6 +25,7 @@ import java.time.format.DateTimeFormatter;
 public class DltConsumer {
 
     private final ObjectMapper objectMapper;
+    private final FailedTaskLogRepository failedTaskLogRepository;
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     /**
@@ -62,19 +66,33 @@ public class DltConsumer {
     }
 
     /**
-     * 記錄 DLT 消息到存儲系統
-     * 供管理員查詢和人工處理
+     * 記錄 DLT 消息到 failed_task_logs 表，供管理員查詢和人工處理
      */
     private void recordDltMessage(String taskId, String taskType, String error, JsonNode originalMessage) {
         try {
-            // TODO: 存儲到數據庫的 dlt_messages 表
-            // INSERT INTO dlt_messages (task_id, task_type, error, message, status, created_at)
-            // VALUES (?, ?, ?, ?, 'PENDING_REVIEW', NOW())
+            String merchantId = originalMessage.path("header").path("merchantId").asText(null);
+            String originalTopic = originalMessage.path("header").path("originalTopic").asText(null);
+            String payloadJson = objectMapper.writeValueAsString(originalMessage);
 
-            log.info("DLT message recorded for manual review: {}", taskId);
+            FailedTaskLog log_ = FailedTaskLog.builder()
+                    .id(NanoIdUtil.generate(20))
+                    .messageId(taskId)
+                    .taskType(taskType)
+                    .taskAction("DLT_RECEIVED")
+                    .sourceJobType("retry-job")
+                    .merchantId(merchantId)
+                    .originalTopic(originalTopic)
+                    .errorMessage(error)
+                    .reason("DLT")
+                    .retryCount(0)
+                    .payload(payloadJson)
+                    .build();
+
+            failedTaskLogRepository.save(log_);
+            log.info("DLT message persisted to failed_task_logs: {}", taskId);
 
         } catch (Exception e) {
-            log.error("Failed to record DLT message", e);
+            log.error("Failed to persist DLT message to DB for taskId={}", taskId, e);
         }
     }
 

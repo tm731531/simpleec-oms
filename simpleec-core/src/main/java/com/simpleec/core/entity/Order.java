@@ -162,8 +162,9 @@ public class Order {
      * true = 回補訂單（回補過去遺漏的訂單）
      * false = 新訂單
      */
+    @Builder.Default
     @Column(name = "is_rollback", nullable = false, columnDefinition = "boolean default false")
-    private Boolean isRollback;
+    private boolean isRollback = false;
 
     /**
      * 支付時間

@@ -7,7 +7,7 @@ spring:
   datasource:
     url: jdbc:postgresql://${DB_HOST:simpleec-postgres}:${DB_PORT:5432}/simpleec
     username: simpleec
-    password: simpleec123
+    password: ${DB_PASSWORD:simpleec123}
   kafka:
     bootstrap-servers: simpleec-kafka:9092
     consumer:

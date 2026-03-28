@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Slf4j
 @Service
@@ -27,7 +28,10 @@ public class DailyStatisticsService {
         log.debug("Recalculating stats: merchantId={}, platformId={}, channelId={}, date={}",
                 merchantId, platformId, channelId, statDate);
 
-        var stats = orderRepository.aggregateStatsByChannelAndDate(merchantId, channelId, statDate);
+        LocalDateTime startOfDay = statDate.atStartOfDay();
+        LocalDateTime endOfDay = statDate.plusDays(1).atStartOfDay();
+
+        var stats = orderRepository.aggregateStatsByChannelAndDate(merchantId, channelId, startOfDay, endOfDay);
 
         // Aggregate queries always return a row; check the actual count instead of null
         if (stats.getNewOrderCount() == null || stats.getNewOrderCount() == 0) {
@@ -52,8 +56,8 @@ public class DailyStatisticsService {
                     .build();
         }
 
-        long refundCount = returnOrderRepository.countByMerchantIdAndChannelIdAndStatDate(merchantId, channelId, statDate);
-        BigDecimal refundAmount = returnOrderRepository.sumRefundAmountByMerchantIdAndChannelIdAndStatDate(merchantId, channelId, statDate);
+        long refundCount = returnOrderRepository.countByMerchantIdAndChannelIdAndStatDate(merchantId, channelId, startOfDay, endOfDay);
+        BigDecimal refundAmount = returnOrderRepository.sumRefundAmountByMerchantIdAndChannelIdAndStatDate(merchantId, channelId, startOfDay, endOfDay);
         if (refundAmount == null) refundAmount = BigDecimal.ZERO;
 
         BigDecimal receivedAmount = stats.getReceivedAmount() != null ? stats.getReceivedAmount() : BigDecimal.ZERO;

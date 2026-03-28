@@ -412,7 +412,7 @@ public class OrderUpsertConsumer {
         }
 
         // 設置回補訂單標籤（從 header 讀取）
-        order.setIsRollback(isRollback);
+        order.setRollback(isRollback);
     }
 
     /**

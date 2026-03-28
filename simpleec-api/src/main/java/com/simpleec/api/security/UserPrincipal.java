@@ -3,7 +3,9 @@ package com.simpleec.api.security;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
@@ -17,11 +19,18 @@ public class UserPrincipal implements UserDetails {
     private final String merchantId;
     private final String email;
     private final String name;
-    private final String role;  // "main" or "sub"
+    private final String role;  // "platform_admin" | "main" | "sub"
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        return List.of();
+        List<GrantedAuthority> authorities = new ArrayList<>();
+        if ("platform_admin".equals(role)) {
+            authorities.add(new SimpleGrantedAuthority("ROLE_PLATFORM_ADMIN"));
+        } else if ("main".equals(role)) {
+            authorities.add(new SimpleGrantedAuthority("ROLE_MERCHANT_MAIN"));
+        }
+        authorities.add(new SimpleGrantedAuthority("ROLE_USER"));
+        return authorities;
     }
 
     @Override

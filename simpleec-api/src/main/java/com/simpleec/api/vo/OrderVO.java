@@ -89,7 +89,7 @@ public class OrderVO {
         vo.setPaidAt(order.getPaidAt());
         vo.setShippedAt(order.getShippedAt());
         vo.setChannelCreatedAt(order.getChannelCreatedAt());
-        vo.setIsRollback(order.getIsRollback());
+        vo.setIsRollback(order.isRollback());
 
         return vo;
     }

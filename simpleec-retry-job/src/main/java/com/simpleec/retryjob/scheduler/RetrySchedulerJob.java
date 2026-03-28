@@ -2,6 +2,8 @@ package com.simpleec.retryjob.scheduler;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.simpleec.common.constants.TopicConstants;
 import com.simpleec.retryjob.consumer.RetryJobConsumer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -58,8 +60,26 @@ public class RetrySchedulerJob {
                     String taskId = msg.path("header").path("messageId").asText("unknown");
                     String targetTopic = retryJobConsumer.routeTaskToTopic(taskType, platformId);
 
+                    // If the router resolved to DLT, wrap in DLT format before sending
+                    String outJson;
+                    if (TopicConstants.TASK_DLT.equals(targetTopic)) {
+                        ObjectNode dltMessage = objectMapper.createObjectNode();
+                        dltMessage.set("originalMessage", msg);
+                        ObjectNode dltInfo = objectMapper.createObjectNode();
+                        dltInfo.put("taskId", taskId);
+                        dltInfo.put("taskType", taskType);
+                        dltInfo.put("finalRetryCount", msg.path("body").path("errorInfo").path("retryCount").asInt(0));
+                        dltInfo.put("lastError", "Unknown routing in RetrySchedulerJob");
+                        dltInfo.put("sentToDLTAt", java.time.Instant.now().toString());
+                        dltInfo.put("status", "AWAITING_MANUAL_REVIEW");
+                        dltMessage.set("dltInfo", dltInfo);
+                        outJson = objectMapper.writeValueAsString(dltMessage);
+                    } else {
+                        outJson = msgJson;
+                    }
+
                     // Re-publish the message (with header/body intact, including originalHeader/originalBody)
-                    kafkaTemplate.send(targetTopic, taskId, msgJson);
+                    kafkaTemplate.send(targetTopic, taskId, outJson);
                     processed++;
 
                     log.info("Retry fired for task {} -> topic {}", taskId, targetTopic);

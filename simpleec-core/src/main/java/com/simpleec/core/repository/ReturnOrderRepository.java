@@ -9,7 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.List;
 
@@ -61,12 +61,14 @@ public interface ReturnOrderRepository extends JpaRepository<ReturnOrder, String
         JOIN orders o ON ro.order_id = o.id
         WHERE ro.merchant_id = :merchantId
           AND o.channel_id = :channelId
-          AND DATE(ro.requested_at) = :statDate
+          AND ro.requested_at >= :startOfDay
+          AND ro.requested_at < :endOfDay
         """, nativeQuery = true)
     long countByMerchantIdAndChannelIdAndStatDate(
         @Param("merchantId") String merchantId,
         @Param("channelId") String channelId,
-        @Param("statDate") LocalDate statDate
+        @Param("startOfDay") LocalDateTime startOfDay,
+        @Param("endOfDay") LocalDateTime endOfDay
     );
 
     @Query(value = """
@@ -75,11 +77,13 @@ public interface ReturnOrderRepository extends JpaRepository<ReturnOrder, String
         JOIN orders o ON ro.order_id = o.id
         WHERE ro.merchant_id = :merchantId
           AND o.channel_id = :channelId
-          AND DATE(ro.requested_at) = :statDate
+          AND ro.requested_at >= :startOfDay
+          AND ro.requested_at < :endOfDay
         """, nativeQuery = true)
     java.math.BigDecimal sumRefundAmountByMerchantIdAndChannelIdAndStatDate(
         @Param("merchantId") String merchantId,
         @Param("channelId") String channelId,
-        @Param("statDate") LocalDate statDate
+        @Param("startOfDay") LocalDateTime startOfDay,
+        @Param("endOfDay") LocalDateTime endOfDay
     );
 }

@@ -15,7 +15,7 @@ server:
   port: 8089
 
 jwt:
-  secret: simpleec-jwt-secret-key-must-be-at-least-256-bits-long-for-hs256-algorithm-security
+  secret: ${JWT_SECRET:simpleec-jwt-secret-key-must-be-at-least-256-bits-long-for-hs256-algorithm-security}
   expiration: 604800  # 7 days in seconds
 
 logging:

@@ -21,7 +21,7 @@
 -- ---------------------------------------------------------------------------
 INSERT INTO public.platform_account (id, name, email, password)
 VALUES ('pa_admin_001', 'SimpleEC Admin', 'admin@simpleec.com',
-        '$2a$10$dummyhashfordevonly000000000000000000000000000000');
+        'pass123456');  -- dev only: plaintext, BCrypt via passwordEncoder or direct match
 
 -- ---------------------------------------------------------------------------
 -- global_config

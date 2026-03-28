@@ -71,9 +71,7 @@ public class OrderService {
         if (order.getOrderStatus() == null) {
             order.setOrderStatus(OrderStatusEnum.PENDING);
         }
-        if (order.getIsRollback() == null) {
-            order.setIsRollback(false);
-        }
+
         if (order.getHasRefund() == null) {
             order.setHasRefund(false);
         }

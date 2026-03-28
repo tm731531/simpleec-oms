@@ -1,5 +1,9 @@
 <template>
-  <div class="admin-layout">
+  <!-- Login page: no layout -->
+  <RouterView v-if="isLoginPage" />
+
+  <!-- Main layout -->
+  <div v-else class="admin-layout">
     <el-container>
       <el-aside width="200px" class="sidebar">
         <el-menu
@@ -29,6 +33,7 @@
       <el-container>
         <el-header class="header">
           <h2>SimpleEC OMS - 管理後台</h2>
+          <el-button text size="small" @click="handleLogout">登出</el-button>
         </el-header>
         <el-main class="main-content">
           <RouterView />
@@ -40,9 +45,12 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 
 const router = useRouter()
+const route = useRoute()
+
+const isLoginPage = computed(() => route.name === 'Login')
 
 const activeMenu = computed(() => {
   return router.currentRoute.value.path || '/'
@@ -50,6 +58,12 @@ const activeMenu = computed(() => {
 
 function navigate(path: string) {
   router.push(path)
+}
+
+function handleLogout() {
+  localStorage.removeItem('authToken')
+  localStorage.removeItem('adminUser')
+  router.push('/login')
 }
 </script>
 

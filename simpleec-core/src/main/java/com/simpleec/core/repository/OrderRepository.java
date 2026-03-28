@@ -10,7 +10,6 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.List;
@@ -74,7 +73,8 @@ public interface OrderRepository extends JpaRepository<Order, String> {
         FROM orders
         WHERE merchant_id = :merchantId
           AND channel_id = :channelId
-          AND DATE(COALESCE(channel_created_at, created_at)) = :statDate
+          AND COALESCE(channel_created_at, created_at) >= :startOfDay
+          AND COALESCE(channel_created_at, created_at) < :endOfDay
         """, nativeQuery = true)
     @org.springframework.data.jpa.repository.QueryHints(
         @jakarta.persistence.QueryHint(name = "org.hibernate.readOnly", value = "true")
@@ -82,6 +82,7 @@ public interface OrderRepository extends JpaRepository<Order, String> {
     OrderStatsResult aggregateStatsByChannelAndDate(
         @Param("merchantId") String merchantId,
         @Param("channelId") String channelId,
-        @Param("statDate") LocalDate statDate
+        @Param("startOfDay") LocalDateTime startOfDay,
+        @Param("endOfDay") LocalDateTime endOfDay
     );
 }

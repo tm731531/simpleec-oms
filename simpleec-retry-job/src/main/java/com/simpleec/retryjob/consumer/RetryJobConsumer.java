@@ -99,11 +99,12 @@ public class RetryJobConsumer {
             scheduleRetry(json, retryCount + 1, delayMs, taskId);
 
         } catch (Exception e) {
-            log.error("Error processing failed task, sending raw message to DLT", e);
+            log.error("Error processing failed task, sending to DLT with error metadata", e);
             try {
-                kafkaTemplate.send(TopicConstants.TASK_DLT, message);
+                JsonNode rawNode = objectMapper.readTree(message);
+                sendToDlt(rawNode, 0, "Processing error: " + e.getMessage(), "UNKNOWN");
             } catch (Exception ex) {
-                log.error("Failed to send to DLT as fallback", ex);
+                log.error("Failed to send to DLT (unparseable message), message lost", ex);
             }
         }
     }

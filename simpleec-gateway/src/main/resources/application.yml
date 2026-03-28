@@ -2,7 +2,7 @@ spring:
   application:
     name: simpleec-gateway
   kafka:
-    bootstrap-servers: localhost:9092
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:simpleec-kafka:9092}
 
 server:
   port: 8088
