@@ -69,7 +69,14 @@ public class PiiEncryptor {
         if (ciphertext == null) return null;
         try {
             byte[] key = keyProvider.getKeyForMerchant(merchantId);
-            byte[] combined = Base64.getDecoder().decode(ciphertext);
+            byte[] combined;
+            try {
+                combined = Base64.getDecoder().decode(ciphertext);
+            } catch (IllegalArgumentException e) {
+                log.warn("Ciphertext is not valid Base64 for merchant {}, returning as-is (legacy plaintext)",
+                         merchantId);
+                return ciphertext;
+            }
 
             if (combined.length < IV_LENGTH + 16) { // IV + minimum auth tag
                 log.warn("Ciphertext too short for merchant {}, returning as-is (may be legacy plaintext)",

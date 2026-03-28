@@ -257,7 +257,13 @@ public class OrderUpsertConsumer {
         order.setChannelOrderId(channelOrderId);
         order.setChannelOrderNumber(channelOrderNumber);
 
-        // 填充訂單數據
+        // 設置 NOT NULL 欄位的預設值（防止 DB constraint 違反）
+        order.setTotalAmount(java.math.BigDecimal.ZERO);
+        order.setShippingFee(java.math.BigDecimal.ZERO);
+        order.setDiscountAmount(java.math.BigDecimal.ZERO);
+        order.setItems("[]");
+
+        // 填充訂單數據（會覆蓋上方預設值）
         populateOrderFromData(order, orderDataJson, isRollback);
 
         return order;

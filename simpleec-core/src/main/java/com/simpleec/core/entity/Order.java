@@ -75,32 +75,28 @@ public class Order {
      * 訂單總金額（含運費、折扣）
      * 注：数据库约束 NOT NULL DEFAULT 0，允许 null，使用 insertable=false 让 DB 处理
      */
-    @Column(name = "total_amount", nullable = false, insertable = false, updatable = true)
+    @Column(name = "total_amount", nullable = false)
     @ColumnDefault("0")
     private BigDecimal totalAmount;
 
     /**
      * 運費
-     * 注：數據庫約束 NOT NULL DEFAULT 0，允許 null，使用 insertable=false 讓 DB 處理
      */
-    @Column(name = "shipping_fee", nullable = false, insertable = false, updatable = true)
+    @Column(name = "shipping_fee", nullable = false)
     @ColumnDefault("0")
     private BigDecimal shippingFee;
 
     /**
      * 折扣金額
-     * 注：數據庫約束 NOT NULL DEFAULT 0，允許 null，使用 insertable=false 讓 DB 處理
      */
-    @Column(name = "discount_amount", nullable = false, insertable = false, updatable = true)
+    @Column(name = "discount_amount", nullable = false)
     @ColumnDefault("0")
     private BigDecimal discountAmount;
 
     /**
      * 訂單項目 (JSONB 格式)
-     * 存儲 OrderItem 陣列的 JSON 字符串
-     * 注：數據庫約束 NOT NULL DEFAULT '[]'::jsonb，允許 null，使用 insertable=false 讓 DB 處理
      */
-    @Column(name = "items", columnDefinition = "jsonb", nullable = false, insertable = false, updatable = true)
+    @Column(name = "items", columnDefinition = "jsonb", nullable = false)
     @JdbcTypeCode(SqlTypes.JSON)
     @ColumnDefault("'[]'::jsonb")
     private String items;  // JSON array

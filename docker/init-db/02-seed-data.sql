@@ -57,6 +57,9 @@ INSERT INTO public.account (
     id, account_name, account_email, account_password,
     account_tel, is_main_account, access_level, merchant_id, status
 ) VALUES
+('a_admin_001', '管理員', 'admin@a00000.com',
+ 'pass123456',
+ '0900000000', true, 9, 'm_test_001', 'enable'),
 ('a_main_001', '王大明', 'wang@health-food.com.tw',
  'password',
  '0912345678', true, 9, 'm_test_001', 'enable'),

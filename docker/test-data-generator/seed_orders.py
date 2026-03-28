@@ -24,8 +24,8 @@ from datetime import datetime, timezone, timedelta
 import requests
 
 API_BASE = "http://simpleec-api:8080"
-LOGIN_EMAIL = "wang@health-food.com.tw"
-LOGIN_PASSWORD = "password"
+LOGIN_EMAIL = "admin@a00000.com"
+LOGIN_PASSWORD = "pass123456"
 MERCHANT_ID = "m_test_001"
 
 CHANNELS = [
@@ -44,6 +44,16 @@ PRODUCTS = [
     {"name": "有機綠茶粉 100g",   "price": 320,  "sku": "GREEN-TEA-100"},
     {"name": "冷壓橄欖油 500ml",  "price": 680,  "sku": "OLIVE-500"},
     {"name": "奇亞籽 300g",       "price": 199,  "sku": "CHIA-300"},
+]
+
+BUYER_NAMES  = ["陳小明", "林美麗", "張大華", "王志偉", "李淑芬", "吳建志", "黃怡君", "劉宗翰"]
+BUYER_PHONES = ["0912345678", "0923456789", "0934567890", "0945678901", "0956789012", "0967890123"]
+CITIES = [
+    ("台北市信義區", "松高路１號"),
+    ("新北市板橋區", "中山路100號"),
+    ("台中市西屯區", "台灣大道四段200號"),
+    ("高雄市前鎮區", "中山二路80號"),
+    ("桃園市中壢區", "中央西路一段50號"),
 ]
 
 
@@ -108,20 +118,28 @@ def build_order(seq: int, channel: dict, days_ago: int) -> dict:
         - timedelta(days=days_ago, minutes=random.randint(0, 1440))
     )
 
+    buyer_name  = random.choice(BUYER_NAMES)
+    buyer_phone = random.choice(BUYER_PHONES)
+    city, street = random.choice(CITIES)
+
     return {
-        "merchantId":      MERCHANT_ID,
-        "channelId":       channel["channelId"],
-        "channelOrderId":  channel_order_id,
-        "orderStatus":     random.choice(STATUSES),
-        "totalAmount":     total_amount,
-        "shippingFee":     shipping_fee,
-        "discountAmount":  discount,
-        "paymentMethod":   random.choice(PAYMENT_METHODS),
-        "shippingMethod":  random.choice(SHIPPING_METHODS),
+        "merchantId":       MERCHANT_ID,
+        "channelId":        channel["channelId"],
+        "channelOrderId":   channel_order_id,
+        "orderStatus":      random.choice(STATUSES),
+        "totalAmount":      total_amount,
+        "shippingFee":      shipping_fee,
+        "discountAmount":   discount,
+        "paymentMethod":    random.choice(PAYMENT_METHODS),
+        "shippingMethod":   random.choice(SHIPPING_METHODS),
         "channelCreatedAt": created_at.strftime("%Y-%m-%dT%H:%M:%S"),
-        "items":           json.dumps(items),
-        "isRollback":      False,
-        "hasRefund":       False,
+        "items":            items,
+        "buyerName":        buyer_name,
+        "buyerPhone":       buyer_phone,
+        "buyerEmail":       f"buyer{seq:04d}@example.com",
+        "shippingAddress":  f"{city}{street}",
+        "isRollback":       False,
+        "hasRefund":        False,
     }
 
 
