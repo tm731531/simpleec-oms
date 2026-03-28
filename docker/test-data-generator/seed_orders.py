@@ -29,8 +29,7 @@ LOGIN_PASSWORD = "pass123456"
 MERCHANT_ID = "m_test_001"
 
 CHANNELS = [
-    {"channelId": "ch_momo_001",   "platformId": "momo"},
-    {"channelId": "ch_shopee_001", "platformId": "shopee"},
+    {"channelId": "ch_fake_123", "platformId": "fake"},
 ]
 
 STATUSES = ["PENDING", "CONFIRMED", "READY_TO_SHIP", "SHIPPED", "COMPLETED", "CANCELLED"]

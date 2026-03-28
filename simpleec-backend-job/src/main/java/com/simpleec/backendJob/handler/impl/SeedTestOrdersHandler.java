@@ -40,9 +40,11 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class SeedTestOrdersHandler extends AbstractEventHandler {
 
-    private static final String API_BASE_URL = "http://simpleec-api:8080";
-    private static final String TEST_EMAIL    = "admin@a00000.com";
-    private static final String TEST_PASSWORD = "pass123456";
+    private static final String API_BASE_URL    = "http://simpleec-api:8080";
+    private static final String TEST_EMAIL      = "admin@a00000.com";
+    private static final String TEST_PASSWORD   = "pass123456";
+    /** 假訂單統一收編到此客製測試通路，不污染真實通路 */
+    private static final String FAKE_CHANNEL_ID = "ch_fake_123";
 
     private static final List<Map<String, Object>> PRODUCTS = List.of(
         Map.of("name", "有機燕麥片 500g",   "price", 299, "sku", "OAT-500"),
@@ -91,34 +93,29 @@ public class SeedTestOrdersHandler extends AbstractEventHandler {
             return;
         }
 
-        // 3. Find active channels (up to 2)
-        List<Channel> channels = channelRepository.findByActivedTrueAndEnableSyncTrue();
-        if (channels.isEmpty()) {
-            log.info("SEED_TEST_ORDERS: no active channels found — skipping");
+        // 3. Verify fake channel exists
+        if (channelRepository.findById(FAKE_CHANNEL_ID).isEmpty()) {
+            log.warn("SEED_TEST_ORDERS: fake channel {} not found — skipping", FAKE_CHANNEL_ID);
             return;
         }
-        List<Channel> targets = channels.size() > 2 ? channels.subList(0, 2) : channels;
 
-        // 4+5. Generate and post orders per channel
+        // 4+5. Generate and post orders to fake channel only
         Random rng = new Random();
+        int count = 3 + rng.nextInt(3); // 3–5
         int totalPosted = 0;
 
-        for (Channel channel : targets) {
-            int count = 3 + rng.nextInt(3); // 3–5
-            for (int i = 0; i < count; i++) {
-                try {
-                    Map<String, Object> order = buildRandomOrder(channel.getId(), rng);
-                    postOrder(token, order);
-                    totalPosted++;
-                } catch (Exception e) {
-                    log.warn("SEED_TEST_ORDERS: failed to post order for channel {}: {}",
-                             channel.getId(), e.getMessage());
-                }
+        for (int i = 0; i < count; i++) {
+            try {
+                Map<String, Object> order = buildRandomOrder(FAKE_CHANNEL_ID, rng);
+                postOrder(token, order);
+                totalPosted++;
+            } catch (Exception e) {
+                log.warn("SEED_TEST_ORDERS: failed to post order: {}", e.getMessage());
             }
         }
 
-        log.info("SEED_TEST_ORDERS: injected {} test orders across {} channels",
-                 totalPosted, targets.size());
+        log.info("SEED_TEST_ORDERS: injected {} test orders to channel {}",
+                 totalPosted, FAKE_CHANNEL_ID);
     }
 
     private String login() {

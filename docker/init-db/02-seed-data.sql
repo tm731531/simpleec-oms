@@ -84,7 +84,8 @@ INSERT INTO public.platform (id, platform_name, actived, queue_topic, currency) 
 ('shopee',    'Shopee蝦皮',   true,  'shopee',    'TWD'),
 ('yahoo',     'Yahoo奇摩',    true,  'yahoo',     'TWD'),
 ('pchome',    'PChome商店街', false, 'pchome',    'TWD'),
-('cyberbiz',  'Cyberbiz',     true,  'cyberbiz',  'TWD');
+('cyberbiz',  'Cyberbiz',     true,  'cyberbiz',  'TWD'),
+('fake',      '測試平台',     true,  'fake',      'TWD');
 
 -- ---------------------------------------------------------------------------
 -- channel_api_versions
@@ -115,6 +116,14 @@ INSERT INTO public.channel (
 ('ch_cyberbiz_001', 'cyberbiz', 'm_test_001', 'CYBERBIZ-HEALTH-2024',
  'Cyberbiz 健康食品館', false,
  'apidemo', 'apidemo', true, true, true);
+
+INSERT INTO public.channel (
+    id, platform_id, merchant_id, channel_sn, channel_name,
+    multi_spec, token, actived, write_actived, enable_sync
+) VALUES
+('ch_fake_123', 'fake', 'm_test_001', '123',
+ '客製測試通路 123', false,
+ 'fake-token', true, false, false);
 
 -- ---------------------------------------------------------------------------
 -- product_group
