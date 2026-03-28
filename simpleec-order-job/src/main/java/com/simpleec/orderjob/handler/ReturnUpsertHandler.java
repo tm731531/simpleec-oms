@@ -47,11 +47,15 @@ public class ReturnUpsertHandler {
         // 第 0 步：構建 Redis Key
         String redisKey = RedisKeyUtil.returnHashKey(merchantId, channelId, channelRefundId);
 
-        // 第 1 步：再次檢查 Redis（避免並發重複）
-        String existingHashInRedis = redisTemplate.opsForValue().get(redisKey);
-        if (returnHash.equals(existingHashInRedis)) {
-            log.info("Return already processed (Redis hash match): {}", channelRefundId);
-            return;
+        // 第 1 步：再次檢查 Redis（避免並發重複；Redis 不可用時降級到 DB 去重）
+        try {
+            String existingHashInRedis = redisTemplate.opsForValue().get(redisKey);
+            if (returnHash.equals(existingHashInRedis)) {
+                log.info("Return already processed (Redis hash match): {}", channelRefundId);
+                return;
+            }
+        } catch (Exception e) {
+            log.warn("Redis dedup check failed for return {}, proceeding with DB check", channelRefundId, e);
         }
 
         // 第 2 步：檢查資料庫中是否已存在

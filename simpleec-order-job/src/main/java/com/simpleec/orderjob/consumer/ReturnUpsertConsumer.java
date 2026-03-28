@@ -2,6 +2,7 @@ package com.simpleec.orderjob.consumer;
 
 import com.simpleec.core.crypto.EncryptionContext;
 import com.simpleec.orderjob.handler.ReturnUpsertHandler;
+import com.simpleec.common.constants.TopicConstants;
 import com.simpleec.common.kafka.SchemaVersionHandler;
 import com.simpleec.common.kafka.TaskMdcHelper;
 import com.simpleec.common.kafka.UnsupportedSchemaVersionException;
@@ -62,7 +63,7 @@ public class ReturnUpsertConsumer {
             SchemaVersionHandler.validate(json);
         } catch (UnsupportedSchemaVersionException e) {
             log.error("Unsupported schema version in RETURN_UPSERT message: {}", e.getMessage());
-            kafkaTemplate.send("task.dlt", "ReturnUpsert", json);
+            kafkaTemplate.send(TopicConstants.TASK_DLT, "ReturnUpsert", json);
             return;
         }
 
@@ -131,7 +132,22 @@ public class ReturnUpsertConsumer {
                 }
 
             } catch (IllegalArgumentException e) {
-                log.error("Invalid message structure: {}", e.getMessage());
+                log.error("Invalid message structure, routing to DLT: {}", e.getMessage());
+                try {
+                    ObjectNode wrappedMessage = json.deepCopy();
+                    ObjectNode errorBody = wrappedMessage.has("body") && wrappedMessage.get("body").isObject()
+                        ? (ObjectNode) wrappedMessage.get("body")
+                        : objectMapper.createObjectNode();
+                    ObjectNode errorInfo = objectMapper.createObjectNode();
+                    errorInfo.put("errorType", "FORMAT_ERROR");
+                    errorInfo.put("errorMessage", e.getMessage());
+                    errorInfo.put("retryCount", 0);
+                    errorBody.set("errorInfo", errorInfo);
+                    wrappedMessage.set("body", errorBody);
+                    kafkaTemplate.send("task.failed", "ReturnUpsert", wrappedMessage.toString());
+                } catch (Exception sendError) {
+                    log.error("Failed to route invalid message to task.failed", sendError);
+                }
             }
 
         } catch (Exception e) {

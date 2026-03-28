@@ -3,6 +3,7 @@ package com.simpleec.orderjob.consumer;
 import com.simpleec.core.crypto.EncryptionContext;
 import com.simpleec.core.entity.Order;
 import com.simpleec.core.service.OrderService;
+import com.simpleec.common.constants.TopicConstants;
 import com.simpleec.common.enums.OrderStatusEnum;
 import com.simpleec.common.kafka.SchemaVersionHandler;
 import com.simpleec.common.kafka.TaskMdcHelper;
@@ -59,7 +60,7 @@ public class OrderUpsertConsumer {
             SchemaVersionHandler.validate(json);
         } catch (UnsupportedSchemaVersionException e) {
             log.error("Unsupported schema version in ORDER_UPSERT message: {}", e.getMessage());
-            kafkaTemplate.send("task.dlt", "OrderUpsert", json);
+            kafkaTemplate.send(TopicConstants.TASK_DLT, "OrderUpsert", json);
             return;
         }
 
@@ -70,7 +71,7 @@ public class OrderUpsertConsumer {
 
             if (header == null || body == null) {
                 log.error("Malformed ORDER_UPSERT message: missing header or body, routing to DLT");
-                kafkaTemplate.send("task.dlt", "OrderUpsert", json.toString());
+                kafkaTemplate.send(TopicConstants.TASK_DLT, "OrderUpsert", json.toString());
                 return;
             }
 
@@ -96,7 +97,7 @@ public class OrderUpsertConsumer {
             if (merchantId.isBlank() || channelId.isBlank() || channelOrderId.isBlank()
                     || orderHash.isBlank() || orderDataJson == null || orderDataJson.isNull()) {
                 log.error("ORDER_UPSERT missing required fields (merchantId/channelId/channelOrderId/orderHash/orderData) — routing to DLT");
-                kafkaTemplate.send("task.dlt", "OrderUpsert", json.toString());
+                kafkaTemplate.send(TopicConstants.TASK_DLT, "OrderUpsert", json.toString());
                 return;
             }
 
