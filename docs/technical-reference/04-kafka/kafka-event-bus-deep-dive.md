@@ -15,7 +15,7 @@
 3. [完整事件流程圖](#3-完整事件流程圖)
    - 3.1 [訂單拉取流程（Mode B — Shopee）](#31-訂單拉取流程mode-b--shopee)
    - 3.2 [訂單拉取流程（Mode A — Easystore）](#32-訂單拉取流程mode-a--easystore)
-   - 3.3 [退貨入庫流程](#33-退貨入庫流程)
+   - 3.3 [退貨申請同步流程](#33-退貨申請同步流程未實作入庫確認)
    - 3.4 [出貨回寫流程（商家主動出貨）](#34-出貨回寫流程商家主動出貨)
    - 3.5 [失敗重試 → DLT 流程](#35-失敗重試--dlt-流程)
    - 3.6 [每日統計重算流程](#36-每日統計重算流程)
@@ -313,36 +313,65 @@ Mode A（Shopify, Easystore）：
 
 ---
 
-### 3.3 退貨入庫流程
+### 3.3 退貨申請同步流程（未實作：入庫確認）
+
+> ⚠️ **重要設計說明**
+>
+> 退貨流程分為兩個階段：
+> - **第一階段（已實作）**：從平台同步退貨申請，記錄到 `refund_orders` 表，狀態為「申請中」
+> - **第二階段（未實作，需手動）**：倉庫人員實際驗收商品後，人工確認入庫
+>
+> 入庫確認涉及實體商品驗收，無法自動化，**不會由系統自動完成**。
 
 ```
+【第一階段：自動同步退貨申請】
+
 Scheduler → dispatch FETCH_RETURNS to {platform}.slow
 
 ChannelJobConsumer
   FetchReturnsHandler.handle()
   │
-  │  ➡ 呼叫平台退貨 API
+  │  ➡ 呼叫平台退貨 API（拉取退貨申請清單）
   │  ➡ 轉換格式
-  │  ➡ 計算 returnHash = SHA-256(退貨資料)
+  │  ➡ 計算 returnHash = SHA-256(退貨申請資料)
   │
   └──► publish to return.process：
        ┌──────────────────────────────────────────┐
        │ header.taskType   = "RETURN_UPSERT"      │
        │ body.channelRefundId = "refund-123"      │
        │ body.returnHash = "sha256-xyz..."        │
-       │ body.returnData = { ...退貨完整資料... } │
+       │ body.returnData = { ...退貨申請資料... } │
        └──────────────────────────────────────────┘
 
 ReturnUpsertConsumer (order-job container)
   │
-  │  [1] 同 OrderUpsertConsumer 的驗證邏輯
-  │  [2] Redis 去重（key 含 channelRefundId）
-  │  [3] DB 去重 → INSERT or UPDATE refund_orders
-  │  [4] Redis dirty marker（統計含退貨金額）
+  │  [1] 驗證 + Redis 去重 + DB 去重
+  │  [2] INSERT or UPDATE refund_orders
+  │      status = "requested"（申請中，尚未入庫）
   │
   ▼
-refund_orders 寫入完成 ✅
-daily_statistics.refund_count / refund_amount 30 秒內更新 ✅
+refund_orders 記錄建立 ✅（僅代表平台有此退貨申請）
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+【第二階段：人工入庫確認】（尚未實作）
+
+倉庫人員收到退貨商品
+  │
+  │  人工驗收：商品狀況、數量、品項是否符合
+  │
+  ├── 驗收通過 → 手動操作系統確認入庫
+  │               refund_orders.status = "received"
+  │               inventory 數量回補
+  │               退款流程啟動
+  │
+  └── 驗收不通過 → 手動標記拒絕
+                  refund_orders.status = "rejected"
+                  通知買家
+
+注意：統計（refund_count / refund_amount）
+  目前只會在 RETURN_UPSERT 寫入時觸發 dirty marker
+  入庫確認的統計更新，待第二階段實作時補上
 ```
 
 ---
