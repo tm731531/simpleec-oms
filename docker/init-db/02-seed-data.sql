@@ -222,15 +222,6 @@ INSERT INTO public.order_status_logs (id, order_id, from_status, to_status, oper
 ('osl_005', 'ord_002', 'pending',  'shipped',   'a_main_001', '已出貨 - 新竹物流');
 
 -- ---------------------------------------------------------------------------
--- order_shipments
--- ---------------------------------------------------------------------------
-INSERT INTO public.order_shipments (
-    id, order_id, tracking_number, logistics_company, shipping_status, shipped_at
-) VALUES
-('os_001', 'ord_001', 'BK123456789TW', '黑貓宅急便', 'delivered', '2026-02-02 14:00:00+08'),
-('os_002', 'ord_002', 'HCT987654321',  '新竹物流',   'in_transit', '2026-02-06 09:00:00+08');
-
--- ---------------------------------------------------------------------------
 -- refund_orders
 -- ---------------------------------------------------------------------------
 INSERT INTO public.refund_orders (
