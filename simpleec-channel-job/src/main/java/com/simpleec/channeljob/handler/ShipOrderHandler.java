@@ -9,6 +9,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -30,6 +32,20 @@ public class ShipOrderHandler {
         String trackingNumber = body.path("trackingNumber").asText("");
         String carrier        = body.path("carrier").asText("other");
 
+        // Extract lineItems (v2 event — partial shipment support)
+        // v1: lineItems absent → pass empty string (Cyberbiz fulfills all items)
+        // v2: lineItems present → pass specific channel_item_ids
+        String lineItemIds = "";
+        if (body.has("lineItems") && body.get("lineItems").isArray()) {
+            List<String> ids = new ArrayList<>();
+            for (com.fasterxml.jackson.databind.JsonNode item : body.get("lineItems")) {
+                String cid = item.path("channelItemId").asText(
+                    item.path("channel_item_id").asText(""));
+                if (!cid.isBlank()) ids.add(cid);
+            }
+            lineItemIds = String.join(",", ids);
+        }
+
         if ("cyberbiz".equalsIgnoreCase(platformCode)) {
             Channel channel = channelService.getChannel(channelId);
             if (channel == null) {
@@ -39,11 +55,10 @@ public class ShipOrderHandler {
             try {
                 CyberbizAdapter adapter = (CyberbizAdapter) cyberbizAdapter;
                 adapter.setCredentials(channel.getToken(), channel.getToken2());
-                // line_item_ids not included in SHIP_ORDER event — pass empty string (fulfills all items)
                 adapter.shipOrder(channelOrderId, Map.of(
                         "trackingNumber", trackingNumber,
                         "carrier", carrier.isBlank() ? "other" : carrier,
-                        "lineItemIds", "",
+                        "lineItemIds", lineItemIds,
                         "notifyCustomer", "false"
                 ));
                 log.info("SHIP_ORDER success: platform={} channel={} orderId={} tracking={}",
