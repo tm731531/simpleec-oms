@@ -313,65 +313,52 @@ Mode A（Shopify, Easystore）：
 
 ---
 
-### 3.3 退貨申請同步流程（未實作：入庫確認）
+### 3.3 退貨流程（⚠️ 尚未實作）
 
-> ⚠️ **重要設計說明**
+> ⚠️ **目前狀態：Stub / 佔位符**
 >
-> 退貨流程分為兩個階段：
-> - **第一階段（已實作）**：從平台同步退貨申請，記錄到 `refund_orders` 表，狀態為「申請中」
-> - **第二階段（未實作，需手動）**：倉庫人員實際驗收商品後，人工確認入庫
->
-> 入庫確認涉及實體商品驗收，無法自動化，**不會由系統自動完成**。
+> 退貨整條流程尚未實作。`FetchReturnsHandler` 目前是一個空跑佔位符：
+> 收到 `FETCH_RETURNS` 任務後，**不呼叫任何平台 API**，只發一筆
+> `body.stub = true` 的假訊息到 `return.process`，防止訊息被靜默丟棄。
 
 ```
-【第一階段：自動同步退貨申請】
+【現況：佔位符空跑】
 
 Scheduler → dispatch FETCH_RETURNS to {platform}.slow
 
 ChannelJobConsumer
-  FetchReturnsHandler.handle()
+  FetchReturnsHandler.handle()   ← stub，什麼都沒做
   │
-  │  ➡ 呼叫平台退貨 API（拉取退貨申請清單）
-  │  ➡ 轉換格式
-  │  ➡ 計算 returnHash = SHA-256(退貨申請資料)
+  │  // TODO: call adapter.fetchReturnsByTimestamp()
+  │  // once platform adapters expose a return-list API
   │
-  └──► publish to return.process：
-       ┌──────────────────────────────────────────┐
-       │ header.taskType   = "RETURN_UPSERT"      │
-       │ body.channelRefundId = "refund-123"      │
-       │ body.returnHash = "sha256-xyz..."        │
-       │ body.returnData = { ...退貨申請資料... } │
-       └──────────────────────────────────────────┘
+  └──► publish to return.process（placeholder）：
+       ┌──────────────────────────────────────────────────┐
+       │ header.taskType = "RETURN_UPSERT"                │
+       │ body.stub = true                                 │
+       │ body.note = "FETCH_RETURNS not yet implemented"  │
+       └──────────────────────────────────────────────────┘
 
-ReturnUpsertConsumer (order-job container)
-  │
-  │  [1] 驗證 + Redis 去重 + DB 去重
-  │  [2] INSERT or UPDATE refund_orders
-  │      status = "requested"（申請中，尚未入庫）
-  │
-  ▼
-refund_orders 記錄建立 ✅（僅代表平台有此退貨申請）
+ReturnUpsertConsumer 收到後…
+  目前沒有對 stub 訊息做特殊處理（可能直接 log 然後跳過）
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-【第二階段：人工入庫確認】（尚未實作）
+【待實作的完整退貨流程】
 
-倉庫人員收到退貨商品
-  │
-  │  人工驗收：商品狀況、數量、品項是否符合
-  │
-  ├── 驗收通過 → 手動操作系統確認入庫
-  │               refund_orders.status = "received"
-  │               inventory 數量回補
-  │               退款流程啟動
-  │
-  └── 驗收不通過 → 手動標記拒絕
-                  refund_orders.status = "rejected"
-                  通知買家
+第一階段：平台退貨申請同步（自動）
+  FetchReturnsHandler → 呼叫平台 API → 拉取退貨申請
+  → publish RETURN_UPSERT（含真實 returnData）
+  → ReturnUpsertConsumer → INSERT refund_orders（status = "requested"）
 
-注意：統計（refund_count / refund_amount）
-  目前只會在 RETURN_UPSERT 寫入時觸發 dirty marker
-  入庫確認的統計更新，待第二階段實作時補上
+第二階段：倉庫入庫確認（手動）
+  倉庫人員實體驗收商品
+  ├── 通過 → 人工操作系統確認入庫
+  │           refund_orders.status = "received"
+  │           inventory 回補、退款啟動
+  └── 拒絕 → refund_orders.status = "rejected"
+
+注意：入庫確認涉及實體商品驗收，不會由系統自動化。
 ```
 
 ---
