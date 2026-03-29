@@ -61,9 +61,9 @@ public interface OrderRepository extends JpaRepository<Order, String> {
             COALESCE(SUM(total_amount), 0)                                                      AS newOrderAmount,
             SUM(CASE WHEN order_status != 'CANCELLED' THEN 1 ELSE 0 END)                       AS grossOrderCount,
             COALESCE(SUM(CASE WHEN order_status != 'CANCELLED' THEN total_amount ELSE 0 END), 0) AS grossAmount,
-            SUM(CASE WHEN order_status IN ('CONFIRMED','READY_TO_SHIP','SHIPPING','SHIPPED','COMPLETED') THEN 1 ELSE 0 END) AS receivedCount,
-            COALESCE(SUM(CASE WHEN order_status IN ('CONFIRMED','READY_TO_SHIP','SHIPPING','SHIPPED','COMPLETED') THEN total_amount ELSE 0 END), 0) AS receivedAmount,
-            SUM(CASE WHEN order_status IN ('SHIPPED', 'COMPLETED') THEN 1 ELSE 0 END)          AS shippedCount,
+            SUM(CASE WHEN order_status IN ('CONFIRMED','READY_TO_SHIP','SHIPPING','PARTIALLY_SHIPPED','SHIPPED','COMPLETED') THEN 1 ELSE 0 END) AS receivedCount,
+            COALESCE(SUM(CASE WHEN order_status IN ('CONFIRMED','READY_TO_SHIP','SHIPPING','PARTIALLY_SHIPPED','SHIPPED','COMPLETED') THEN total_amount ELSE 0 END), 0) AS receivedAmount,
+            SUM(CASE WHEN order_status IN ('PARTIALLY_SHIPPED', 'SHIPPED', 'COMPLETED') THEN 1 ELSE 0 END) AS shippedCount,
             SUM(CASE WHEN order_status = 'COMPLETED' THEN 1 ELSE 0 END)                        AS completedCount,
             SUM(CASE WHEN order_status = 'CANCELLED' THEN 1 ELSE 0 END)                        AS cancelledCount,
             COALESCE(SUM(
