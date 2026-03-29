@@ -425,6 +425,102 @@ public class ShipmentService {
         }
     }
 
+    // -----------------------------------------------------------------------
+    // Pick list generation
+    // -----------------------------------------------------------------------
+
+    public record PickLineItem(
+        String warehouseLocation,
+        String sku,
+        String name,
+        int totalQuantity,
+        List<String> orderIds   // which orders need this item
+    ) {}
+
+    public record SortLineItem(
+        String orderId,
+        String channelOrderId,
+        List<PickItem> items
+    ) {}
+
+    public record PickItem(
+        String channelItemId,
+        String sku,
+        String name,
+        int quantity,
+        boolean picked
+    ) {}
+
+    /**
+     * 拿貨清單 — consolidated by warehouse_location × sku, sorted by location then sku.
+     * Picker walks the warehouse once and picks all needed quantity for each SKU.
+     */
+    public List<PickLineItem> generatePickList(List<String> shipmentIds) {
+        List<ShipmentItem> allItems = shipmentItemRepository.findByShipmentIdIn(shipmentIds);
+
+        // location × sku → (totalQty, orderIds)
+        Map<String, int[]> qtyMap   = new LinkedHashMap<>();
+        Map<String, List<String>> orderMap = new LinkedHashMap<>();
+        Map<String, String> skuName = new HashMap<>();
+
+        for (ShipmentItem si : allItems) {
+            try {
+                JsonNode items = objectMapper.readTree(si.getItems());
+                for (JsonNode item : items) {
+                    String location = item.path("warehouse_location").isNull()
+                        ? "UNKNOWN" : item.path("warehouse_location").asText("UNKNOWN");
+                    String sku = item.path("sku").asText("");
+                    String key = location + "\t" + sku;
+                    int qty = item.path("quantity").asInt(1);
+
+                    qtyMap.computeIfAbsent(key, k -> new int[]{0})[0] += qty;
+                    orderMap.computeIfAbsent(key, k -> new ArrayList<>()).add(si.getOrderId());
+                    skuName.putIfAbsent(key, item.path("name").asText(""));
+                }
+            } catch (Exception e) {
+                log.warn("Failed to parse items for shipment_item {}", si.getId(), e);
+            }
+        }
+
+        return qtyMap.entrySet().stream()
+            .sorted(Map.Entry.comparingByKey())
+            .map(e -> {
+                String[] parts = e.getKey().split("\t", 2);
+                return new PickLineItem(parts[0], parts[1],
+                    skuName.getOrDefault(e.getKey(), ""),
+                    e.getValue()[0],
+                    orderMap.getOrDefault(e.getKey(), List.of()));
+            })
+            .collect(Collectors.toList());
+    }
+
+    /**
+     * 分貨清單 — per-order breakdown for the packing station.
+     * Shows what to put in each order's box after picking.
+     */
+    public List<SortLineItem> generateSortList(List<String> shipmentIds) {
+        List<ShipmentItem> allItems = shipmentItemRepository.findByShipmentIdIn(shipmentIds);
+
+        return allItems.stream().map(si -> {
+            List<PickItem> items = new ArrayList<>();
+            try {
+                JsonNode itemsNode = objectMapper.readTree(si.getItems());
+                for (JsonNode item : itemsNode) {
+                    items.add(new PickItem(
+                        item.path("channel_item_id").asText(""),
+                        item.path("sku").asText(""),
+                        item.path("name").asText(""),
+                        item.path("quantity").asInt(1),
+                        item.path("picked").asBoolean(false)
+                    ));
+                }
+            } catch (Exception e) {
+                log.warn("Failed to parse items for sort list: {}", si.getId(), e);
+            }
+            return new SortLineItem(si.getOrderId(), si.getChannelOrderId(), items);
+        }).collect(Collectors.toList());
+    }
+
     /**
      * Build initial items JSON from orders.items JSONB.
      * orders.items format: [{channel_item_id, sku, name, quantity, ...}]
