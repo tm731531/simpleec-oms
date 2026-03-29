@@ -14,6 +14,7 @@ public enum OrderStatusEnum {
     PENDING("PENDING", "待支付", "等待買家支付款項"),
     CONFIRMED("CONFIRMED", "已確認", "訂單已確認，待出貨"),
     READY_TO_SHIP("READY_TO_SHIP", "待出貨", "準備出貨中"),
+    PARTIALLY_SHIPPED("PARTIALLY_SHIPPED", "部分出貨", "訂單已部分出貨，尚有商品待出"),
     SHIPPING("SHIPPING", "出貨中", "訂單已出貨，運送中"),
     SHIPPED("SHIPPED", "已出貨", "訂單已出貨"),
     COMPLETED("COMPLETED", "已完成", "訂單交易完成"),
