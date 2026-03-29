@@ -210,6 +210,148 @@ public class ShipmentService {
         return shipment;
     }
 
+    /**
+     * Split: move specified channel_item_ids from shipmentId into a new shipment.
+     * Uses Redis distributed lock to prevent concurrent modification.
+     * Returns [originalShipment, newShipment].
+     */
+    @Transactional
+    public List<Shipment> split(String shipmentId, List<String> channelItemIdsToMove,
+                                 String operatorId) {
+        String lockKey = "shipment:" + shipmentId + ":lock";
+        // Use unique value so we only delete our own lock (avoids deleting another thread's lock after TTL expiry)
+        String lockValue = java.util.UUID.randomUUID().toString();
+        Boolean locked = redisTemplate.opsForValue().setIfAbsent(lockKey, lockValue, 30, TimeUnit.SECONDS);
+        if (!Boolean.TRUE.equals(locked)) {
+            throw new IllegalStateException("Shipment is being modified by another operator: " + shipmentId);
+        }
+        try {
+            Shipment original = getAndVerify(shipmentId);
+            if (original.getStatus().isTerminal() || original.getStatus() == ShipmentStatusEnum.ON_HOLD) {
+                throw new IllegalStateException("Cannot split shipment in status: " + original.getStatus());
+            }
+
+            List<ShipmentItem> allItems = shipmentItemRepository.findByShipmentId(shipmentId);
+
+            // Create new shipment
+            String newShipmentId = NanoIdUtil.generate();
+            Shipment newShipment = Shipment.builder()
+                .id(newShipmentId)
+                .merchantId(original.getMerchantId())
+                .channelId(original.getChannelId())
+                .batchId(original.getBatchId())
+                .shipmentNo(original.getShipmentNo() + "-B")
+                .status(original.getStatus())
+                .build();
+            shipmentRepository.save(newShipment);
+            logStatusChange(newShipmentId, null, newShipment.getStatus(), operatorId, "Split from " + shipmentId);
+
+            Set<String> toMove = new HashSet<>(channelItemIdsToMove);
+
+            for (ShipmentItem si : allItems) {
+                try {
+                    JsonNode items = objectMapper.readTree(si.getItems());
+                    ArrayNode remaining = objectMapper.createArrayNode();
+                    ArrayNode moved = objectMapper.createArrayNode();
+
+                    for (JsonNode item : items) {
+                        String cid = item.path("channel_item_id").asText();
+                        if (toMove.contains(cid)) {
+                            moved.add(item);
+                        } else {
+                            remaining.add(item);
+                        }
+                    }
+
+                    if (!moved.isEmpty()) {
+                        // Create new item row on new shipment
+                        ShipmentItem newItem = ShipmentItem.builder()
+                            .id(NanoIdUtil.generate())
+                            .shipmentId(newShipmentId)
+                            .merchantId(si.getMerchantId())
+                            .orderId(si.getOrderId())
+                            .channelOrderId(si.getChannelOrderId())
+                            .items(objectMapper.writeValueAsString(moved))
+                            .build();
+                        shipmentItemRepository.save(newItem);
+                    }
+                    if (!remaining.isEmpty()) {
+                        si.setItems(objectMapper.writeValueAsString(remaining));
+                        shipmentItemRepository.save(si);
+                    } else {
+                        // All items moved — remove the original row
+                        shipmentItemRepository.delete(si);
+                    }
+                } catch (Exception e) {
+                    throw new RuntimeException("Error processing shipment items during split", e);
+                }
+            }
+            return List.of(original, newShipment);
+        } finally {
+            // Only delete the lock if we still own it (TTL may have expired and another thread may have re-acquired)
+            if (lockValue.equals(redisTemplate.opsForValue().get(lockKey))) {
+                redisTemplate.delete(lockKey);
+            }
+        }
+    }
+
+    /**
+     * Merge shipmentIdB into shipmentIdA.
+     * Both must belong to the same merchant and channel.
+     * shipmentIdB is CANCELLED after merge.
+     */
+    @Transactional
+    public Shipment merge(String shipmentIdA, String shipmentIdB, String operatorId) {
+        String lockKeyA = "shipment:" + shipmentIdA + ":lock";
+        String lockKeyB = "shipment:" + shipmentIdB + ":lock";
+        // Use unique value so we only release locks we actually acquired
+        String lockValue = java.util.UUID.randomUUID().toString();
+        Boolean lockedA = redisTemplate.opsForValue().setIfAbsent(lockKeyA, lockValue, 30, TimeUnit.SECONDS);
+        Boolean lockedB = redisTemplate.opsForValue().setIfAbsent(lockKeyB, lockValue, 30, TimeUnit.SECONDS);
+        if (!Boolean.TRUE.equals(lockedA) || !Boolean.TRUE.equals(lockedB)) {
+            // Only release locks we actually acquired — don't delete another thread's lock
+            if (Boolean.TRUE.equals(lockedA)) redisTemplate.delete(lockKeyA);
+            if (Boolean.TRUE.equals(lockedB)) redisTemplate.delete(lockKeyB);
+            throw new IllegalStateException("One or both shipments are being modified concurrently");
+        }
+        try {
+            Shipment a = getAndVerify(shipmentIdA);
+            Shipment b = getAndVerify(shipmentIdB);
+
+            if (!a.getMerchantId().equals(b.getMerchantId())) {
+                throw new IllegalArgumentException("Cannot merge shipments from different merchants");
+            }
+            if (!a.getChannelId().equals(b.getChannelId())) {
+                throw new IllegalArgumentException("Cannot merge shipments from different channels");
+            }
+            if (a.getStatus().isTerminal() || b.getStatus().isTerminal()) {
+                throw new IllegalStateException("Cannot merge terminal shipments");
+            }
+
+            // Move all shipment_items from B → A
+            List<ShipmentItem> bItems = shipmentItemRepository.findByShipmentId(shipmentIdB);
+            for (ShipmentItem si : bItems) {
+                si.setShipmentId(shipmentIdA);
+                shipmentItemRepository.save(si);
+            }
+
+            // Cancel B — capture previous status BEFORE mutation (fixes audit log from_status)
+            ShipmentStatusEnum prevB = b.getStatus();
+            b.setStatus(ShipmentStatusEnum.CANCELLED);
+            b.setCancelledAt(LocalDateTime.now());
+            b.setCancelReason("Merged into " + shipmentIdA);
+            shipmentRepository.save(b);
+            logStatusChange(shipmentIdB, prevB, ShipmentStatusEnum.CANCELLED, operatorId,
+                "Merged into " + shipmentIdA);
+
+            return a;
+        } finally {
+            // Only release locks we still own (TTL-safe)
+            if (lockValue.equals(redisTemplate.opsForValue().get(lockKeyA))) redisTemplate.delete(lockKeyA);
+            if (lockValue.equals(redisTemplate.opsForValue().get(lockKeyB))) redisTemplate.delete(lockKeyB);
+        }
+    }
+
     // -----------------------------------------------------------------------
     // Read operations
     // -----------------------------------------------------------------------
