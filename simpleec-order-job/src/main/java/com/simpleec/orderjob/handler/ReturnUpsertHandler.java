@@ -1,6 +1,8 @@
 package com.simpleec.orderjob.handler;
 
+import com.simpleec.core.entity.Order;
 import com.simpleec.core.entity.ReturnOrder;
+import com.simpleec.core.repository.OrderRepository;
 import com.simpleec.core.service.ReturnOrderService;
 import com.simpleec.common.enums.ReturnStatusEnum;
 import com.simpleec.common.util.RedisKeyUtil;
@@ -29,6 +31,7 @@ import java.util.Optional;
 public class ReturnUpsertHandler {
 
     private final ReturnOrderService returnOrderService;
+    private final OrderRepository orderRepository;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
 
@@ -71,7 +74,7 @@ public class ReturnUpsertHandler {
 
             if (!returnHash.equals(dbReturnHash)) {
                 // Hash 不同 → 有實質變化 → 執行 UPDATE
-                returnOrder = updateReturnFromData(returnOrder, returnDataJson);
+                returnOrder = updateReturnFromData(returnOrder, channelId, returnDataJson);
                 log.info("Updated return: {} from channel {} (hash changed)",
                     returnOrder.getId(), channelId);
             } else {
@@ -107,7 +110,7 @@ public class ReturnUpsertHandler {
         returnOrder.setChannelRefundId(channelRefundId);
 
         // 填充退貨數據
-        populateReturnFromData(returnOrder, returnDataJson);
+        populateReturnFromData(returnOrder, channelId, returnDataJson);
 
         return returnOrder;
     }
@@ -115,17 +118,30 @@ public class ReturnUpsertHandler {
     /**
      * 更新現有 ReturnOrder 實體
      */
-    private ReturnOrder updateReturnFromData(ReturnOrder returnOrder, JsonNode returnDataJson) throws Exception {
-        populateReturnFromData(returnOrder, returnDataJson);
+    private ReturnOrder updateReturnFromData(ReturnOrder returnOrder, String channelId, JsonNode returnDataJson) throws Exception {
+        populateReturnFromData(returnOrder, channelId, returnDataJson);
         return returnOrder;
     }
 
     /**
      * 從 API 數據填充 ReturnOrder 實體
+     *
+     * orderId 解析優先順序：
+     *  1. returnData.orderId（OMS 內部 ID，直接使用）
+     *  2. returnData.channelOrderId（通路訂單 ID，查詢 orders 表取 OMS ID）
      */
-    private void populateReturnFromData(ReturnOrder returnOrder, JsonNode returnDataJson) throws Exception {
-        if (returnDataJson.has("orderId")) {
+    private void populateReturnFromData(ReturnOrder returnOrder, String channelId, JsonNode returnDataJson) throws Exception {
+        if (returnDataJson.has("orderId") && !returnDataJson.get("orderId").isNull()) {
             returnOrder.setOrderId(returnDataJson.get("orderId").asText());
+        } else if (returnDataJson.has("channelOrderId") && !returnDataJson.get("channelOrderId").isNull()) {
+            String channelOrderId = returnDataJson.get("channelOrderId").asText();
+            Optional<Order> order = orderRepository.findByChannelIdAndChannelOrderId(channelId, channelOrderId);
+            if (order.isPresent()) {
+                returnOrder.setOrderId(order.get().getId());
+            } else {
+                log.warn("populateReturnFromData: order not found for channelId={} channelOrderId={}",
+                        channelId, channelOrderId);
+            }
         }
 
         if (returnDataJson.has("status")) {

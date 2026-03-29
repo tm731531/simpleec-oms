@@ -349,16 +349,46 @@ public class CyberbizAdapter implements ChannelAdapter {
         return allProducts;
     }
 
+    /**
+     * 確認訂單出貨（自定義物流）— 實作 ChannelAdapter 介面。
+     *
+     * 從 shippingInfo 提取 lineItemIds, trackingNumber, carrier, notifyCustomer 欄位，
+     * 呼叫 POST /v1/orders/{orderId}/fulfillments/custom_shipping。
+     *
+     * @param orderId      Cyberbiz 訂單 ID（channelOrderId）
+     * @param shippingInfo 出貨資訊，需含 trackingNumber、carrier（及可選 lineItemIds）
+     */
     @Override
     public void shipOrder(String orderId, Map<String, Object> shippingInfo) throws Exception {
-        log.info("Shipping order {} on Cyberbiz with info: {}", orderId, shippingInfo);
-        // TODO: 實現 Cyberbiz 出貨確認邏輯
+        String lineItemIds  = shippingInfo.getOrDefault("lineItemIds", "").toString();
+        String tracking     = shippingInfo.getOrDefault("trackingNumber", "").toString();
+        String carrier      = shippingInfo.getOrDefault("carrier", "other").toString();
+        boolean notify      = Boolean.parseBoolean(shippingInfo.getOrDefault("notifyCustomer", "false").toString());
+
+        if (tracking.isBlank()) {
+            throw new IllegalArgumentException("shipOrder: trackingNumber is required for orderId=" + orderId);
+        }
+
+        boolean ok = cyberbizApiClient.fulfillOrderCustomShipping(token, secret, orderId, lineItemIds, tracking, carrier, notify);
+        if (!ok) {
+            throw new RuntimeException("Cyberbiz fulfillOrderCustomShipping failed for orderId=" + orderId);
+        }
     }
 
+    /**
+     * 更新商品庫存（ChannelAdapter 介面 — 只有 productId，無 variantId）。
+     *
+     * ⚠️ 此方法無法呼叫 Cyberbiz API（需要 product_id + variant_id 兩個參數）。
+     * 請使用 {@link #updateVariantInventory(String, String, int)} 代替。
+     *
+     * @deprecated 使用 updateVariantInventory(channelProductId, channelSpecId, quantity) 代替
+     */
     @Override
+    @Deprecated
     public void updateInventory(String productId, int quantity) throws Exception {
-        log.info("Updating inventory for product {} to quantity {} on Cyberbiz", productId, quantity);
-        // TODO: 實現 Cyberbiz 庫存更新邏輯
+        log.warn("CyberbizAdapter.updateInventory(productId, quantity) called — this method cannot call Cyberbiz API " +
+                 "because Cyberbiz requires both product_id AND variant_id. " +
+                 "Use updateVariantInventory(channelProductId, channelSpecId, quantity) instead.");
     }
 
     /**
@@ -431,5 +461,110 @@ public class CyberbizAdapter implements ChannelAdapter {
         log.info("Testing connection to Cyberbiz API");
         // 模擬連接測試
         return true;
+    }
+
+    /**
+     * 更新商品規格庫存量
+     *
+     * PUT /v1/products/{channelProductId}/product_variants/{channelSpecId}
+     * form-data: inventory_quantity={quantity}
+     *
+     * @param channelProductId Cyberbiz product ID（sell_pack.channel_product_id）
+     * @param channelSpecId    Cyberbiz variant ID（sell_pack.channel_spec_id）
+     * @param quantity         新的庫存量
+     */
+    public void updateVariantInventory(String channelProductId, String channelSpecId, int quantity) throws Exception {
+        Map<String, String> params = new java.util.LinkedHashMap<>();
+        params.put("inventory_quantity", String.valueOf(quantity));
+        boolean ok = cyberbizApiClient.updateProductVariant(token, secret, channelProductId, channelSpecId, params);
+        if (!ok) {
+            throw new RuntimeException("Cyberbiz updateProductVariant (inventory) failed: productId=" + channelProductId + " variantId=" + channelSpecId);
+        }
+    }
+
+    /**
+     * 更新商品規格售價
+     *
+     * PUT /v1/products/{channelProductId}/product_variants/{channelSpecId}
+     * form-data: price={price}
+     *
+     * @param channelProductId Cyberbiz product ID
+     * @param channelSpecId    Cyberbiz variant ID
+     * @param price            新的售價（字串，保留小數點精度）
+     */
+    public void updateVariantPrice(String channelProductId, String channelSpecId, String price) throws Exception {
+        Map<String, String> params = new java.util.LinkedHashMap<>();
+        params.put("price", price);
+        boolean ok = cyberbizApiClient.updateProductVariant(token, secret, channelProductId, channelSpecId, params);
+        if (!ok) {
+            throw new RuntimeException("Cyberbiz updateProductVariant (price) failed: productId=" + channelProductId + " variantId=" + channelSpecId);
+        }
+    }
+
+    /**
+     * 通知平台：退貨申請已核准（進入驗貨流程）
+     *
+     * PUT /v1/orders/{channelOrderId}/manual_return  operation=manual_returning
+     *
+     * @param channelOrderId Cyberbiz 訂單 ID
+     */
+    public void approveReturn(String channelOrderId) throws Exception {
+        boolean ok = cyberbizApiClient.updateOrderManualReturn(token, secret, channelOrderId, "manual_returning");
+        if (!ok) {
+            throw new RuntimeException("Cyberbiz approveReturn failed: orderId=" + channelOrderId);
+        }
+    }
+
+    /**
+     * 通知平台：退貨申請已拒絕
+     *
+     * PUT /v1/orders/{channelOrderId}/manual_return  operation=manual_return_refuse
+     *
+     * @param channelOrderId Cyberbiz 訂單 ID
+     */
+    public void rejectReturn(String channelOrderId) throws Exception {
+        boolean ok = cyberbizApiClient.updateOrderManualReturn(token, secret, channelOrderId, "manual_return_refuse");
+        if (!ok) {
+            throw new RuntimeException("Cyberbiz rejectReturn failed: orderId=" + channelOrderId);
+        }
+    }
+
+    /**
+     * 拉取退貨記錄列表（以 baseTimestamp 為基準的時間窗口）
+     *
+     * 流程：
+     *  1. 呼叫 getOrdersWithRefund() 取得近 1 小時有退貨的訂單列表
+     *  2. 對每筆訂單呼叫 getOrderReturns() 取得退貨記錄
+     *  3. 在每筆退貨記錄中附加 channelOrderId（供 ReturnUpsertHandler 查詢 OMS orderId 用）
+     *
+     * @param baseTimestamp 基礎時間戳（秒）
+     * @return list of return records, each containing a "channelOrderId" field
+     */
+    public List<Map<String, Object>> fetchReturnsByTimestamp(long baseTimestamp) throws Exception {
+        List<Map<String, Object>> result = new ArrayList<>();
+
+        long oneHourAgo = baseTimestamp - 3600;
+        List<Map<String, Object>> ordersWithRefund =
+                cyberbizApiClient.getOrdersWithRefund(token, secret, oneHourAgo, baseTimestamp);
+
+        log.info("fetchReturnsByTimestamp: found {} orders with refunds in window [{}, {}]",
+                ordersWithRefund.size(), oneHourAgo, baseTimestamp);
+
+        for (Map<String, Object> order : ordersWithRefund) {
+            Object orderIdObj = order.get("id");
+            if (orderIdObj == null) continue;
+            String channelOrderId = String.valueOf(orderIdObj);
+
+            List<Map<String, Object>> returns =
+                    cyberbizApiClient.getOrderReturns(token, secret, channelOrderId);
+            for (Map<String, Object> ret : returns) {
+                // Attach channelOrderId so ReturnUpsertHandler can resolve OMS orderId
+                ret.put("channelOrderId", channelOrderId);
+                result.add(ret);
+            }
+        }
+
+        log.info("fetchReturnsByTimestamp: {} total return records", result.size());
+        return result;
     }
 }

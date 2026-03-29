@@ -292,6 +292,175 @@ public class CyberbizApiClient {
     }
 
     /**
+     * 確認訂單出貨（自定義物流）
+     *
+     * POST /v1/orders/{order_id}/fulfillments/custom_shipping
+     * form-data: line_item_ids (comma-separated), tracking_number, tracking_company, notify_customer
+     *
+     * @param lineItemIds  comma-separated Cyberbiz line item IDs (e.g. "12345,67890")
+     * @param carrier      carrier code (e.g. "hct", "kerry_express", "other")
+     * @param notifyCustomer whether to notify the customer by email
+     * @return true if successful (2xx response)
+     */
+    public boolean fulfillOrderCustomShipping(String username, String secret,
+                                               String orderId, String lineItemIds,
+                                               String trackingNumber, String carrier,
+                                               boolean notifyCustomer) {
+        try {
+            String path = "/v1/orders/" + orderId + "/fulfillments/custom_shipping";
+            String url = baseUrl + path;
+
+            HttpHeaders headers = buildHmacHeaders(username, secret, "POST", path, null);
+            headers.set("Content-Type", "application/x-www-form-urlencoded");
+
+            StringBuilder form = new StringBuilder();
+            form.append("line_item_ids=").append(java.net.URLEncoder.encode(lineItemIds, "UTF-8"));
+            form.append("&tracking_number=").append(java.net.URLEncoder.encode(trackingNumber, "UTF-8"));
+            form.append("&tracking_company=").append(java.net.URLEncoder.encode(carrier, "UTF-8"));
+            form.append("&notify_customer=").append(notifyCustomer ? "true" : "false");
+
+            HttpEntity<String> entity = new HttpEntity<>(form.toString(), headers);
+            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
+
+            boolean success = response.getStatusCode().is2xxSuccessful();
+            if (success) {
+                log.info("fulfillOrderCustomShipping success: orderId={} tracking={}", orderId, trackingNumber);
+            } else {
+                log.warn("fulfillOrderCustomShipping failed: orderId={} status={} body={}",
+                        orderId, response.getStatusCode(), response.getBody());
+            }
+            return success;
+
+        } catch (Exception e) {
+            log.error("Error calling fulfillOrderCustomShipping for orderId={}", orderId, e);
+            return false;
+        }
+    }
+
+    /**
+     * 更新商品規格（庫存量、售價等）
+     *
+     * PUT /v1/products/{product_id}/product_variants/{product_variant_id}
+     * form-data: any subset of inventory_quantity, price, compare_at_price, sku, etc.
+     *
+     * @param params map of fields to update (e.g. {"inventory_quantity": "10"} or {"price": "299.00"})
+     * @return true if successful (2xx response)
+     */
+    public boolean updateProductVariant(String username, String secret,
+                                         String productId, String variantId,
+                                         Map<String, String> params) {
+        try {
+            String path = "/v1/products/" + productId + "/product_variants/" + variantId;
+            String url = baseUrl + path;
+
+            HttpHeaders headers = buildHmacHeaders(username, secret, "PUT", path, null);
+            headers.set("Content-Type", "application/x-www-form-urlencoded");
+
+            StringBuilder form = new StringBuilder();
+            for (Map.Entry<String, String> entry : params.entrySet()) {
+                if (form.length() > 0) form.append("&");
+                form.append(java.net.URLEncoder.encode(entry.getKey(), "UTF-8"))
+                    .append("=")
+                    .append(java.net.URLEncoder.encode(entry.getValue(), "UTF-8"));
+            }
+
+            HttpEntity<String> entity = new HttpEntity<>(form.toString(), headers);
+            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.PUT, entity, String.class);
+
+            boolean success = response.getStatusCode().is2xxSuccessful();
+            if (success) {
+                log.info("updateProductVariant success: productId={} variantId={} params={}", productId, variantId, params);
+            } else {
+                log.warn("updateProductVariant failed: productId={} variantId={} status={} body={}",
+                        productId, variantId, response.getStatusCode(), response.getBody());
+            }
+            return success;
+
+        } catch (Exception e) {
+            log.error("Error calling updateProductVariant for productId={} variantId={}", productId, variantId, e);
+            return false;
+        }
+    }
+
+    /**
+     * 更新訂單退貨狀態（手動操作）
+     *
+     * PUT /v1/orders/{order_id}/manual_return
+     * form-data: operation (enum: manual_returning | manual_check_goods | manual_return_refuse | manual_return_done)
+     *
+     * @param operation one of: "manual_returning", "manual_check_goods", "manual_return_refuse", "manual_return_done"
+     * @return true if successful (2xx response)
+     */
+    public boolean updateOrderManualReturn(String username, String secret,
+                                            String orderId, String operation) {
+        try {
+            String path = "/v1/orders/" + orderId + "/manual_return";
+            String url = baseUrl + path;
+
+            HttpHeaders headers = buildHmacHeaders(username, secret, "PUT", path, null);
+            headers.set("Content-Type", "application/x-www-form-urlencoded");
+
+            String form = "operation=" + java.net.URLEncoder.encode(operation, "UTF-8");
+
+            HttpEntity<String> entity = new HttpEntity<>(form, headers);
+            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.PUT, entity, String.class);
+
+            boolean success = response.getStatusCode().is2xxSuccessful();
+            if (success) {
+                log.info("updateOrderManualReturn success: orderId={} operation={}", orderId, operation);
+            } else {
+                log.warn("updateOrderManualReturn failed: orderId={} operation={} status={} body={}",
+                        orderId, operation, response.getStatusCode(), response.getBody());
+            }
+            return success;
+
+        } catch (Exception e) {
+            log.error("Error calling updateOrderManualReturn for orderId={}", orderId, e);
+            return false;
+        }
+    }
+
+    /**
+     * 查詢訂單的退貨記錄列表
+     *
+     * GET /v1/orders/{order_id}/returns
+     * Response: array of return records with id, created_at, tracking_number, line_items, return_reason
+     *
+     * @return list of return records; empty if none or on error
+     */
+    public List<Map<String, Object>> getOrderReturns(String username, String secret, String orderId) {
+        try {
+            String path = "/v1/orders/" + orderId + "/returns";
+            String url = baseUrl + path;
+
+            HttpHeaders headers = buildHmacHeaders(username, secret, "GET", path, null);
+            HttpEntity<?> entity = new HttpEntity<>(headers);
+            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
+
+            if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
+                log.debug("getOrderReturns: no data for orderId={} status={}", orderId, response.getStatusCode());
+                return Collections.emptyList();
+            }
+
+            JsonNode root = objectMapper.readTree(response.getBody());
+            List<Map<String, Object>> returns = new ArrayList<>();
+
+            if (root.isArray()) {
+                root.forEach(r -> returns.add(objectMapper.convertValue(r, Map.class)));
+            } else if (root.has("data") && root.get("data").isArray()) {
+                root.get("data").forEach(r -> returns.add(objectMapper.convertValue(r, Map.class)));
+            }
+
+            log.debug("getOrderReturns: orderId={} found {} records", orderId, returns.size());
+            return returns;
+
+        } catch (Exception e) {
+            log.error("Error calling getOrderReturns for orderId={}", orderId, e);
+            return Collections.emptyList();
+        }
+    }
+
+    /**
      * 建立 HMAC-SHA256 認證 Headers
      * 使用 Channel.token（username）和 Channel.token2（secret）
      */
