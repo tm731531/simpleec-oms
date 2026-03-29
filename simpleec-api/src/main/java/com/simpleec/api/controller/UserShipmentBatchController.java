@@ -6,6 +6,7 @@ import com.simpleec.core.entity.Shipment;
 import com.simpleec.core.entity.ShipmentBatch;
 import com.simpleec.core.service.ShipmentService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
@@ -18,6 +19,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/user/shipment-batches")
 @RequiredArgsConstructor
@@ -33,9 +35,13 @@ public class UserShipmentBatchController {
     public ResponseEntity<ShipmentBatch> createBatch(
             @AuthenticationPrincipal UserPrincipal p,
             @RequestBody CreateBatchRequest req) {
-        ShipmentBatch batch = shipmentService.createBatch(
-            p.getMerchantId(), req.carrier(), req.scheduledPickupAt(), req.notes());
-        return ResponseEntity.status(HttpStatus.CREATED).body(batch);
+        try {
+            ShipmentBatch batch = shipmentService.createBatch(
+                p.getMerchantId(), req.carrier(), req.scheduledPickupAt(), req.notes());
+            return ResponseEntity.status(HttpStatus.CREATED).body(batch);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().build();
+        }
     }
 
     @GetMapping
@@ -66,8 +72,14 @@ public class UserShipmentBatchController {
             @AuthenticationPrincipal UserPrincipal p,
             @PathVariable String id,
             @RequestBody ForceReadyRequest req) {
-        verifyOwnership(id, p.getMerchantId());
-        return ResponseEntity.ok(shipmentService.forceReadyBatch(id, req.note()));
+        try {
+            verifyOwnership(id, p.getMerchantId());
+            return ResponseEntity.ok(shipmentService.forceReadyBatch(id, req.note()));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.notFound().build();
+        } catch (IllegalStateException e) {
+            return ResponseEntity.unprocessableEntity().build();
+        }
     }
 
     @PutMapping("/{id}/confirm-pickup")
@@ -75,17 +87,27 @@ public class UserShipmentBatchController {
             @AuthenticationPrincipal UserPrincipal p,
             @PathVariable String id,
             @RequestBody ConfirmPickupRequest req) {
-        verifyOwnership(id, p.getMerchantId());
-        return ResponseEntity.ok(shipmentService.confirmPickup(
-            id, req.carrierDriverId(), req.boxCount(), req.logisticsCost()));
+        try {
+            verifyOwnership(id, p.getMerchantId());
+            return ResponseEntity.ok(shipmentService.confirmPickup(
+                id, req.carrierDriverId(), req.boxCount(), req.logisticsCost()));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.notFound().build();
+        } catch (IllegalStateException e) {
+            return ResponseEntity.unprocessableEntity().build();
+        }
     }
 
     @GetMapping("/{id}/manifest")
     public ResponseEntity<Map<String, Object>> manifest(
             @AuthenticationPrincipal UserPrincipal p,
             @PathVariable String id) {
-        verifyOwnership(id, p.getMerchantId());
-        return ResponseEntity.ok(shipmentService.generateManifest(id));
+        try {
+            verifyOwnership(id, p.getMerchantId());
+            return ResponseEntity.ok(shipmentService.generateManifest(id));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.notFound().build();
+        }
     }
 
     private void verifyOwnership(String batchId, String merchantId) {

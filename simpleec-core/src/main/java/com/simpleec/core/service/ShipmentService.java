@@ -674,11 +674,12 @@ public class ShipmentService {
     @Transactional
     public ShipmentBatch createBatch(String merchantId, String carrier,
                                       LocalDateTime scheduledPickupAt, String notes) {
+        String batchId = NanoIdUtil.generate();
         ShipmentBatch batch = ShipmentBatch.builder()
-            .id(NanoIdUtil.generate())
+            .id(batchId)
             .merchantId(merchantId)
             .batchNo("BATCH-" + LocalDateTime.now().format(
-                java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmm")))
+                java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmm")) + "-" + batchId.substring(0, 6))
             .carrier(carrier)
             .scheduledPickupAt(scheduledPickupAt)
             .notes(notes)
