@@ -15,8 +15,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
 import java.util.*;
@@ -35,6 +37,9 @@ public class ShipmentService {
     private final OrderRepository orderRepository;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
+    private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final TransactionTemplate transactionTemplate;
+    private final ChannelRepository channelRepository;
 
     // Status advance order — ends at AWAITING_PICKUP.
     // DISPATCHED is intentionally excluded: the only path to DISPATCHED is
@@ -520,6 +525,147 @@ public class ShipmentService {
             return new SortLineItem(si.getOrderId(), si.getChannelOrderId(), items);
         }).collect(Collectors.toList());
     }
+
+    /**
+     * Dispatch a shipment (Phase 6).
+     *
+     * Phase 1 — atomic DB (via TransactionTemplate):
+     *   1. status → DISPATCHED, record dispatched_at
+     *   2. Update affected orders (SHIPPED or PARTIALLY_SHIPPED)
+     *
+     * Phase 2 — Kafka (outside transaction, after DB commits):
+     *   3. Publish SHIP_ORDER v2 per affected order
+     *   4. Write platform_notified_at on success; leave null for retry on failure
+     *
+     * NOTE: We use TransactionTemplate (not @Transactional on dispatchDb) because
+     * Spring AOP @Transactional does NOT work on internal self-invocation — the proxy
+     * is bypassed and no transaction would start.
+     */
+    public Shipment dispatch(String shipmentId, String operatorId) {
+        // Phase 1: atomic DB — TransactionTemplate ensures the proxy boundary is respected
+        DispatchResult result = transactionTemplate.execute(status -> dispatchDb(shipmentId, operatorId));
+
+        // Phase 2: Kafka (outside transaction — DB has already committed)
+        for (OrderDispatchInfo info : result.orderInfos()) {
+            publishShipOrderEvent(result.shipment(), info);
+        }
+
+        return result.shipment();
+    }
+
+    // No @Transactional here — transaction is managed by TransactionTemplate in dispatch()
+    private DispatchResult dispatchDb(String shipmentId, String operatorId) {
+        Shipment shipment = getAndVerify(shipmentId);
+
+        if (shipment.getStatus() != ShipmentStatusEnum.AWAITING_PICKUP) {
+            throw new IllegalStateException(
+                "Can only dispatch from AWAITING_PICKUP, current: " + shipment.getStatus());
+        }
+        if (shipment.isHasException()) {
+            throw new IllegalStateException("Resolve exception before dispatching: " + shipmentId);
+        }
+
+        shipment.setStatus(ShipmentStatusEnum.DISPATCHED);
+        shipment.setDispatchedAt(LocalDateTime.now());
+        shipmentRepository.save(shipment);
+        logStatusChange(shipmentId, ShipmentStatusEnum.AWAITING_PICKUP,
+            ShipmentStatusEnum.DISPATCHED, operatorId, null);
+
+        // Determine affected orders and their shipment completeness.
+        // Deduplicate by orderId: a split-then-merge can leave two ShipmentItem rows
+        // for the same order on the same shipment. Without deduplication, SHIP_ORDER
+        // would be published twice for that order.
+        List<ShipmentItem> items = shipmentItemRepository.findByShipmentId(shipmentId);
+        List<OrderDispatchInfo> orderInfos = new ArrayList<>();
+        Set<String> processedOrderIds = new HashSet<>();
+
+        for (ShipmentItem si : items) {
+            if (!processedOrderIds.add(si.getOrderId())) continue; // skip duplicate
+            Order order = orderRepository.findById(si.getOrderId()).orElse(null);
+            if (order == null) continue;
+
+            List<ShipmentItem> activeForOrder = shipmentItemRepository.findActiveByOrderId(si.getOrderId());
+            boolean fullyShipped = activeForOrder.stream()
+                .allMatch(a -> {
+                    Shipment s = shipmentRepository.findById(a.getShipmentId()).orElse(null);
+                    return s != null && s.getStatus() == ShipmentStatusEnum.DISPATCHED;
+                });
+
+            OrderStatusEnum newStatus = fullyShipped
+                ? OrderStatusEnum.SHIPPED : OrderStatusEnum.PARTIALLY_SHIPPED;
+            order.setOrderStatus(newStatus);
+            if (fullyShipped) order.setShippedAt(LocalDateTime.now());
+            orderRepository.save(order);
+
+            orderInfos.add(new OrderDispatchInfo(
+                order.getId(), order.getChannelOrderId(), order.getMerchantId(),
+                order.getChannelId(), si.getItems()
+            ));
+        }
+
+        return new DispatchResult(shipment, orderInfos);
+    }
+
+    private void publishShipOrderEvent(Shipment shipment, OrderDispatchInfo info) {
+        try {
+            // Resolve platform code via channel lookup.
+            // channel.getPlatformId() IS the platform code ("cyberbiz", "shopee", etc.) — same pattern
+            // as SchedulerEventHandler.dispatchFetchOrders(). No Platform table lookup needed.
+            Channel channel = channelRepository.findById(info.channelId())
+                .orElseThrow(() -> new IllegalStateException("Channel not found: " + info.channelId()));
+            String platformCode = channel.getPlatformId().toLowerCase();
+            String topic = com.simpleec.common.constants.TopicConstants.platformFastTopic(platformCode);
+
+            ObjectNode message = objectMapper.createObjectNode();
+
+            ObjectNode header = objectMapper.createObjectNode();
+            header.put("messageId",  "msg_" + NanoIdUtil.generate());
+            header.put("requestId",  "req_" + NanoIdUtil.generate());
+            header.put("taskType",   "SHIP_ORDER");
+            header.put("platformId", platformCode);
+            header.put("channelId",  info.channelId());
+            header.put("merchantId", info.merchantId());
+            header.put("timestamp",  java.time.Instant.now().toString());
+            header.put("source",     "shipment_service");
+            header.put("version",    2);
+            header.put("isRollback", false);
+
+            ObjectNode body = objectMapper.createObjectNode();
+            body.put("orderId",         info.orderId());
+            body.put("channelOrderId",  info.channelOrderId());
+            body.put("trackingNumber",  shipment.getTrackingNumber());
+            body.put("carrier",         shipment.getCarrier());
+            body.set("lineItems",       objectMapper.readTree(info.itemsJson()));
+
+            message.set("header", header);
+            message.set("body", body);
+
+            kafkaTemplate.send(topic, info.channelId(), message)
+                .whenComplete((r, ex) -> {
+                    if (ex == null) {
+                        // Update platform_notified_at — must use TransactionTemplate since this runs
+                        // on the Kafka producer thread with no Spring transaction context
+                        transactionTemplate.executeWithoutResult(s ->
+                            shipmentRepository.findById(shipment.getId()).ifPresent(found -> {
+                                found.setPlatformNotifiedAt(LocalDateTime.now());
+                                shipmentRepository.save(found);
+                            })
+                        );
+                    } else {
+                        log.error("SHIP_ORDER publish failed for order={} shipment={}",
+                            info.orderId(), shipment.getId(), ex);
+                        // platform_notified_at stays null — reconciliation job will retry
+                    }
+                });
+        } catch (Exception e) {
+            log.error("Failed to build/send SHIP_ORDER event for order={}", info.orderId(), e);
+        }
+    }
+
+    // DTOs for internal dispatch coordination
+    private record DispatchResult(Shipment shipment, List<OrderDispatchInfo> orderInfos) {}
+    private record OrderDispatchInfo(String orderId, String channelOrderId,
+                                      String merchantId, String channelId, String itemsJson) {}
 
     /**
      * Build initial items JSON from orders.items JSONB.
