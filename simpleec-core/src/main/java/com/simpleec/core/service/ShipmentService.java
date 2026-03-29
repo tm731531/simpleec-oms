@@ -667,6 +667,88 @@ public class ShipmentService {
     private record OrderDispatchInfo(String orderId, String channelOrderId,
                                       String merchantId, String channelId, String itemsJson) {}
 
+    // -----------------------------------------------------------------------
+    // Batch operations
+    // -----------------------------------------------------------------------
+
+    @Transactional
+    public ShipmentBatch createBatch(String merchantId, String carrier,
+                                      LocalDateTime scheduledPickupAt, String notes) {
+        ShipmentBatch batch = ShipmentBatch.builder()
+            .id(NanoIdUtil.generate())
+            .merchantId(merchantId)
+            .batchNo("BATCH-" + LocalDateTime.now().format(
+                java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmm")))
+            .carrier(carrier)
+            .scheduledPickupAt(scheduledPickupAt)
+            .notes(notes)
+            .status("PREPARING")
+            .build();
+        return shipmentBatchRepository.save(batch);
+    }
+
+    @Transactional
+    public ShipmentBatch forceReadyBatch(String batchId, String note) {
+        ShipmentBatch batch = shipmentBatchRepository.findById(batchId)
+            .orElseThrow(() -> new IllegalArgumentException("Batch not found: " + batchId));
+        batch.setStatus("READY");
+        batch.setForceReadyNote(note);
+        return shipmentBatchRepository.save(batch);
+    }
+
+    @Transactional
+    public ShipmentBatch confirmPickup(String batchId, String carrierDriverId,
+                                        int boxCount, java.math.BigDecimal cost) {
+        ShipmentBatch batch = shipmentBatchRepository.findById(batchId)
+            .orElseThrow(() -> new IllegalArgumentException("Batch not found: " + batchId));
+        batch.setStatus("PICKED_UP");
+        batch.setActualPickupAt(LocalDateTime.now());
+        batch.setCarrierDriverId(carrierDriverId);
+        batch.setHandoffBoxCount(boxCount);
+        if (cost != null) batch.setLogisticsCost(cost);
+        return shipmentBatchRepository.save(batch);
+    }
+
+    public Page<ShipmentBatch> findBatchesByMerchant(String merchantId, Pageable pageable) {
+        return shipmentBatchRepository.findByMerchantIdOrderByCreatedAtDesc(merchantId, pageable);
+    }
+
+    public Optional<ShipmentBatch> findBatchById(String id) {
+        return shipmentBatchRepository.findById(id);
+    }
+
+    public List<Shipment> findShipmentsByBatch(String batchId) {
+        return shipmentRepository.findByBatchId(batchId);
+    }
+
+    /** Generate manifest (裝車清單) for a batch. */
+    public Map<String, Object> generateManifest(String batchId) {
+        ShipmentBatch batch = shipmentBatchRepository.findById(batchId)
+            .orElseThrow(() -> new IllegalArgumentException("Batch not found: " + batchId));
+        List<Shipment> shipments = shipmentRepository.findByBatchId(batchId);
+        long activeCount = shipments.stream()
+            .filter(s -> s.getStatus() != ShipmentStatusEnum.CANCELLED).count();
+        List<Map<String, String>> boxes = shipments.stream()
+            .filter(s -> s.getStatus() != ShipmentStatusEnum.CANCELLED)
+            .map(s -> Map.of(
+                "shipmentNo", s.getShipmentNo() != null ? s.getShipmentNo() : s.getId(),
+                "trackingNumber", s.getTrackingNumber() != null ? s.getTrackingNumber() : "",
+                "status", s.getStatus().getLabel()
+            ))
+            .collect(java.util.stream.Collectors.toList());
+
+        // Use HashMap (not Map.of) because Map.of throws NPE on null values
+        Map<String, Object> manifest = new java.util.HashMap<>();
+        manifest.put("batchNo",    batch.getBatchNo());
+        manifest.put("carrier",    batch.getCarrier() != null ? batch.getCarrier() : "");
+        manifest.put("boxCount",   activeCount);
+        manifest.put("scheduledPickupAt", batch.getScheduledPickupAt() != null
+            ? batch.getScheduledPickupAt().toString() : null);
+        manifest.put("generatedAt", LocalDateTime.now().toString());
+        manifest.put("boxes",       boxes);
+        return manifest;
+    }
+
     /**
      * Build initial items JSON from orders.items JSONB.
      * orders.items format: [{channel_item_id, sku, name, quantity, ...}]
