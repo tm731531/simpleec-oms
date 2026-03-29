@@ -8,13 +8,13 @@ import com.simpleec.common.constants.TopicConstants;
 import com.simpleec.common.enums.OrderStatusEnum;
 import com.simpleec.core.entity.Channel;
 import com.simpleec.core.entity.Order;
-import com.simpleec.core.entity.OrderShipment;
 import com.simpleec.core.entity.OrderStatusLog;
 import com.simpleec.core.entity.Platform;
+import com.simpleec.core.entity.ShipmentItem;
 import com.simpleec.core.repository.ChannelRepository;
 import com.simpleec.core.repository.OrderRepository;
-import com.simpleec.core.repository.OrderShipmentRepository;
 import com.simpleec.core.repository.OrderStatusLogRepository;
+import com.simpleec.core.repository.ShipmentItemRepository;
 import com.simpleec.core.repository.PlatformRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -47,7 +47,7 @@ public class UserOrderController {
     private final PlatformRepository platformRepository;
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final OrderStatusLogRepository statusLogRepository;
-    private final OrderShipmentRepository shipmentRepository;
+    private final ShipmentItemRepository shipmentItemRepository;
 
     /**
      * POST /api/user/orders
@@ -232,10 +232,10 @@ public class UserOrderController {
 
     /**
      * GET /api/user/orders/{orderId}/shipments
-     * Returns all shipment records for a specific order.
+     * Returns all shipment items for a specific order (uses new shipments tables).
      */
     @GetMapping("/{orderId}/shipments")
-    public ResponseEntity<List<OrderShipment>> listShipmentsForOrder(
+    public ResponseEntity<List<ShipmentItem>> listShipmentsForOrder(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable String orderId) {
 
@@ -243,8 +243,7 @@ public class UserOrderController {
         if (orderOpt.isEmpty() || !principal.getMerchantId().equals(orderOpt.get().getMerchantId())) {
             return ResponseEntity.notFound().build();
         }
-        List<OrderShipment> shipments = shipmentRepository.findByOrderId(orderId);
-        return ResponseEntity.ok(shipments);
+        return ResponseEntity.ok(shipmentItemRepository.findByOrderId(orderId));
     }
 
     /**
