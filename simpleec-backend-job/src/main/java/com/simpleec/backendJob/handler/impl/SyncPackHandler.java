@@ -71,6 +71,7 @@ public class SyncPackHandler extends AbstractEventHandler {
 
         String packStatus  = "draft";
         String visibility  = null;
+        Integer quantity   = null;
         if (body.has("packInfo") && !body.get("packInfo").isNull()) {
             JsonNode packInfo = body.get("packInfo");
             if (packInfo.has("packStatus")) {
@@ -78,6 +79,9 @@ public class SyncPackHandler extends AbstractEventHandler {
             }
             if (packInfo.has("visibility")) {
                 visibility = packInfo.get("visibility").asText();
+            }
+            if (packInfo.has("quantity") && !packInfo.get("quantity").isNull()) {
+                quantity = packInfo.get("quantity").asInt();
             }
         }
 
@@ -128,6 +132,9 @@ public class SyncPackHandler extends AbstractEventHandler {
             pack.setSellingPrice(sellingPrice);
             pack.setStatus(packStatus);
             pack.setVisibility(visibility);
+            if (quantity != null) {
+                pack.setQuantity(quantity);
+            }
             pack.setLastSyncAt(LocalDateTime.now());
             log.info("SYNC_PACK updating sell_pack id={} channelProductId={} channelSpecId={} merchantId={}",
                     pack.getId(), channelProductId, channelSpecId, merchantId);
@@ -144,7 +151,7 @@ public class SyncPackHandler extends AbstractEventHandler {
                     .channelProductName(channelProductName)
                     .channelSpecName(channelSpecName)
                     .sellingPrice(sellingPrice)
-                    .quantity(0)
+                    .quantity(quantity != null ? quantity : 0)
                     .status(packStatus)
                     .visibility(visibility)
                     .lastSyncAt(LocalDateTime.now())

@@ -136,6 +136,8 @@ public class SyncPackChannelHandler {
         header.put("isRollback", false);
 
         ObjectNode body = objectMapper.createObjectNode();
+        // merchantId must also appear in body — AbstractEventHandler.extractMerchantId() reads body.merchantId
+        body.put("merchantId", merchantId);
         body.put("channelProductId", channelProductId);
         body.put("channelSpecId", channelSpecId);
         body.put("sku", sku);
