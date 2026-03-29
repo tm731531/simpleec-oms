@@ -1,17 +1,19 @@
 # Kafka Event Bus 深度解析
 
-> 本文從兩個角度梳理 SimpleEC OMS 的 Kafka 事件匯流排：
-> 1. **功能性視角** — 每條訊息的來源、目的地、處理邏輯
-> 2. **工程性視角** — CAP 理論在非同步系統中如何落地
+> 本文從三個角度梳理 SimpleEC OMS 的 Kafka 事件匯流排：
+> 1. **選型視角** — 為什麼一定要用 Kafka，不能用輪詢、其他 MQ 或 API 直呼
+> 2. **功能性視角** — 每條訊息的來源、目的地、處理邏輯
+> 3. **工程性視角** — CAP 理論在非同步系統中如何落地
 >
-> 讀完本文，你應該能回答：「一筆訂單是怎麼從電商平台進來、被存到資料庫的？」以及「系統掛掉一部分，資料會怎樣？」
+> 讀完本文，你應該能回答三個問題：「為什麼選 Kafka？」「一筆訂單是怎麼從電商平台進來、被存到資料庫的？」「系統掛掉一部分，資料會怎樣？」
 
 ---
 
 ## 目錄
 
-1. [系統全貌：Event Bus 拓撲圖](#1-系統全貌-event-bus-拓撲圖)
-2. [Topic 職責與分層設計](#2-topic-職責與分層設計)
+1. [為什麼一定要用 Kafka](#1-為什麼一定要用-kafka)
+2. [系統全貌：Event Bus 拓撲圖](#2-系統全貌-event-bus-拓撲圖)
+3. [Topic 職責與分層設計](#3-topic-職責與分層設計)
 3. [完整事件流程圖](#3-完整事件流程圖)
    - 3.1 [訂單拉取流程（Mode B — Shopee）](#31-訂單拉取流程mode-b--shopee)
    - 3.2 [訂單拉取流程（Mode A — Easystore）](#32-訂單拉取流程mode-a--easystore)
@@ -30,7 +32,301 @@
 
 ---
 
-## 1. 系統全貌：Event Bus 拓撲圖
+## 1. 為什麼一定要用 Kafka
+
+### 1.1 先理解問題的規模
+
+SimpleEC OMS 需要同時對接 6 個電商平台，每個平台底下有多個通路實例（channel），每個通路需要定期拉取訂單、退貨、同步庫存，並且能即時接收 webhook。
+
+先做一個粗估：
+
+```
+6 個平台 × 平均 3 個通路 = 18 個通路實例
+每個通路每 5 分鐘觸發一次 FETCH_ORDERS
+每次 FETCH_ORDERS 需要拉 4 個時間窗口（PENDING/CONFIRMED/SHIPPED/COMPLETED）
+每個時間窗口可能產生 50-200 筆訂單
+每筆 Mode B 訂單需要一次額外的 detail API 呼叫
+
+高峰期（促銷日）：
+  18 通路 × 4 窗口 × 200 筆 = 14,400 筆訂單 / 5 分鐘
+  14,400 筆 × Mode B detail = 14,400 次額外 API 呼叫 / 5 分鐘
+  = 每秒 48 次 API 呼叫（平台 rate limit 的邊緣）
+```
+
+這個規模決定了架構的選擇。
+
+---
+
+### 1.2 為什麼不用輪詢（Polling）
+
+最直覺的做法：寫一個 cron job，每 5 分鐘呼叫一次平台 API。
+
+```
+❌ 輪詢方案：
+
+CronJob (每5分鐘)
+  for each channel:
+    orders = platform.fetchOrders()
+    for each order:
+      db.upsert(order)
+```
+
+**問題一：無法彈性擴縮**
+
+```
+輪詢是單執行緒的順序執行：
+  通路A → 通路B → 通路C → ...（串行）
+
+促銷日訂單量 ×10：
+  → cron job 執行時間從 3 分鐘變成 30 分鐘
+  → 下一輪 cron 觸發時上一輪還沒跑完
+  → 訂單積壓、延遲
+
+Kafka 方案：
+  → 增加 consumer concurrency 即可（改一個環境變數）
+  → 水平擴展不影響其他服務
+```
+
+**問題二：rate limit 無法協調**
+
+```
+各平台都有 rate limit（例如 Shopee: 10 req/sec）
+
+輪詢方案：
+  如果同時有 10 個通路在跑，每個都在打 Shopee API
+  → 瞬間超過 rate limit → 429 Too Many Requests → 全部失敗
+
+Kafka 方案：
+  Channel Job consumer concurrency 直接控制並發數
+  每個 platform 的 fast/slow 分開，各自的 consumer group 隔離
+  → rate limit 控制精確
+```
+
+**問題三：失敗沒有自然的重試機制**
+
+```
+輪詢方案失敗：
+  try:
+    orders = platform.fetchOrders()   ← 網路超時
+  except:
+    log.error("failed")               ← 只能記 log
+    # 下次 cron 再試，但已經錯過這個時間窗口了
+
+Kafka 方案失敗：
+  → 訊息進 task.failed
+  → RetryJob 自動 1min / 5min / 30min 重試
+  → 超過 3 次 → task.dlt → 持久化到 DB + 告警
+  → 可以手動補跑
+```
+
+**問題四：資源浪費**
+
+```
+輪詢永遠在跑，不管有沒有訂單：
+
+凌晨 3 點：
+  輪詢：依然每 5 分鐘查一次，回傳 0 筆 → 白打 API
+  Kafka：Scheduler 發 FETCH_ORDERS，Channel Job 呼叫 API
+         → 同樣跑，但可以在 Scheduler 層加邏輯跳過離峰
+
+（注意：這個問題兩者差異不大，但 Kafka 的 Scheduler 更容易加判斷邏輯）
+```
+
+---
+
+### 1.3 為什麼不用其他 MQ（RabbitMQ / ActiveMQ / AWS SQS）
+
+這些 MQ 都是優秀的工具，選 Kafka 的理由是以下幾個**這個題目特有的需求**：
+
+**需求一：訊息必須可以重播（Replay）**
+
+```
+傳統 MQ（RabbitMQ / SQS）：
+  消費完 → 訊息消失 → 無法重播
+
+Kafka：
+  訊息保留在 log 中（retention 期間內）
+  任何 consumer group 都可以從任意 offset 重新消費
+
+場景：
+  order-job 部署了一個有 bug 的版本，消費了 1 小時後才發現
+  → 修好 bug 後，把 consumer group offset 重置
+  → 重新消費那 1 小時的訊息
+  → 訂單資料修正完成
+
+  用 RabbitMQ：那 1 小時的訊息已經 ack 刪除，無法補救
+```
+
+**需求二：多個獨立消費者讀同一份訊息**
+
+```
+order.process topic 的訊息需要被：
+  1. order-job：寫入 DB
+  2. （未來）analytics-job：寫入資料倉儲
+  3. （未來）notification-job：發推播通知
+
+Kafka Consumer Group 機制：
+  每個 group 各自維護 offset，互不干擾
+  新增 consumer group 不影響現有消費者
+
+RabbitMQ：
+  一條訊息只能被一個 consumer 消費（需要 fanout exchange 複製訊息）
+  新增消費者需要改 topology，侵入性較高
+```
+
+**需求三：嚴格的訊息順序（per partition）**
+
+```
+同一個 channelOrderId 的訂單可能被更新多次：
+  T1: status=confirmed
+  T2: status=shipped
+  T3: status=completed
+
+如果 T3 比 T1 先處理 → 訂單狀態倒退 → 錯誤資料
+
+Kafka：
+  同一個 key（channelOrderId）的訊息永遠落在同一個 partition
+  同一個 partition 內的訊息嚴格有序消費
+  → 保證同一訂單的更新按時間順序處理
+
+SQS Standard：不保證順序（需要改用 FIFO queue，有吞吐量上限）
+RabbitMQ：需要額外設計才能保證順序
+```
+
+**需求四：高吞吐 + 持久化**
+
+```
+Kafka 的底層是 append-only log：
+  寫入速度極快（順序寫磁碟比隨機寫快 100 倍）
+  可達到每秒百萬級訊息
+  訊息預設持久化到磁碟（不會因 broker 重啟而丟失）
+
+這個系統高峰期估計：
+  每秒最多 ~50 筆 ORDER_UPSERT
+  → 對 Kafka 來說是九牛一毛
+  → 但如果未來接入更多平台 / 做即時資料流分析，擴充空間充裕
+```
+
+**什麼情況應該用 RabbitMQ 而非 Kafka？**
+
+```
+✅ 適合 RabbitMQ 的場景：
+  - 訊息量小（每秒 < 1000）
+  - 複雜的 routing 邏輯（direct/topic/fanout/headers exchange）
+  - 需要訊息優先級（priority queue）
+  - 消費完立即刪除、不需要 replay
+  - 任務分發（work queue）型場景
+
+❌ 這個系統需要 replay、高吞吐、嚴格順序 → Kafka 更合適
+```
+
+---
+
+### 1.4 為什麼不用 API 直呼（微服務 REST/gRPC）
+
+另一個常見的替代方案：Channel Job 處理完訂單後，直接 HTTP 呼叫 Order Service 的 API。
+
+```
+❌ API 直呼方案：
+
+channel-job  ──HTTP POST──►  order-service  ──HTTP POST──►  stats-service
+                              (處理訂單)                     (更新統計)
+```
+
+**問題一：同步耦合 → 級聯失敗**
+
+```
+channel-job 呼叫 order-service：
+  order-service 回應慢（DB 壓力大）
+  → channel-job 的 thread 被阻塞等待
+  → 所有通路的訂單處理全部卡住
+  → Shopee API 的 rate limit window 過了
+  → 這批訂單丟失
+
+Kafka 方案：
+  channel-job 把訊息寫進 order.process（極快，< 5ms）
+  order-job 慢慢消費、可以 lag
+  → 兩者完全解耦，互不影響
+```
+
+**問題二：沒有自然的 Buffer**
+
+```
+促銷日瞬間湧入 10,000 筆訂單：
+
+API 直呼：
+  channel-job 同時發 10,000 個 HTTP request 給 order-service
+  → order-service 記憶體爆炸 / 503 / OOM
+  → 資料全部遺失（沒有 buffer）
+
+Kafka 方案：
+  10,000 筆訊息進 Kafka（已持久化）
+  order-job 以自己的速度消費（consumer lag 暫時增加）
+  → 最終一致，資料不會遺失
+```
+
+**問題三：重試邏輯要自己實作**
+
+```
+API 直呼失敗：
+  你需要自己寫：指數退避、重試次數限制、circuit breaker、
+  失敗日誌、死信儲存...
+
+Kafka 方案：
+  task.failed → RetryJob（指數退避已內建）
+  → task.dlt（持久化 + 告警已內建）
+  重試邏輯集中在一個地方，所有服務共用
+```
+
+**問題四：沒辦法 replay**
+
+```
+order-service 有 bug，處理了錯誤的訂單資料：
+
+API 直呼：
+  訊息已發出並被消費 → 無法重播 → 需要人工補資料
+
+Kafka：
+  reset consumer group offset → 重新消費 → 資料自動修正
+```
+
+**什麼情況應該用 API 直呼？**
+
+```
+✅ 適合 API 直呼的場景：
+  - 需要即時回應（使用者等待結果）
+  - 業務強依賴同步確認（付款、扣款）
+  - 資料量小、呼叫頻率低
+
+這個系統：
+  - 訂單同步是背景作業，不需要即時回應 → ✅ 適合非同步
+  - 規模大（每5分鐘幾千筆）→ ✅ 需要 buffer
+  - 需要 replay → ✅ 需要 Kafka
+```
+
+---
+
+### 1.5 選型總結
+
+```
+                    輪詢        其他 MQ      API 直呼     Kafka
+                    ────────    ─────────    ─────────    ──────
+可水平擴展           △ 難        ✅           ✅           ✅
+訊息 Replay          ❌          ❌           ❌           ✅
+多獨立消費者         ❌          △ 需設計      ❌           ✅
+嚴格順序（per key）  △           △            ❌           ✅
+失敗重試 / DLT       ❌ 要自寫   △ 部分支援   ❌ 要自寫    ✅ 內建
+Rate limit 控制      ❌ 難協調   △            ❌           ✅ 精確
+促銷日流量洪峰緩衝   ❌          ✅           ❌           ✅
+平台掛掉不影響其他   ❌          ✅           ❌           ✅
+高吞吐持久化         △           △            ❌           ✅
+```
+
+**結論：這個題目的核心需求是「多平台、高並發、需要 Replay、嚴格順序、失敗容錯」，Kafka 是唯一能同時滿足所有需求的選項。**
+
+---
+
+## 2. 系統全貌：Event Bus 拓撲圖
 
 ```
                          ┌─────────────────────────────────────────────────────────┐
@@ -92,7 +388,7 @@
 
 ---
 
-## 2. Topic 職責與分層設計
+## 3. Topic 職責與分層設計
 
 ### 為什麼 fast / slow 分開？
 
@@ -139,7 +435,7 @@ task.dlt = 30d 是因為需要人工審查和補跑
 
 ---
 
-## 3. 完整事件流程圖
+## 4. 完整事件流程圖
 
 ### 3.1 訂單拉取流程（Mode B — Shopee）
 
@@ -552,7 +848,7 @@ SyncProductTaskHandler.handle()
 
 ---
 
-## 4. 訊息結構解析
+## 5. 訊息結構解析
 
 ### 通用 Envelope
 
@@ -605,7 +901,7 @@ isRollback = true（歷史補跑）：
 
 ---
 
-## 5. CAP 理論在本系統的實現
+## 6. CAP 理論在本系統的實現
 
 ### 5.1 我們的選擇：AP 系統
 
@@ -788,7 +1084,7 @@ Consumer 的 offset commit：
 
 ---
 
-## 6. 關鍵設計決策摘要
+## 7. 關鍵設計決策摘要
 
 | 決策 | 原因 | 取捨 |
 |------|------|------|
