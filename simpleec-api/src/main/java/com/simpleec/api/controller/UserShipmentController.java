@@ -44,9 +44,17 @@ public class UserShipmentController {
     public ResponseEntity<List<Shipment>> createShipments(
             @AuthenticationPrincipal UserPrincipal p,
             @RequestBody CreateShipmentsRequest req) {
-        List<Shipment> shipments = shipmentService.createShipments(
-            req.orderIds(), p.getMerchantId());
-        return ResponseEntity.status(HttpStatus.CREATED).body(shipments);
+        try {
+            List<Shipment> shipments = shipmentService.createShipments(
+                req.orderIds(), p.getMerchantId());
+            return ResponseEntity.status(HttpStatus.CREATED).body(shipments);
+        } catch (IllegalArgumentException e) {
+            log.warn("createShipments: {}", e.getMessage());
+            return ResponseEntity.notFound().build();
+        } catch (IllegalStateException e) {
+            log.warn("createShipments business rule: {}", e.getMessage());
+            return ResponseEntity.unprocessableEntity().build();
+        }
     }
 
     @GetMapping
@@ -77,8 +85,16 @@ public class UserShipmentController {
     public ResponseEntity<Shipment> advanceStatus(
             @AuthenticationPrincipal UserPrincipal p,
             @PathVariable String id) {
-        verifyOwnership(id, p.getMerchantId());
-        return ResponseEntity.ok(shipmentService.advanceStatus(id, p.getAccountId()));
+        try {
+            verifyOwnership(id, p.getMerchantId());
+            return ResponseEntity.ok(shipmentService.advanceStatus(id, p.getAccountId()));
+        } catch (IllegalArgumentException e) {
+            log.warn("advanceStatus not found: {}", e.getMessage());
+            return ResponseEntity.notFound().build();
+        } catch (IllegalStateException e) {
+            log.warn("advanceStatus business rule: {}", e.getMessage());
+            return ResponseEntity.unprocessableEntity().build();
+        }
     }
 
     @PutMapping("/{id}/tracking")
@@ -86,9 +102,17 @@ public class UserShipmentController {
             @AuthenticationPrincipal UserPrincipal p,
             @PathVariable String id,
             @RequestBody SetTrackingRequest req) {
-        verifyOwnership(id, p.getMerchantId());
-        return ResponseEntity.ok(
-            shipmentService.setTracking(id, req.trackingNumber(), req.carrier(), p.getAccountId()));
+        try {
+            verifyOwnership(id, p.getMerchantId());
+            return ResponseEntity.ok(
+                shipmentService.setTracking(id, req.trackingNumber(), req.carrier(), p.getAccountId()));
+        } catch (IllegalArgumentException e) {
+            log.warn("setTracking not found: {}", e.getMessage());
+            return ResponseEntity.notFound().build();
+        } catch (IllegalStateException e) {
+            log.warn("setTracking business rule: {}", e.getMessage());
+            return ResponseEntity.unprocessableEntity().build();
+        }
     }
 
     @PostMapping("/{id}/split")
@@ -96,8 +120,16 @@ public class UserShipmentController {
             @AuthenticationPrincipal UserPrincipal p,
             @PathVariable String id,
             @RequestBody SplitRequest req) {
-        verifyOwnership(id, p.getMerchantId());
-        return ResponseEntity.ok(shipmentService.split(id, req.channelItemIds(), p.getAccountId()));
+        try {
+            verifyOwnership(id, p.getMerchantId());
+            return ResponseEntity.ok(shipmentService.split(id, req.channelItemIds(), p.getAccountId()));
+        } catch (IllegalArgumentException e) {
+            log.warn("split not found: {}", e.getMessage());
+            return ResponseEntity.notFound().build();
+        } catch (IllegalStateException e) {
+            log.warn("split business rule: {}", e.getMessage());
+            return ResponseEntity.unprocessableEntity().build();
+        }
     }
 
     @PostMapping("/{id}/merge")
@@ -105,9 +137,17 @@ public class UserShipmentController {
             @AuthenticationPrincipal UserPrincipal p,
             @PathVariable String id,
             @RequestBody MergeRequest req) {
-        verifyOwnership(id, p.getMerchantId());
-        verifyOwnership(req.shipmentIdB(), p.getMerchantId());
-        return ResponseEntity.ok(shipmentService.merge(id, req.shipmentIdB(), p.getAccountId()));
+        try {
+            verifyOwnership(id, p.getMerchantId());
+            verifyOwnership(req.shipmentIdB(), p.getMerchantId());
+            return ResponseEntity.ok(shipmentService.merge(id, req.shipmentIdB(), p.getAccountId()));
+        } catch (IllegalArgumentException e) {
+            log.warn("merge not found or cross-merchant: {}", e.getMessage());
+            return ResponseEntity.notFound().build();
+        } catch (IllegalStateException e) {
+            log.warn("merge business rule: {}", e.getMessage());
+            return ResponseEntity.unprocessableEntity().build();
+        }
     }
 
     @DeleteMapping("/{id}")
@@ -115,9 +155,17 @@ public class UserShipmentController {
             @AuthenticationPrincipal UserPrincipal p,
             @PathVariable String id,
             @RequestBody(required = false) CancelRequest req) {
-        verifyOwnership(id, p.getMerchantId());
-        String reason = req != null ? req.reason() : null;
-        return ResponseEntity.ok(shipmentService.cancelShipment(id, reason, p.getAccountId()));
+        try {
+            verifyOwnership(id, p.getMerchantId());
+            String reason = req != null ? req.reason() : null;
+            return ResponseEntity.ok(shipmentService.cancelShipment(id, reason, p.getAccountId()));
+        } catch (IllegalArgumentException e) {
+            log.warn("cancel not found: {}", e.getMessage());
+            return ResponseEntity.notFound().build();
+        } catch (IllegalStateException e) {
+            log.warn("cancel business rule: {}", e.getMessage());
+            return ResponseEntity.unprocessableEntity().build();
+        }
     }
 
     @PutMapping("/{id}/exception")
@@ -125,10 +173,23 @@ public class UserShipmentController {
             @AuthenticationPrincipal UserPrincipal p,
             @PathVariable String id,
             @RequestBody ExceptionRequest req) {
-        verifyOwnership(id, p.getMerchantId());
-        ShipmentExceptionTypeEnum type = ShipmentExceptionTypeEnum.valueOf(req.exceptionType());
-        return ResponseEntity.ok(
-            shipmentService.raiseException(id, type, req.note(), p.getAccountId()));
+        try {
+            verifyOwnership(id, p.getMerchantId());
+            ShipmentExceptionTypeEnum type = ShipmentExceptionTypeEnum.valueOf(req.exceptionType());
+            return ResponseEntity.ok(
+                shipmentService.raiseException(id, type, req.note(), p.getAccountId()));
+        } catch (IllegalArgumentException e) {
+            log.warn("raiseException bad request or not found: {}", e.getMessage());
+            // valueOf() throws IAE for unknown enum names; verifyOwnership throws IAE for not-found
+            // Distinguish: if it mentions "Shipment not found" return 404, else 400
+            if (e.getMessage() != null && e.getMessage().startsWith("Shipment not found")) {
+                return ResponseEntity.notFound().build();
+            }
+            return ResponseEntity.badRequest().build();
+        } catch (IllegalStateException e) {
+            log.warn("raiseException business rule: {}", e.getMessage());
+            return ResponseEntity.unprocessableEntity().build();
+        }
     }
 
     @PutMapping("/{id}/exception/resolve")
@@ -136,31 +197,72 @@ public class UserShipmentController {
             @AuthenticationPrincipal UserPrincipal p,
             @PathVariable String id,
             @RequestBody ResolveExceptionRequest req) {
-        verifyOwnership(id, p.getMerchantId());
-        ShipmentStatusEnum resume = ShipmentStatusEnum.fromCode(req.resumeStatus());
-        return ResponseEntity.ok(shipmentService.resolveException(id, resume, p.getAccountId()));
+        try {
+            verifyOwnership(id, p.getMerchantId());
+            ShipmentStatusEnum resume = ShipmentStatusEnum.fromCode(req.resumeStatus());
+            return ResponseEntity.ok(shipmentService.resolveException(id, resume, p.getAccountId()));
+        } catch (IllegalArgumentException e) {
+            log.warn("resolveException bad request or not found: {}", e.getMessage());
+            if (e.getMessage() != null && e.getMessage().startsWith("Shipment not found")) {
+                return ResponseEntity.notFound().build();
+            }
+            return ResponseEntity.badRequest().build();
+        } catch (IllegalStateException e) {
+            log.warn("resolveException business rule: {}", e.getMessage());
+            return ResponseEntity.unprocessableEntity().build();
+        }
     }
 
     @PutMapping("/{id}/dispatch")
     public ResponseEntity<Shipment> dispatch(
             @AuthenticationPrincipal UserPrincipal p,
             @PathVariable String id) {
-        verifyOwnership(id, p.getMerchantId());
-        return ResponseEntity.ok(shipmentService.dispatch(id, p.getAccountId()));
+        try {
+            verifyOwnership(id, p.getMerchantId());
+            return ResponseEntity.ok(shipmentService.dispatch(id, p.getAccountId()));
+        } catch (IllegalArgumentException e) {
+            log.warn("dispatch not found: {}", e.getMessage());
+            return ResponseEntity.notFound().build();
+        } catch (IllegalStateException e) {
+            log.warn("dispatch business rule: {}", e.getMessage());
+            return ResponseEntity.unprocessableEntity().build();
+        }
     }
 
     @PostMapping("/pick-list")
     public ResponseEntity<List<ShipmentService.PickLineItem>> pickList(
             @AuthenticationPrincipal UserPrincipal p,
             @RequestBody PickListRequest req) {
-        return ResponseEntity.ok(shipmentService.generatePickList(req.shipmentIds()));
+        try {
+            for (String sid : req.shipmentIds()) {
+                verifyOwnership(sid, p.getMerchantId());
+            }
+            return ResponseEntity.ok(shipmentService.generatePickList(req.shipmentIds()));
+        } catch (IllegalArgumentException e) {
+            log.warn("pickList not found: {}", e.getMessage());
+            return ResponseEntity.notFound().build();
+        } catch (IllegalStateException e) {
+            log.warn("pickList business rule: {}", e.getMessage());
+            return ResponseEntity.unprocessableEntity().build();
+        }
     }
 
     @PostMapping("/sort-list")
     public ResponseEntity<List<ShipmentService.SortLineItem>> sortList(
             @AuthenticationPrincipal UserPrincipal p,
             @RequestBody PickListRequest req) {
-        return ResponseEntity.ok(shipmentService.generateSortList(req.shipmentIds()));
+        try {
+            for (String sid : req.shipmentIds()) {
+                verifyOwnership(sid, p.getMerchantId());
+            }
+            return ResponseEntity.ok(shipmentService.generateSortList(req.shipmentIds()));
+        } catch (IllegalArgumentException e) {
+            log.warn("sortList not found: {}", e.getMessage());
+            return ResponseEntity.notFound().build();
+        } catch (IllegalStateException e) {
+            log.warn("sortList business rule: {}", e.getMessage());
+            return ResponseEntity.unprocessableEntity().build();
+        }
     }
 
     private void verifyOwnership(String shipmentId, String merchantId) {
