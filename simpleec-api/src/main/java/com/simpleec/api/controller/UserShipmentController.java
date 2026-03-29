@@ -2,97 +2,172 @@ package com.simpleec.api.controller;
 
 import com.simpleec.api.dto.UserPageResponse;
 import com.simpleec.api.security.UserPrincipal;
-import com.simpleec.core.entity.Order;
+import com.simpleec.common.enums.ShipmentExceptionTypeEnum;
+import com.simpleec.common.enums.ShipmentStatusEnum;
 import com.simpleec.core.entity.Shipment;
-import com.simpleec.core.repository.OrderRepository;
-import com.simpleec.core.repository.ShipmentRepository;
+import com.simpleec.core.entity.ShipmentItem;
+import com.simpleec.core.entity.ShipmentStatusLog;
+import com.simpleec.core.service.ShipmentService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
-/**
- * REST controller for shipment management.
- *
- * NOTE: This is a transitional stub — will be fully replaced in Task 8
- * (REST API — Replace UserShipmentController) with full CRUD + batch support.
- *
- * All endpoints are JWT-protected via the global security filter chain.
- * merchantId is always read from the JWT principal — never from the request body.
- */
 @Slf4j
 @RestController
 @RequestMapping("/api/user/shipments")
 @RequiredArgsConstructor
 public class UserShipmentController {
 
-    private final ShipmentRepository shipmentRepository;
-    private final OrderRepository orderRepository;
+    private final ShipmentService shipmentService;
 
-    /**
-     * GET /api/user/shipments
-     * Paginated list of all shipments for the authenticated merchant.
-     */
+    // ---- Request records ----
+    // channelId removed — derived automatically from order.getChannelId() in ShipmentService
+    record CreateShipmentsRequest(List<String> orderIds) {}
+    record SetTrackingRequest(String trackingNumber, String carrier) {}
+    record SplitRequest(List<String> channelItemIds) {}
+    record MergeRequest(String shipmentIdB) {}
+    record CancelRequest(String reason) {}
+    record ExceptionRequest(String exceptionType, String note) {}
+    record ResolveExceptionRequest(String resumeStatus) {}
+    record PickListRequest(List<String> shipmentIds) {}
+
+    @PostMapping
+    public ResponseEntity<List<Shipment>> createShipments(
+            @AuthenticationPrincipal UserPrincipal p,
+            @RequestBody CreateShipmentsRequest req) {
+        List<Shipment> shipments = shipmentService.createShipments(
+            req.orderIds(), p.getMerchantId());
+        return ResponseEntity.status(HttpStatus.CREATED).body(shipments);
+    }
+
     @GetMapping
     public ResponseEntity<UserPageResponse<Shipment>> listShipments(
-            @AuthenticationPrincipal UserPrincipal principal,
+            @AuthenticationPrincipal UserPrincipal p,
             @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "10") int pageSize) {
-
-        PageRequest pageable = PageRequest.of(page - 1, pageSize);
-        Page<Shipment> result = shipmentRepository.findByMerchantIdOrderByCreatedAtDesc(
-                principal.getMerchantId(), pageable);
+            @RequestParam(defaultValue = "20") int pageSize) {
+        Page<Shipment> result = shipmentService.findByMerchant(
+            p.getMerchantId(), PageRequest.of(page - 1, pageSize));
         return ResponseEntity.ok(UserPageResponse.from(result));
     }
 
-    /**
-     * GET /api/user/shipments/{id}
-     * Fetch one shipment by ID; verifies it belongs to the calling merchant.
-     */
     @GetMapping("/{id}")
-    public ResponseEntity<Shipment> getShipment(
-            @AuthenticationPrincipal UserPrincipal principal,
+    public ResponseEntity<Map<String, Object>> getShipment(
+            @AuthenticationPrincipal UserPrincipal p,
             @PathVariable String id) {
-
-        Optional<Shipment> shipmentOpt = shipmentRepository.findById(id);
-        if (shipmentOpt.isEmpty()) {
+        Optional<Shipment> opt = shipmentService.findById(id);
+        if (opt.isEmpty() || !opt.get().getMerchantId().equals(p.getMerchantId())) {
             return ResponseEntity.notFound().build();
         }
-        Shipment shipment = shipmentOpt.get();
-        if (!principal.getMerchantId().equals(shipment.getMerchantId())) {
-            return ResponseEntity.notFound().build();
-        }
-        return ResponseEntity.ok(shipment);
+        Shipment s = opt.get();
+        List<ShipmentItem> items = shipmentService.findItemsByShipmentId(id);
+        List<ShipmentStatusLog> logs = shipmentService.findStatusLogs(id);
+        return ResponseEntity.ok(Map.of("shipment", s, "items", items, "statusLogs", logs));
     }
 
-    /**
-     * GET /api/user/shipments/by-order/{orderId}
-     * List all shipments for a specific order.
-     */
-    @GetMapping("/by-order/{orderId}")
-    public ResponseEntity<List<Shipment>> listShipmentsByOrder(
-            @AuthenticationPrincipal UserPrincipal principal,
-            @PathVariable String orderId) {
-
-        if (!isOwnedByMerchant(orderId, principal.getMerchantId())) {
-            return ResponseEntity.notFound().build();
-        }
-        List<Shipment> shipments = shipmentRepository.findByBatchId(orderId);
-        return ResponseEntity.ok(shipments);
+    @PutMapping("/{id}/status")
+    public ResponseEntity<Shipment> advanceStatus(
+            @AuthenticationPrincipal UserPrincipal p,
+            @PathVariable String id) {
+        verifyOwnership(id, p.getMerchantId());
+        return ResponseEntity.ok(shipmentService.advanceStatus(id, p.getAccountId()));
     }
 
-    // -------------------------------------------------------------------------
-    // Helpers
-    // -------------------------------------------------------------------------
+    @PutMapping("/{id}/tracking")
+    public ResponseEntity<Shipment> setTracking(
+            @AuthenticationPrincipal UserPrincipal p,
+            @PathVariable String id,
+            @RequestBody SetTrackingRequest req) {
+        verifyOwnership(id, p.getMerchantId());
+        return ResponseEntity.ok(
+            shipmentService.setTracking(id, req.trackingNumber(), req.carrier(), p.getAccountId()));
+    }
 
-    private boolean isOwnedByMerchant(String orderId, String merchantId) {
-        Optional<Order> orderOpt = orderRepository.findById(orderId);
-        return orderOpt.isPresent() && merchantId.equals(orderOpt.get().getMerchantId());
+    @PostMapping("/{id}/split")
+    public ResponseEntity<List<Shipment>> split(
+            @AuthenticationPrincipal UserPrincipal p,
+            @PathVariable String id,
+            @RequestBody SplitRequest req) {
+        verifyOwnership(id, p.getMerchantId());
+        return ResponseEntity.ok(shipmentService.split(id, req.channelItemIds(), p.getAccountId()));
+    }
+
+    @PostMapping("/{id}/merge")
+    public ResponseEntity<Shipment> mergeInto(
+            @AuthenticationPrincipal UserPrincipal p,
+            @PathVariable String id,
+            @RequestBody MergeRequest req) {
+        verifyOwnership(id, p.getMerchantId());
+        verifyOwnership(req.shipmentIdB(), p.getMerchantId());
+        return ResponseEntity.ok(shipmentService.merge(id, req.shipmentIdB(), p.getAccountId()));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Shipment> cancel(
+            @AuthenticationPrincipal UserPrincipal p,
+            @PathVariable String id,
+            @RequestBody(required = false) CancelRequest req) {
+        verifyOwnership(id, p.getMerchantId());
+        String reason = req != null ? req.reason() : null;
+        return ResponseEntity.ok(shipmentService.cancelShipment(id, reason, p.getAccountId()));
+    }
+
+    @PutMapping("/{id}/exception")
+    public ResponseEntity<Shipment> raiseException(
+            @AuthenticationPrincipal UserPrincipal p,
+            @PathVariable String id,
+            @RequestBody ExceptionRequest req) {
+        verifyOwnership(id, p.getMerchantId());
+        ShipmentExceptionTypeEnum type = ShipmentExceptionTypeEnum.valueOf(req.exceptionType());
+        return ResponseEntity.ok(
+            shipmentService.raiseException(id, type, req.note(), p.getAccountId()));
+    }
+
+    @PutMapping("/{id}/exception/resolve")
+    public ResponseEntity<Shipment> resolveException(
+            @AuthenticationPrincipal UserPrincipal p,
+            @PathVariable String id,
+            @RequestBody ResolveExceptionRequest req) {
+        verifyOwnership(id, p.getMerchantId());
+        ShipmentStatusEnum resume = ShipmentStatusEnum.fromCode(req.resumeStatus());
+        return ResponseEntity.ok(shipmentService.resolveException(id, resume, p.getAccountId()));
+    }
+
+    @PutMapping("/{id}/dispatch")
+    public ResponseEntity<Shipment> dispatch(
+            @AuthenticationPrincipal UserPrincipal p,
+            @PathVariable String id) {
+        verifyOwnership(id, p.getMerchantId());
+        return ResponseEntity.ok(shipmentService.dispatch(id, p.getAccountId()));
+    }
+
+    @PostMapping("/pick-list")
+    public ResponseEntity<List<ShipmentService.PickLineItem>> pickList(
+            @AuthenticationPrincipal UserPrincipal p,
+            @RequestBody PickListRequest req) {
+        return ResponseEntity.ok(shipmentService.generatePickList(req.shipmentIds()));
+    }
+
+    @PostMapping("/sort-list")
+    public ResponseEntity<List<ShipmentService.SortLineItem>> sortList(
+            @AuthenticationPrincipal UserPrincipal p,
+            @RequestBody PickListRequest req) {
+        return ResponseEntity.ok(shipmentService.generateSortList(req.shipmentIds()));
+    }
+
+    private void verifyOwnership(String shipmentId, String merchantId) {
+        shipmentService.findById(shipmentId).ifPresentOrElse(s -> {
+            if (!s.getMerchantId().equals(merchantId)) {
+                throw new org.springframework.security.access.AccessDeniedException("Not your shipment");
+            }
+        }, () -> { throw new IllegalArgumentException("Shipment not found: " + shipmentId); });
     }
 }
