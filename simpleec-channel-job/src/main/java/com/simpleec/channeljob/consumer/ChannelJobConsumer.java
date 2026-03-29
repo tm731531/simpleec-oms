@@ -10,6 +10,7 @@ import com.simpleec.channeljob.handler.ModeBOrderListHandler;
 import com.simpleec.channeljob.handler.ModeBOrderDetailHandler;
 import com.simpleec.channeljob.handler.RejectReturnHandler;
 import com.simpleec.channeljob.handler.ShipOrderHandler;
+import com.simpleec.channeljob.handler.SyncPackChannelHandler;
 import com.simpleec.channeljob.handler.UpdateInventoryHandler;
 import com.simpleec.channeljob.handler.UpdatePriceHandler;
 import com.simpleec.channeljob.service.ChannelService;
@@ -59,6 +60,7 @@ public class ChannelJobConsumer {
     private final ModeBOrderDetailHandler modeBOrderDetailHandler;
     private final RejectReturnHandler rejectReturnHandler;
     private final ShipOrderHandler shipOrderHandler;
+    private final SyncPackChannelHandler syncPackChannelHandler;
     private final UpdateInventoryHandler updateInventoryHandler;
     private final UpdatePriceHandler updatePriceHandler;
     private final ObjectMapper objectMapper;
@@ -246,7 +248,7 @@ public class ChannelJobConsumer {
                 healthCheckService.performChannelHealthCheck(channelId);
                 log.info("Health check completed for channel {}", channelId);
             } else if ("SYNC_PACK".equals(taskType)) {
-                log.debug("SYNC_PACK not implemented yet");
+                handleSyncPack(platformCode, channelId, merchantId);
             } else if ("SHIP_ORDER".equals(taskType)) {
                 shipOrderHandler.handleShipOrder(platformCode, channelId, merchantId, body);
             } else if ("UPDATE_INVENTORY".equals(taskType)) {
@@ -314,6 +316,44 @@ public class ChannelJobConsumer {
 
         } catch (Exception e) {
             log.error("Error handling FETCH_ORDERS for {}", platformCode, e);
+        }
+    }
+
+    /**
+     * 處理 SYNC_PACK（slow topic）
+     * 從通路拉取商品目錄，每個 variant 發送 SYNC_PACK 事件到 task.backend
+     */
+    private void handleSyncPack(String platformCode, String channelId, String merchantId) {
+        try {
+            ChannelAdapter adapter = getAdapter(platformCode);
+            if (adapter == null) {
+                log.error("No adapter found for platform: {}", platformCode);
+                return;
+            }
+
+            if (!(adapter instanceof CyberbizAdapter)) {
+                log.warn("SYNC_PACK not supported for platform: {} (only cyberbiz implemented)", platformCode);
+                return;
+            }
+
+            CyberbizAdapter cyberbiz = (CyberbizAdapter) adapter;
+            com.simpleec.channeljob.entity.Channel channel = channelService.getChannel(channelId);
+            if (channel == null) {
+                log.error("Channel not found: {}", channelId);
+                return;
+            }
+            String token = channel.getToken();
+            String token2 = channel.getToken2();
+            if (token == null || token.isEmpty() || token2 == null || token2.isEmpty()) {
+                log.error("Channel credentials not configured for SYNC_PACK: {}", channelId);
+                return;
+            }
+            cyberbiz.setCredentials(token, token2);
+
+            syncPackChannelHandler.handleSyncPack(platformCode, channelId, merchantId, cyberbiz);
+
+        } catch (Exception e) {
+            log.error("Error handling SYNC_PACK for platform={} channel={}", platformCode, channelId, e);
         }
     }
 

@@ -201,6 +201,54 @@ public class CyberbizApiClient {
     }
 
     /**
+     * 拉取商品列表（含 product_variants），支援分頁
+     *
+     * @param username  Cyberbiz username
+     * @param secret    Cyberbiz secret key
+     * @param page      頁碼，從 1 開始
+     * @param perPage   每頁筆數（最大 50）
+     * @return 商品列表，每筆含 product_variants 陣列；若無更多則返回空列表
+     */
+    public List<Map<String, Object>> getProducts(String username, String secret, int page, int perPage) {
+        try {
+            String path = "/v1/products";
+            String queryString = String.format("page=%d&per_page=%d", page, perPage);
+            String url = baseUrl + path + "?" + queryString;
+
+            log.debug("Calling Cyberbiz API: GET {}", url);
+
+            HttpHeaders headers = buildHmacHeaders(username, secret, "GET", path, null);
+            HttpEntity<?> entity = new HttpEntity<>(headers);
+            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
+
+            if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
+                log.warn("Unexpected response from Cyberbiz getProducts: {}", response.getStatusCode());
+                return Collections.emptyList();
+            }
+
+            JsonNode root = objectMapper.readTree(response.getBody());
+            List<Map<String, Object>> products = new ArrayList<>();
+
+            // Cyberbiz returns a JSON array directly
+            if (root.isArray()) {
+                root.forEach(p -> products.add(objectMapper.convertValue(p, Map.class)));
+            }
+            // Fallback: { data: { products: [...] } }
+            else if (root.has("data") && root.get("data").has("products")) {
+                root.get("data").get("products")
+                        .forEach(p -> products.add(objectMapper.convertValue(p, Map.class)));
+            }
+
+            log.debug("Fetched {} products from Cyberbiz (page={})", products.size(), page);
+            return products;
+
+        } catch (Exception e) {
+            log.error("Error calling Cyberbiz API getProducts page={}", page, e);
+            return Collections.emptyList();
+        }
+    }
+
+    /**
      * 查詢該時段內有退貨的訂單
      */
     public List<Map<String, Object>> getOrdersWithRefund(String username, String secret, long refundTimeFrom, long refundTimeTo) {

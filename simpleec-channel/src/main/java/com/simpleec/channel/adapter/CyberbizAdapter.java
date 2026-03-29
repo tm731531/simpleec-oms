@@ -314,6 +314,41 @@ public class CyberbizAdapter implements ChannelAdapter {
         return cyberbizApiClient.getOrdersWithRefund(token, secret, oneHourAgo, now);
     }
 
+    /**
+     * 拉取所有商品（含 product_variants），自動分頁直到無更多資料。
+     *
+     * 每筆商品包含完整的 product_variants 陣列，供 SYNC_PACK 使用。
+     * 最大每頁 50 筆，若某頁返回空則停止分頁。
+     *
+     * @param channelId 通路 ID（credentials 必須已透過 setCredentials() 設置）
+     * @return 所有商品列表
+     */
+    public List<Map<String, Object>> fetchProducts(String channelId) throws Exception {
+        if (token == null || token.isEmpty() || secret == null || secret.isEmpty()) {
+            throw new IllegalArgumentException("Credentials not set for channel " + channelId);
+        }
+
+        List<Map<String, Object>> allProducts = new ArrayList<>();
+        int page = 1;
+        final int perPage = 50;
+
+        while (true) {
+            List<Map<String, Object>> page_result = cyberbizApiClient.getProducts(token, secret, page, perPage);
+            if (page_result.isEmpty()) {
+                break;
+            }
+            allProducts.addAll(page_result);
+            log.debug("Fetched products page={}, count={}, total so far={}", page, page_result.size(), allProducts.size());
+            if (page_result.size() < perPage) {
+                break; // last page
+            }
+            page++;
+        }
+
+        log.info("fetchProducts complete for channel={}: {} products total", channelId, allProducts.size());
+        return allProducts;
+    }
+
     @Override
     public void shipOrder(String orderId, Map<String, Object> shippingInfo) throws Exception {
         log.info("Shipping order {} on Cyberbiz with info: {}", orderId, shippingInfo);

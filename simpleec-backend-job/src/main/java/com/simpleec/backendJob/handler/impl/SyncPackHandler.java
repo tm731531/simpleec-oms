@@ -86,20 +86,33 @@ public class SyncPackHandler extends AbstractEventHandler {
             return;
         }
 
-        // Resolve product_id via SKU
+        // Resolve product_id via SKU; auto-create product if first time seeing this SKU
         String productId = null;
-        if (sku != null) {
-            Optional<Product> productOpt = productRepository.findByMerchantIdAndSku(merchantId, sku);
-            if (productOpt.isPresent()) {
-                productId = productOpt.get().getId();
-            } else {
-                log.warn("SYNC_PACK product not found for merchantId={} sku={} — skipping", merchantId, sku);
-                return;
-            }
-        } else {
+        if (sku == null || sku.isBlank()) {
             log.warn("SYNC_PACK missing sku for merchantId={} channelId={} channelProductId={} — cannot resolve product",
                     merchantId, channelId, channelProductId);
             return;
+        }
+
+        Optional<Product> productOpt = productRepository.findByMerchantIdAndSku(merchantId, sku);
+        if (productOpt.isPresent()) {
+            productId = productOpt.get().getId();
+        } else {
+            // First time this SKU is seen — create a minimal product record.
+            // sell_pack carries channel-specific pricing; product holds master data.
+            Product newProduct = Product.builder()
+                    .id(NanoIdUtil.generateComposite(merchantId))
+                    .merchantId(merchantId)
+                    .sku(sku)
+                    .productName(channelProductName != null ? channelProductName : sku)
+                    .suggestPrice(sellingPrice)
+                    .quantity(0)
+                    .safetyQuantity(0)
+                    .status("active")
+                    .build();
+            productRepository.save(newProduct);
+            productId = newProduct.getId();
+            log.info("SYNC_PACK auto-created product for merchantId={} sku={} id={}", merchantId, sku, productId);
         }
 
         // Upsert: look up by (channelId, channelProductId, channelSpecId)
