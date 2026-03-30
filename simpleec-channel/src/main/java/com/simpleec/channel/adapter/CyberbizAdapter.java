@@ -208,6 +208,7 @@ public class CyberbizAdapter implements ChannelAdapter {
      *
      * @deprecated 使用 {@link #fetchOrderListByTimestamp(String, long)} 代替
      */
+    @Deprecated(since = "1.0", forRemoval = false)
     private List<String> fetchOrdersCreatedInTimeRange(String timeRange) {
         log.debug("Fetching orders created in timeRange: {} (using current time as base)", timeRange);
         long now = Instant.now().getEpochSecond();
@@ -224,6 +225,7 @@ public class CyberbizAdapter implements ChannelAdapter {
      *
      * @deprecated 使用 {@link #fetchOrderListByTimestamp(String, long)} 代替
      */
+    @Deprecated(since = "1.0", forRemoval = false)
     private List<String> fetchOrdersUpdatedInTimeRange(String timeRange) {
         log.debug("Fetching orders updated in timeRange: {} (using current time as base)", timeRange);
         long now = Instant.now().getEpochSecond();
@@ -415,39 +417,59 @@ public class CyberbizAdapter implements ChannelAdapter {
         // 使用 LinkedHashMap 去重：key = order id，value = order data
         Map<Integer, Map<String, Object>> ordersMap = new LinkedHashMap<>();
 
-        // 第一次呼叫：查詢該時段內建立的訂單（7 天窗口）
-        try {
-            long sevenDaysAgo = baseTimestamp - (7 * 86400);
-            log.debug("Fetching orders created in timeRange: {} to {}", sevenDaysAgo, baseTimestamp);
+        // 並行呼叫兩個 API（從序列改為並行，性能提升 ~300-400ms per message）
+        long sevenDaysAgo = baseTimestamp - (7 * 86400);
+        long oneDayAgo = baseTimestamp - 86400;
 
-            List<Map<String, Object>> createdOrders = cyberbizApiClient.getCompleteOrdersCreatedInTimeRange(
-                token, secret, sevenDaysAgo, baseTimestamp
-            );
+        log.debug("Parallel fetching orders created: {} to {} and updated: {} to {}",
+            sevenDaysAgo, baseTimestamp, oneDayAgo, baseTimestamp);
+
+        try {
+            // 使用 CompletableFuture 並行調用兩個 API
+            java.util.concurrent.CompletableFuture<List<Map<String, Object>>> createdFuture =
+                java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+                    try {
+                        return cyberbizApiClient.getCompleteOrdersCreatedInTimeRange(
+                            token, secret, sevenDaysAgo, baseTimestamp
+                        );
+                    } catch (Exception e) {
+                        log.error("Error fetching created orders", e);
+                        return Collections.emptyList();
+                    }
+                });
+
+            java.util.concurrent.CompletableFuture<List<Map<String, Object>>> updatedFuture =
+                java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+                    try {
+                        return cyberbizApiClient.getCompleteOrdersUpdatedInTimeRange(
+                            token, secret, oneDayAgo, baseTimestamp
+                        );
+                    } catch (Exception e) {
+                        log.error("Error fetching updated orders", e);
+                        return Collections.emptyList();
+                    }
+                });
+
+            // 等待兩個 API 調用完成
+            List<Map<String, Object>> createdOrders = createdFuture.get();
+            List<Map<String, Object>> updatedOrders = updatedFuture.get();
+
+            log.debug("Fetched {} orders created in timeRange from Cyberbiz", createdOrders.size());
+            log.debug("Fetched {} orders updated in timeRange from Cyberbiz", updatedOrders.size());
+
+            // 合併結果：先加入 created，再用 updated 覆蓋（更新優先）
             for (Map<String, Object> order : createdOrders) {
                 Integer orderId = ((Number) order.get("id")).intValue();
                 ordersMap.put(orderId, order);
             }
-            log.debug("Fetched {} orders created in timeRange from Cyberbiz", createdOrders.size());
-        } catch (Exception e) {
-            log.error("Error fetching created orders from Cyberbiz", e);
-            throw e;
-        }
 
-        // 第二次呼叫：查詢該時段內更新的訂單（1 天窗口）
-        try {
-            long oneDayAgo = baseTimestamp - 86400;
-            log.debug("Fetching orders updated in timeRange: {} to {}", oneDayAgo, baseTimestamp);
-
-            List<Map<String, Object>> updatedOrders = cyberbizApiClient.getCompleteOrdersUpdatedInTimeRange(
-                token, secret, oneDayAgo, baseTimestamp
-            );
             for (Map<String, Object> order : updatedOrders) {
                 Integer orderId = ((Number) order.get("id")).intValue();
                 ordersMap.put(orderId, order);  // 覆蓋或新增（去重邏輯）
             }
-            log.debug("Fetched {} orders updated in timeRange from Cyberbiz", updatedOrders.size());
+
         } catch (Exception e) {
-            log.error("Error fetching updated orders from Cyberbiz", e);
+            log.error("Error in parallel API calls", e);
             throw e;
         }
 

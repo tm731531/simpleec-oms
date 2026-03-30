@@ -45,6 +45,7 @@ public class ModeAOrderListHandler {
      */
     public void handleModeAOrders(ChannelAdapter adapter, long baseTimestamp,
                                    String merchantId, String channelId) {
+        long methodStart = System.currentTimeMillis();
         try {
             log.info("Processing Mode A orders for {} ({}) using baseTimestamp", adapter.getPlatformCode(), channelId);
 
@@ -54,21 +55,33 @@ public class ModeAOrderListHandler {
 
             // 第一步：呼叫列表 API（調用 fetchOrdersByTimestamp 以使用正確的時間窗口）
             // 該方法會自動調用兩次 API：新建（7天） + 更新（1天），然後合併去重
+            long apiStart = System.currentTimeMillis();
             List<Map<String, Object>> orders = adapter.fetchOrdersByTimestamp(channelId, baseTimestamp);
+            long apiDuration = System.currentTimeMillis() - apiStart;
 
-            log.info("Fetched {} orders from {} API", orders.size(), adapter.getPlatformCode());
+            log.info("Fetched {} orders from {} API (took {}ms)", orders.size(), adapter.getPlatformCode(), apiDuration);
 
             // 第二步：逐單處理
+            long processingStart = System.currentTimeMillis();
             for (Map<String, Object> channelOrder : orders) {
                 try {
+                    long orderStart = System.currentTimeMillis();
                     processOrder(channelOrder, adapter.getPlatformCode(), channelId, merchantId);
+                    long orderDuration = System.currentTimeMillis() - orderStart;
+                    if (orderDuration > 100) {
+                        log.debug("Order processing took {}ms for order {}", orderDuration,
+                            channelOrder.get("id") != null ? channelOrder.get("id") : "unknown");
+                    }
                 } catch (Exception e) {
                     log.error("Error processing order from {}", adapter.getPlatformCode(), e);
                     // 繼續處理下一筆，不中斷整個流程
                 }
             }
+            long processingDuration = System.currentTimeMillis() - processingStart;
 
-            log.info("Completed processing {} orders from {}", orders.size(), adapter.getPlatformCode());
+            long methodDuration = System.currentTimeMillis() - methodStart;
+            log.info("Completed processing {} orders from {} (API: {}ms, Processing: {}ms, Total: {}ms)",
+                orders.size(), adapter.getPlatformCode(), apiDuration, processingDuration, methodDuration);
 
         } catch (Exception e) {
             log.error("Error handling Mode A orders for {}", adapter.getPlatformCode(), e);
@@ -80,6 +93,7 @@ public class ModeAOrderListHandler {
      */
     private void processOrder(Map<String, Object> channelOrder, String platformCode,
                               String channelId, String merchantId) throws Exception {
+        long orderProcessStart = System.currentTimeMillis();
 
         // 第三步：組織成 OMS Order 結構
         // 不同平台使用不同的 ID 字段名（Cyberbiz: id, 其他: order_id）
@@ -101,12 +115,17 @@ public class ModeAOrderListHandler {
             channelOrderNumber = channelOrder.get("order_name").toString();
         }
 
+        long buildStart = System.currentTimeMillis();
         ObjectNode omsOrderData = buildOmsOrderData(channelOrder, platformCode);
+        long buildDuration = System.currentTimeMillis() - buildStart;
 
         // 第四步：計算 Hash（基於完整資料）
+        long hashStart = System.currentTimeMillis();
         String orderHash = calculateOrderHash(omsOrderData);
+        long hashDuration = System.currentTimeMillis() - hashStart;
 
         // 第五步：檢查 Redis（第一層去重） — 容錯模式
+        long redisStart = System.currentTimeMillis();
         try {
             String redisKey = RedisKeyUtil.orderHashKey(merchantId, channelId, channelOrderId);
             String existingHash = redisTemplate.opsForValue().get(redisKey);
@@ -119,11 +138,16 @@ public class ModeAOrderListHandler {
             // Redis 連接失敗時，記錄警告但繼續發送消息
             log.warn("Redis dedup check failed for order {}, proceeding with ORDER_UPSERT", channelOrderId, e);
         }
+        long redisDuration = System.currentTimeMillis() - redisStart;
 
         // 第六步：發送 ORDER_UPSERT 到 order.process topic
+        long sendStart = System.currentTimeMillis();
         sendOrderUpsert(channelOrderId, channelOrderNumber, omsOrderData, orderHash, channelId, merchantId, platformCode);
+        long sendDuration = System.currentTimeMillis() - sendStart;
 
-        log.info("Sent ORDER_UPSERT for {} from {}", channelOrderId, platformCode);
+        long totalDuration = System.currentTimeMillis() - orderProcessStart;
+        log.info("Order {} processed (build:{}ms, hash:{}ms, redis:{}ms, send:{}ms, total:{}ms)",
+            channelOrderId, buildDuration, hashDuration, redisDuration, sendDuration, totalDuration);
     }
 
     /**

@@ -66,6 +66,8 @@ public class OrderUpsertConsumer {
 
         TaskMdcHelper.set(json);
         try {
+            // 將 String 轉換為 JsonNode
+            JsonNode json = objectMapper.readTree(messageJson);
             JsonNode header = json.get("header");
             JsonNode body = json.get("body");
 

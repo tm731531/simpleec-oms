@@ -176,8 +176,10 @@ public class ChannelJobConsumer {
      * Scheduler 只需發送 channelId，ChannelJob 負責查詢對應的 merchantId
      */
     public void consumeChannelMessage(String messageJson) {
+        long messageStart = System.currentTimeMillis();
         try {
             // Parse JSON string to JsonNode
+            long parseStart = System.currentTimeMillis();
             JsonNode json = objectMapper.readTree(messageJson);
 
             try {
@@ -262,6 +264,9 @@ public class ChannelJobConsumer {
             } else {
                 log.warn("Unknown taskType: {}", taskType);
             }
+
+            long totalDuration = System.currentTimeMillis() - messageStart;
+            log.info("Message processing completed (total: {}ms)", totalDuration);
 
             } finally {
                 TaskMdcHelper.clear();

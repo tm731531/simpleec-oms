@@ -1,344 +1,204 @@
 # SimpleEC OMS - 簡易電商訂單管理系統
 
-**選擇語言**: [English](README.md) | [繁體中文](README.zh-TW.md) | [簡體中文](README.zh-CN.md) (計畫中) | [語言指南](LANGUAGE-GUIDE.md)
+[![Java](https://img.shields.io/badge/Java-17-orange?logo=openjdk)](https://openjdk.org/)
+[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5-green?logo=springboot)](https://spring.io/projects/spring-boot)
+[![Kafka](https://img.shields.io/badge/Apache%20Kafka-3.7-black?logo=apachekafka)](https://kafka.apache.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-blue?logo=postgresql)](https://www.postgresql.org/)
+[![Redis](https://img.shields.io/badge/Redis-7-red?logo=redis)](https://redis.io/)
+[![Docker](https://img.shields.io/badge/Docker-Compose-blue?logo=docker)](https://docs.docker.com/compose/)
+[![License](https://img.shields.io/badge/License-Private-lightgrey)]()
 
-> 多通路訂單管理系統
-> 支持 7 個通路：Cyberbiz、PChome、MOMO、Shopline、Yahoo 購物中心、Shopee、Shopify
+**選擇語言:** [English](README.md) | [繁體中文](README.zh-TW.md)
 
-**狀態**: ✅ **完全運作中 (FULLY OPERATIONAL)** - 系統運作、API 已修復、使用者事件流運作中 (2026 年 2 月 24 日)
-
-> 📍 **最新信息**：[OPERATIONS_CURRENT_STATUS.md](docs/6-OPERATIONS/OPERATIONS_CURRENT_STATUS.md) | 文檔索引 [DOCUMENTATION_INDEX.md](docs/0-START/DOCUMENTATION_INDEX.md) | 工作指示 [CLAUDE.md](CLAUDE.md)
+> 專為台灣電商市場打造的多通路訂單管理系統 (OMS)，以事件驅動架構統一管理訂單、庫存、出貨與退貨。
 
 ---
 
-## 🚀 快速開始 (3 分鐘)
+## 什麼是 SimpleEC OMS？
 
-### 1. 環境需求
-```bash
-Docker 20.10+
-Docker Compose 2.0+
-JDK 17+ (推薦用 sdkman)
+SimpleEC OMS 是一套事件驅動的訂單管理系統，將來自多個電商平台的訂單、庫存、出貨和退貨統一到單一操作介面。專為同時經營 Cyberbiz、蝦皮、MOMO、PChome、Yahoo、Shopline、Shopify 的台灣賣家設計。
+
+不再需要登入 7 個不同的賣家後台 — SimpleEC OMS 透過 Kafka 事件串流自動同步所有訂單資料，提供集中化的管理介面。
+
+## 核心功能
+
+| 功能 | 說明 |
+|------|------|
+| **多通路同步** | 自動從 7 個平台（Cyberbiz、蝦皮、MOMO、PChome、Yahoo、Shopline、Shopify）抓取訂單 |
+| **統一訂單管理** | 在同一介面查看、篩選、管理所有來源平台的訂單 |
+| **出貨工作流** | 完整倉庫流程：揀貨、包裝、貼標、批次出貨管理 |
+| **庫存同步** | 將庫存更新推送回各個通路 |
+| **退貨處理** | 跨平台集中式退貨/退款處理 |
+| **銷售報表** | 依通路彙總的每日統計與歷史趨勢追蹤 |
+| **事件驅動架構** | 基於 Kafka 的非同步處理，內建自動重試與死信佇列 |
+| **可觀測性** | 內建 Grafana + Prometheus + Loki + Tempo，涵蓋指標、日誌與追蹤 |
+
+## 系統架構
+
+```
+                        ┌─────────────────────────┐
+                        │     Nginx (8089)         │
+                        │  / → 商家前台 (Vue 3)    │
+                        │  /admin → 管理後台       │
+                        │  /api → Spring Boot API  │
+                        └────────────┬────────────┘
+                                     │
+┌────────────────────────────────────┼────────────────────────────────────┐
+│                           Spring Boot API (8083)                        │
+│  JWT 認證 · REST 控制器 · 出貨服務 · 統計服務                           │
+└────────────────────────────────────┬────────────────────────────────────┘
+                                     │
+              ┌──────────────────────┼──────────────────────┐
+              ▼                      ▼                      ▼
+    ┌─────────────────┐   ┌──────────────────┐   ┌─────────────────┐
+    │  Apache Kafka    │   │   PostgreSQL 16   │   │     Redis 7     │
+    │  16 個主題       │   │   19+ 張資料表    │   │  快取 + 去重    │
+    │  KRaft 模式      │   │   AES-256 加密    │   │  分散式鎖       │
+    └────────┬────────┘   └──────────────────┘   └─────────────────┘
+             │
+    ┌────────┴────────────────────────────────┐
+    │         Kafka 消費者任務                  │
+    │  通路任務 · 訂單任務 · 重試任務           │
+    │  後端任務 · 排程任務 · 前端任務           │
+    └─────────────────────────────────────────┘
 ```
 
-### 2. 啟動系統
+### 事件流如何運作？
+
+1. **排程器**每 5 分鐘發送心跳時間戳到 Kafka
+2. **通路任務**收到時間戳後，根據各平台特性自主決定時間窗口和分頁策略，呼叫平台 API
+3. 通路任務將各平台特有格式轉換為統一 OMS 結構，發布到 `order.process` 主題
+4. **訂單任務**將訂單持久化到 PostgreSQL，自動去重
+5. 出貨時，**出貨服務**發布 `SHIP_ORDER` 事件回平台的 Kafka 主題
+6. **通路任務**呼叫平台的出貨確認 API
+
+## 支援平台
+
+| 平台 | 訂單同步 | 出貨 | 退貨 | 庫存 |
+|------|:--------:|:----:|:----:|:----:|
+| Cyberbiz | ✅ | ✅ | ✅ | ✅ |
+| 蝦皮 (Shopee) | ✅ | ✅ | ✅ | ✅ |
+| MOMO | ✅ | ✅ | ✅ | - |
+| PChome | ✅ | ✅ | - | - |
+| Yahoo | ✅ | ✅ | - | - |
+| Shopline | ✅ | - | - | - |
+| Shopify | ✅ | - | - | - |
+
+## 技術棧
+
+| 層級 | 技術 |
+|------|------|
+| 程式語言 | Java 17 |
+| 框架 | Spring Boot 3.5、MyBatis-Plus |
+| 訊息佇列 | Apache Kafka 3.7（KRaft 模式，無 ZooKeeper） |
+| 資料庫 | PostgreSQL 16 |
+| 快取 | Redis 7（AOF 持久化） |
+| 前端 | Vue 3 + Vite |
+| 認證 | JWT + AES-256-GCM（PII 加密） |
+| 可觀測性 | OpenTelemetry + Grafana + Prometheus + Loki + Tempo |
+| 容器化 | Docker Compose（26 個容器） |
+| 建置 | Gradle 8.14，11 個模組 |
+
+## 快速開始
+
+### 環境需求
+
+- Docker 20.10+ 和 Docker Compose 2.0+
+- JDK 17+（推薦使用 [sdkman](https://sdkman.io/)）
+
+### 安裝
+
 ```bash
 git clone https://github.com/tm731531/simpleec-oms.git
 cd simpleec-oms
 
-# 方式一：使用啟動腳本（推薦）
-bash scripts/start-all.sh
+# 編譯
+./gradlew clean build -x test
 
-# 方式二：使用 Docker Compose
+# 啟動全部 26 個容器
 docker compose up -d
 
-# 檢查容器狀態
-docker compose ps
-
-# 查看日誌
-docker compose logs -f simpleec-api
+# 驗證
+curl http://localhost:8083/api/health
 ```
 
-### 3. 驗證系統
-```bash
-# 使用者應用程式登入（透過反向代理）
-# 瀏覽器: http://localhost:8089
-# 電子郵件: admin@a00000.com
-# 密碼: pass123456
+### 服務入口
 
-# API 直接測試
-curl -X POST http://localhost:8083/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"admin@a00000.com","password":"pass123456"}'
-
-# Kafka UI (查看主題)
-# 瀏覽器: http://localhost:8088
-
-# 系統架構圖
-# 詳見: https://localhost:8089/admin/ (管理應用程式)
-```
-
----
-
-## 📊 系統架構
-
-### 前端架構（2026 年 2 月 22 日後）
-```
-┌──────────────────────────────────────────┐
-│    Nginx 反向代理 (8089)                  │
-│  路由: / → 使用者應用程式 (5173)          │
-│  路由: /admin/ → 管理應用程式 (8084)      │
-│  路由: /api/* → 後端 API (8083)           │
-└────────────┬─────────────┬────────────────┘
-             │             │
-    ┌────────▼─────┐  ┌────▼──────────┐
-    │ 使用者應用   │  │ 管理應用      │
-    │ (5173)       │  │ (8084)        │
-    │ Vue 3+Vite   │  │ Vue 3+Vite    │
-    └──────────────┘  └───────────────┘
-```
-
-### 後端架構（事件驅動）
-```
-┌──────────────────────────────────────────┐
-│ Kafka 消費者組 (8 個)                     │
-├──────────────────────────────────────────┤
-│ 通路任務: 通路資料同步 (5 個平台)        │
-│ 訂單任務: 訂單/退貨處理                   │
-│ 重試任務: 失敗消息處理 + DLT              │
-│ 後端/前端/排程任務                        │
-├──────────────────────────────────────────┤
-│ Kafka 主題 (15 個)                        │
-│ - 10 個平台 (cyberbiz/momo/.../shopee)   │
-│ - 1 個訂單工作流 (order.process)         │
-│ - 4 個系統 (scheduler, task.*, failed)   │
-└────────┬──────────────┬──────────────────┘
-         ↓              ↓
-    PostgreSQL      Redis
-    (16 個表)    (快取/去重)
-```
-
----
-
-## 🔧 常用命令
-
-### 構建服務
-```bash
-./gradlew clean build -x test
-```
-
-### Docker 操作
-```bash
-# 查看日誌 (即時)
-docker-compose logs -f simpleec-api
-docker-compose logs -f simpleec-order-job
-
-# 進入資料庫
-docker-compose exec postgres psql -U simpleec -d simpleec
-
-# 進入 Redis
-docker-compose exec redis redis-cli
-
-# 停止所有容器
-docker-compose down
-docker-compose down -v  # 清除資料
-```
-
-### 資料庫
-```bash
-# 查看表
-docker-compose exec postgres psql -U simpleec -d simpleec -c "\dt"
-
-# 查看最新訂單
-docker-compose exec postgres psql -U simpleec -d simpleec -c \
-  "SELECT * FROM orders ORDER BY created_at DESC LIMIT 10;"
-```
-
----
-
-## 📈 監控與調試
-
-### Grafana 儀表板 (連接埠 3000)
-- URL: http://localhost:3000
-- 預設使用者: admin/admin
-
-### Prometheus (連接埠 9090)
-- URL: http://localhost:9090
-
-### Kafka UI (連接埠 8088)
-- URL: http://localhost:8088
-
-### 應用程式日誌
-```bash
-docker-compose logs simpleec-api
-docker-compose logs simpleec-channel-momo-fast
-docker-compose logs simpleec-order-job
-```
-
----
-
-## 📁 文檔索引
-
-### 快速參考
-- **[ARCHITECTURE_OVERVIEW.md](docs/1-ARCHITECTURE/ARCHITECTURE_OVERVIEW.md)** - 系統全景圖
-- **[CORE_CONTRACTS.md](docs/3-EVENT-FLOW/CORE_CONTRACTS.md)** - 16 個 Kafka 主題定義
-- **[CHANNEL_IMPLEMENTATION_GUIDE.md](docs/7-IMPLEMENTATION/CHANNEL_IMPLEMENTATION_GUIDE.md)** - 通路實作細節
-
-### 深度學習
-- **[DATA_FLOW_MAPPING.md](docs/3-EVENT-FLOW/DATA_FLOW_MAPPING.md)** - Kafka 消息流與資料庫映射
-- **[PLATFORM_MAPPING.md](docs/4-SCHEMA/PLATFORM_MAPPING.md)** - 7 個通路 API 狀態轉換
-- **[OPERATIONS_RUNBOOK.md](docs/6-OPERATIONS/OPERATIONS_RUNBOOK.md)** - 營運手冊
-
----
-
-## 📋 環境配置
-
-```yaml
-# 資料庫 (PostgreSQL 16)
-SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/simpleec_oms
-SPRING_DATASOURCE_USERNAME: postgres
-SPRING_DATASOURCE_PASSWORD: postgres123
-
-# Redis (快取與去重)
-REDIS_HOST: redis
-REDIS_PORT: 6379
-
-# Kafka (KRaft 模式，無 ZooKeeper)
-KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-KAFKA_LOG_RETENTION_HOURS: 1
-KAFKA_LOG_SEGMENT_BYTES: 104857600  # 100MB
-
-# API 認證
-JWT_SECRET: (自動生成)
-
-# 前端 API 端點偵測
-# 本地: http://localhost:8083/api
-# 遠端: /api (透過反向代理)
-```
-
----
-
-## 🌐 服務端點
-
-### 前端（透過反向代理）
 | 服務 | URL | 說明 |
 |------|-----|------|
-| Nginx 反向代理 | http://localhost:8089 | 統一入口 |
-| 使用者應用程式 | http://localhost:8089/ | 商家端（訂單/通路管理） |
-| 管理應用程式 | http://localhost:8089/admin/ | 平台端（商家/平台管理） |
-
-### 後端（直接訪問）
-| 服務 | URL | 說明 |
-|------|-----|------|
+| 商家前台 | http://localhost:8089 | 訂單與通路管理 |
+| 管理後台 | http://localhost:8089/admin/ | 平台管理 |
 | API | http://localhost:8083/api | REST API |
-| Kafka UI | http://localhost:8088 | Kafka 消費組/主題監控 |
-| PostgreSQL | localhost:5433 | 資料庫 |
-| Redis | localhost:6379 | 快取與去重 |
+| Kafka UI | http://localhost:8088 | 主題與消費者監控 |
+| Grafana | http://localhost:3000 | 指標與日誌儀表板 |
 
-### 前端開發訪問（不使用代理）
-| 服務 | URL | 說明 |
-|------|-----|------|
-| 使用者應用程式 | http://localhost:5173 | 直接開發伺服器 |
-| 管理應用程式 | http://localhost:8084 | 直接開發伺服器 |
+**測試帳號：** `admin@a00000.com` / `pass123456`
 
-### 外部訪問（Cloudflare）
-| 服務 | URL | 說明 |
-|------|-----|------|
-| 使用者應用程式 | https://oms.tomting.com | 商家端公網 |
-| 管理應用程式 | https://oms-admin.tomting.com | 平台端公網 |
+## 模組結構
 
----
-
-## 🐛 故障排除
-
-### 使用者應用程式登入失敗
-**症狀**: 登入頁面無法登入（2026 年 2 月 23 日已修復）
-
-**修復**:
-- ✅ API 端點已更正：8082 → 8083
-- ✅ 回應攔截器已修復：支援多種格式
-- ✅ Docker 網路已修復：使用者應用程式連接到 simpleec-oms_default
-
-**驗證**:
-```bash
-# 直接測試 API
-curl -X POST http://localhost:8083/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"admin@a00000.com","password":"pass123456"}'
-
-# 檢查使用者應用程式網路
-docker inspect simpleec-user-app | grep NetworkID
+```
+simpleec-oms/
+├── simpleec-common        # 共用：列舉、模型、工具類
+├── simpleec-core          # 核心：實體、倉儲、服務
+├── simpleec-channel       # 通路適配器（各平台 API 客戶端）
+├── simpleec-api           # REST API（Spring Boot :8083）
+├── simpleec-gateway       # 對外閘道：Webhook、ERP
+├── simpleec-channel-job   # 通路同步消費者（10 個實例）
+├── simpleec-order-job     # 訂單處理消費者
+├── simpleec-scheduler-job # 心跳排程器
+├── simpleec-backend-job   # 非同步後端任務
+├── simpleec-frontend-job  # 前端事件消費者
+└── simpleec-retry-job     # 重試 + 死信佇列路由
 ```
 
-### Kafka 消費者組未建立
-**症狀**: `kafka-consumer-groups.sh --list` 無輸出
+## Kafka 主題
 
-**狀態**: ✅ 已修復（2026 年 2 月 23 日）- 8 個消費者組已運作
+SimpleEC 使用 16 個 Kafka 主題，依功能分類：
 
-**根本原因** (已修復):
-1. ServiceAutoConfiguration 自動載入 OrderService（非 JPA 任務失敗）
-2. KafkaConfig bean 衝突（核心 + 任務的多重定義）
-3. 過寬的元件掃描範圍
+| 類別 | 主題 | 用途 |
+|------|------|------|
+| 通路（快速） | `{platform}.fast` x6 | 快速操作：出貨、改價、庫存同步（<5s） |
+| 通路（慢速） | `{platform}.slow` x6 | 資料同步：抓取訂單、退貨、商品（<5min） |
+| 業務 | `order.process`、`return.process` | 訂單/退貨事件的唯一事實來源 |
+| 系統 | `scheduler`、`task.backend`、`task.frontend` | 內部協調 |
+| 錯誤 | `task.failed`、`task.dlt` | 重試佇列（保留 1 天）與死信（保留 30 天） |
 
-**驗證**:
-```bash
-# 檢查消費者組日誌
-docker logs simpleec-channel-job | grep "groupId="
-
-# 檢查 Kafka 主題
-docker exec simpleec-kafka /opt/kafka/bin/kafka-topics.sh \
-  --bootstrap-server localhost:9092 --list
-```
-
-### 容器無法啟動
-```bash
-# 查看詳細日誌
-docker compose logs simpleec-api --tail 100
-
-# 檢查依賴服務
-docker compose ps
-
-# 重新啟動基礎設施
-docker compose restart postgres kafka redis
-```
-
-### 資料未進入資料庫
-```bash
-# 檢查訂單任務日誌
-docker compose logs simpleec-order-job -f
-
-# 檢查 Redis 去重
-docker compose exec redis redis-cli
-> KEYS "dedup:*" | head -20
-```
-
----
-
-## 📝 分支說明
-
-- **ops/production** ← 目前分支（運作環境）
-- **main** - 穩定版本
-- **docs-only** - 文檔專用分支
-
----
-
-## 📚 完整文檔
+## 文件
 
 | 文件 | 說明 |
 |------|------|
-| [docs/1-ARCHITECTURE/DESIGN_v2.md](docs/1-ARCHITECTURE/DESIGN_v2.md) | 完整系統設計 |
-| [docs/6-OPERATIONS/DEPLOYMENT_GUIDE.md](docs/6-OPERATIONS/DEPLOYMENT_GUIDE.md) | 部署指南 |
-| [docs/1-ARCHITECTURE/CODE_STRUCTURE.md](docs/1-ARCHITECTURE/CODE_STRUCTURE.md) | 代碼結構 |
-| [docs/4-SCHEMA/SCHEMA.md](docs/4-SCHEMA/SCHEMA.md) | 資料庫 Schema |
-| [docs/6-OPERATIONS/DOCKER_GUIDE.md](docs/6-OPERATIONS/DOCKER_GUIDE.md) | Docker 使用手冊 |
-| [docs/](docs/) | 其他設計文件 |
+| [架構總覽](docs/1-ARCHITECTURE/ARCHITECTURE_OVERVIEW.md) | 系統設計與元件圖 |
+| [核心契約](docs/3-EVENT-FLOW/CORE_CONTRACTS.md) | Kafka 訊息格式與主題定義 |
+| [資料流映射](docs/3-EVENT-FLOW/DATA_FLOW_MAPPING.md) | API 到 Kafka 到資料庫的映射 |
+| [資料庫 Schema](docs/4-SCHEMA/SCHEMA.md) | 全部資料表 DDL（19+ 張表） |
+| [通路實作指南](docs/7-IMPLEMENTATION/CHANNEL_IMPLEMENTATION_GUIDE.md) | 如何新增平台 |
+| [營運手冊](docs/6-OPERATIONS/OPERATIONS_RUNBOOK.md) | 部署與故障排除 |
+
+## 常見問題
+
+### 如何新增電商平台？
+
+實作平台的 `ChannelAdapter`，建立帶有 `@ChannelHandler(platform = "xxx")` 註解的處理器，並新增平台的 `.fast` 和 `.slow` Kafka 主題。詳見[通路實作指南](docs/7-IMPLEMENTATION/CHANNEL_IMPLEMENTATION_GUIDE.md)。
+
+### 訂單去重如何運作？
+
+每張訂單以 `channelId + channelOrderId` 唯一識別。透過 Redis 去重防止重複處理。`OrderUpsertConsumer` 在新增/更新前會檢查是否已存在。
+
+### 為什麼用 Kafka 而不是 REST 做服務間通訊？
+
+Kafka 提供可靠的非同步處理，內建自動重試、死信佇列和背壓處理。各平台 API 回應時間差異很大（1 秒到 30 秒），Kafka 將同步速度與處理速度解耦。
+
+### 敏感資料如何保護？
+
+買家 PII（姓名、電話、Email、地址）使用 AES-256-GCM 加密儲存，透過 MyBatis 透明型別處理器實現。每個商家有獨立的加密金鑰。
+
+### 可以不用 Docker 執行嗎？
+
+可以。每個模組都是標準的 Spring Boot 應用程式。需要另外啟動 PostgreSQL 16、Redis 7 和 Kafka 3.7，然後為每個模組配置 `application.yml`。
 
 ---
 
-## 📖 詳細文檔
-
-### 快速參考
-- **[docs/6-OPERATIONS/DEPLOYMENT.md](docs/6-OPERATIONS/DEPLOYMENT.md)** ⭐ - 部署指南 (2026 年 2 月 23 日已更新)
-- **[docs/1-ARCHITECTURE/ARCHITECTURE_OVERVIEW.md](docs/1-ARCHITECTURE/ARCHITECTURE_OVERVIEW.md)** - 系統架構詳解
-- **[docs/3-EVENT-FLOW/CORE_CONTRACTS.md](docs/3-EVENT-FLOW/CORE_CONTRACTS.md)** - Kafka 主題定義
-- **[docs/4-SCHEMA/PLATFORM_MAPPING.md](docs/4-SCHEMA/PLATFORM_MAPPING.md)** - 7 個通路映射
-
-### 深度學習
-- **[docs/3-EVENT-FLOW/DATA_FLOW_MAPPING.md](docs/3-EVENT-FLOW/DATA_FLOW_MAPPING.md)** - 消息流與資料庫映射
-- **[docs/7-IMPLEMENTATION/CHANNEL_IMPLEMENTATION_GUIDE.md](docs/7-IMPLEMENTATION/CHANNEL_IMPLEMENTATION_GUIDE.md)** - 通路實作
-- **[docs/3-EVENT-FLOW/EVENT_SAMPLES.md](docs/3-EVENT-FLOW/EVENT_SAMPLES.md)** - 事件範例
-- **[docs/](docs/)** - 完整技術文檔（9 大類別）
-
-### 最新修復（2026 年 2 月 23 日）
-- **[使用者應用程式登入修復](docs/6-OPERATIONS/DEPLOYMENT.md#user-app-login-fails)** - API 端點、回應格式、Docker 網路
-- **[Kafka 消費者組修復](docs/6-OPERATIONS/DEPLOYMENT.md#kafka-consumer-groups-not-created)** - Bean 配置、掃描範圍調整
-- **[系統保留策略](docs/6-OPERATIONS/RETENTION_CLEANUP_RUNBOOK.md)** - Kafka 1 小時、Prometheus 7 天、Loki 7 天
-
----
-
-**最後更新**: 2026 年 2 月 23 日
-**版本**: v0.1-MVP
-**狀態**: ✅ 完全運作中
-**分支**: main
+**版本**: v0.1-MVP | **狀態**: 完全運作中 | **最後更新**: 2026-03
 
 ## 授權
 
