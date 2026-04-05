@@ -144,9 +144,9 @@ public class ReturnUpsertConsumer {
                     errorInfo.put("retryCount", 0);
                     errorBody.set("errorInfo", errorInfo);
                     wrappedMessage.set("body", errorBody);
-                    kafkaTemplate.send("task.failed", "ReturnUpsert", wrappedMessage.toString());
+                    kafkaTemplate.send(TopicConstants.TASK_DLT, "ReturnUpsert", wrappedMessage.toString());
                 } catch (Exception sendError) {
-                    log.error("Failed to route invalid message to task.failed", sendError);
+                    log.error("Failed to route invalid message to task.dlt", sendError);
                 }
             }
 

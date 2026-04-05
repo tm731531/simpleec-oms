@@ -1,5 +1,7 @@
 package com.simpleec.channeljob.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.simpleec.channeljob.entity.Channel;
 import com.simpleec.channeljob.entity.ChannelMessage;
 import com.simpleec.channeljob.repository.ChannelRepository;
@@ -18,10 +20,12 @@ public class ChannelService {
 
     private final ChannelRepository channelRepository;
     private final JdbcTemplate jdbcTemplate;
+    private final ObjectMapper objectMapper;
 
-    public ChannelService(ChannelRepository channelRepository, JdbcTemplate jdbcTemplate) {
+    public ChannelService(ChannelRepository channelRepository, JdbcTemplate jdbcTemplate, ObjectMapper objectMapper) {
         this.channelRepository = channelRepository;
         this.jdbcTemplate = jdbcTemplate;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -71,6 +75,30 @@ public class ChannelService {
     public Channel getChannel(String channelId) {
         return channelRepository.findById(channelId)
             .orElse(null);
+    }
+
+    /**
+     * Read platform capabilities JSONB for a given channelId.
+     * Used by handlers to make capability-driven decisions instead of hardcoding platform names.
+     *
+     * Example: capabilities.path("supportsShipment").asBoolean(false)
+     */
+    public JsonNode getPlatformCapabilities(String channelId) {
+        try {
+            var rows = jdbcTemplate.queryForList(
+                "SELECT p.capabilities FROM platform p " +
+                "JOIN channel c ON c.platform_id = p.id " +
+                "WHERE c.id = ?",
+                channelId);
+            if (rows.isEmpty()) {
+                return objectMapper.createObjectNode();
+            }
+            Object capObj = rows.get(0).get("capabilities");
+            return objectMapper.readTree(capObj != null ? capObj.toString() : "{}");
+        } catch (Exception e) {
+            log.warn("Failed to read platform capabilities for channel {}: {}", channelId, e.getMessage());
+            return objectMapper.createObjectNode();
+        }
     }
 
     /**

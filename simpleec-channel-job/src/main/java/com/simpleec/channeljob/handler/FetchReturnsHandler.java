@@ -1,5 +1,6 @@
 package com.simpleec.channeljob.handler;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.simpleec.channel.adapter.ChannelAdapter;
 import com.simpleec.channel.adapter.CyberbizAdapter;
 import com.simpleec.channeljob.entity.Channel;
@@ -47,7 +48,8 @@ public class FetchReturnsHandler {
         log.info("FETCH_RETURNS: platform={}, channel={}, merchant={}, baseTimestamp={}",
                 platformCode, channelId, merchantId, baseTimestamp);
 
-        if ("cyberbiz".equalsIgnoreCase(platformCode)) {
+        JsonNode capabilities = channelService.getPlatformCapabilities(channelId);
+        if (capabilities.path("supportsReturnFetch").asBoolean(false)) {
             Channel channel = channelService.getChannel(channelId);
             if (channel == null) {
                 log.error("FETCH_RETURNS: channel not found: {}", channelId);
@@ -76,7 +78,7 @@ public class FetchReturnsHandler {
                 log.error("FETCH_RETURNS failed for platform={} channel={}", platformCode, channelId, e);
             }
         } else {
-            log.info("FETCH_RETURNS not yet implemented for platform={}, skipping", platformCode);
+            log.debug("FETCH_RETURNS not supported for channel={} (supportsReturnFetch=false)", channelId);
         }
     }
 

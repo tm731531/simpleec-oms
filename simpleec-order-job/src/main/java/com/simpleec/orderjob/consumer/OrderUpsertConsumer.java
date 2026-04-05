@@ -2,6 +2,8 @@ package com.simpleec.orderjob.consumer;
 
 import com.simpleec.core.crypto.EncryptionContext;
 import com.simpleec.core.entity.Order;
+import com.simpleec.core.entity.OrderStatusLog;
+import com.simpleec.core.repository.OrderStatusLogRepository;
 import com.simpleec.core.service.OrderService;
 import com.simpleec.common.constants.TopicConstants;
 import com.simpleec.common.enums.OrderStatusEnum;
@@ -40,6 +42,7 @@ import java.util.Optional;
 public class OrderUpsertConsumer {
 
     private final OrderService orderService;
+    private final OrderStatusLogRepository orderStatusLogRepository;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
     private final KafkaTemplate<String, Object> kafkaTemplate;
@@ -169,10 +172,14 @@ public class OrderUpsertConsumer {
         // 第 2 步：檢查資料庫中是否已存在
         Optional<Order> existingOrder = orderService.findByChannelOrderId(channelId, channelOrderId);
 
+        String oldStatus = null;
+        boolean isNewOrder = !existingOrder.isPresent();
+
         Order order;
         if (existingOrder.isPresent()) {
             // UPDATE 現有訂單
             order = existingOrder.get();
+            oldStatus = order.getOrderStatus() != null ? order.getOrderStatus().getCode() : null;
 
             // 計算 DB 中現有訂單的 hash（內存，不是從 DB 欄位讀）
             String dbOrderHash = calculateOrderHash(order, orderDataJson);
@@ -191,7 +198,7 @@ public class OrderUpsertConsumer {
                 log.debug("Order content unchanged: {}", channelOrderId);
                 // 但仍要更新 Redis（刷新 TTL）
                 try {
-                    redisTemplate.opsForValue().set(redisKey, orderHash, Duration.ofDays(7));
+                    redisTemplate.opsForValue().set(redisKey, orderHash, Duration.ofHours(24));
                 } catch (Exception e) {
                     log.warn("Failed to update Redis cache for order {}", channelOrderId, e);
                 }
@@ -220,12 +227,33 @@ public class OrderUpsertConsumer {
 
         // 第 4 步：更新 Redis hash 快取 — 容錯模式
         try {
-            redisTemplate.opsForValue().set(redisKey, orderHash, Duration.ofDays(7));
+            redisTemplate.opsForValue().set(redisKey, orderHash, Duration.ofHours(24));
         } catch (Exception e) {
             log.warn("Failed to update Redis cache for order {}", channelOrderId, e);
         }
 
-        // Step 5: Mark stats dirty for this channel's date
+        // Step 5: Write order_status_logs if status changed or new order
+        try {
+            String newStatus = savedOrder.getOrderStatus() != null
+                ? savedOrder.getOrderStatus().getCode() : null;
+            boolean statusChanged = isNewOrder || !java.util.Objects.equals(oldStatus, newStatus);
+            if (newStatus != null && statusChanged) {
+                OrderStatusLog statusLog = OrderStatusLog.builder()
+                    .id(NanoIdUtil.generate())
+                    .orderId(savedOrder.getId())
+                    .fromStatus(isNewOrder ? null : oldStatus)
+                    .toStatus(newStatus)
+                    .operator("system")
+                    .remark("ORDER_UPSERT from channel " + channelId)
+                    .build();
+                orderStatusLogRepository.save(statusLog);
+                log.debug("Wrote status log: {} → {} for order {}", oldStatus, newStatus, savedOrder.getId());
+            }
+        } catch (Exception e) {
+            log.warn("Failed to write order_status_logs for order {}", savedOrder.getId(), e);
+        }
+
+        // Step 7: Mark stats dirty for this channel's date
         try {
             java.time.LocalDate statDate = isRollback && order.getChannelCreatedAt() != null
                 ? order.getChannelCreatedAt().toLocalDate()

@@ -49,7 +49,8 @@ public class RejectReturnHandler {
         }
         String channelOrderId = orderRef.getChannelOrderId();
 
-        if ("cyberbiz".equalsIgnoreCase(platformCode)) {
+        JsonNode capabilities = channelService.getPlatformCapabilities(channelId);
+        if (capabilities.path("supportsReturnApproval").asBoolean(false)) {
             Channel channel = channelService.getChannel(channelId);
             if (channel == null) {
                 log.error("REJECT_RETURN: channel not found: {}", channelId);
@@ -67,8 +68,8 @@ public class RejectReturnHandler {
                 throw new RuntimeException("REJECT_RETURN failed for orderId=" + channelOrderId, e);
             }
         } else {
-            log.warn("REJECT_RETURN not yet implemented: platform={}, channel={}, orderId={}, returnId={}, reason={}",
-                    platformCode, channelId, channelOrderId, returnId, reason);
+            log.warn("REJECT_RETURN not supported for channel={} (supportsReturnApproval=false): orderId={}, returnId={}, reason={}",
+                    channelId, channelOrderId, returnId, reason);
         }
     }
 }

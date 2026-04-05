@@ -81,7 +81,7 @@ public class ReturnUpsertHandler {
                 // Hash 相同 → 沒有變化 → 跳過
                 log.debug("Return content unchanged: {}", channelRefundId);
                 // 但仍要更新 Redis（刷新 TTL）
-                redisTemplate.opsForValue().set(redisKey, returnHash, Duration.ofDays(7));
+                redisTemplate.opsForValue().set(redisKey, returnHash, Duration.ofHours(24));
                 return;
             }
         } else {
@@ -94,7 +94,7 @@ public class ReturnUpsertHandler {
         ReturnOrder savedReturn = returnOrderService.updateReturn(returnOrder);
 
         // 第 4 步：更新 Redis hash 快取
-        redisTemplate.opsForValue().set(redisKey, returnHash, Duration.ofDays(7));
+        redisTemplate.opsForValue().set(redisKey, returnHash, Duration.ofHours(24));
 
         log.info("Completed RETURN_UPSERT for: {}", savedReturn.getId());
     }

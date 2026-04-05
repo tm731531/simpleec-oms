@@ -82,7 +82,7 @@ public class ModeBOrderListHandler {
             // 第 2 步：為每個訂單 ID 發送 FETCH_ORDER_DETAIL 消息
             for (String channelOrderId : orderIds) {
                 try {
-                    sendFetchDetailMessage(merchantId, channelId, channelOrderId, adapter);
+                    sendFetchDetailMessage(merchantId, channelId, channelOrderId, adapter, baseTimestamp);
                 } catch (Exception e) {
                     log.error("Failed to send detail fetch message for order {}", channelOrderId, e);
                     // 繼續處理其他訂單（不中斷整個列表）
@@ -115,7 +115,8 @@ public class ModeBOrderListHandler {
      *   }
      * }
      */
-    private void sendFetchDetailMessage(String merchantId, String channelId, String channelOrderId, ChannelAdapter adapter)
+    private void sendFetchDetailMessage(String merchantId, String channelId, String channelOrderId,
+                                         ChannelAdapter adapter, long baseTimestamp)
             throws Exception {
 
         ObjectNode message = objectMapper.createObjectNode();
@@ -126,8 +127,8 @@ public class ModeBOrderListHandler {
         header.put("taskType", TaskTypeEnum.FETCH_ORDER_DETAIL.getCode());
         header.put("channelId", channelId);
         header.put("merchantId", merchantId);
-        header.put("timestamp", Instant.now().toString());
-        header.put("version", "1.0");
+        header.put("timestamp", Instant.ofEpochSecond(baseTimestamp).toString());
+        header.put("version", 1);
         message.set("header", header);
 
         // 構建 body（只需要訂單 ID）

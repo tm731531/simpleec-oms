@@ -222,16 +222,18 @@ public class SchedulerEventHandler {
 
         ObjectNode header = objectMapper.createObjectNode();
         header.put("taskType", taskType.getCode());
+        header.put("merchantId", channel.getMerchantId());
         header.put("platformId", channel.getPlatformId());
         header.put("channelId", channel.getId());
         header.put("requestId", "sched-" + NanoIdUtil.generate());
         header.put("timestamp", DateUtil.toIsoString(timestamp));
         header.put("source", "scheduler");
         header.put("version", 1);
+        header.put("isRollback", false);
         header.put("priority", "NORMAL");
 
         ObjectNode body = objectMapper.createObjectNode();
-        body.set("fetchSpec", objectMapper.createObjectNode());
+        body.put("timestamp", DateUtil.toIsoString(timestamp));
 
         message.set("header", header);
         message.set("body", body);

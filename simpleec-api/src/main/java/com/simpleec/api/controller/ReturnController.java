@@ -1,9 +1,19 @@
 package com.simpleec.api.controller;
 
-import com.simpleec.core.entity.ReturnOrder;
-import com.simpleec.core.service.ReturnOrderService;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.simpleec.api.security.UserPrincipal;
+import com.simpleec.common.constants.TopicConstants;
 import com.simpleec.common.enums.ReturnStatusEnum;
+import com.simpleec.common.util.NanoIdUtil;
+import com.simpleec.core.entity.Channel;
+import com.simpleec.core.entity.Order;
+import com.simpleec.core.entity.Platform;
+import com.simpleec.core.entity.ReturnOrder;
+import com.simpleec.core.repository.ChannelRepository;
+import com.simpleec.core.repository.OrderRepository;
+import com.simpleec.core.repository.PlatformRepository;
+import com.simpleec.core.service.ReturnOrderService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -11,6 +21,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
@@ -27,6 +38,11 @@ import java.util.Optional;
 public class ReturnController {
 
     private final ReturnOrderService returnOrderService;
+    private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final ObjectMapper objectMapper;
+    private final OrderRepository orderRepository;
+    private final ChannelRepository channelRepository;
+    private final PlatformRepository platformRepository;
 
     private static final int MAX_PAGE_SIZE = 100;
 
@@ -92,7 +108,6 @@ public class ReturnController {
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable String orderId) {
         List<ReturnOrder> returns = returnOrderService.findByOrderId(orderId);
-        // Filter to only returns belonging to this merchant
         returns = returns.stream()
             .filter(r -> principal.getMerchantId().equals(r.getMerchantId()))
             .toList();
@@ -168,6 +183,8 @@ public class ReturnController {
         returnOrder.setReturnStatus(ReturnStatusEnum.APPROVED);
         ReturnOrder updated = returnOrderService.updateReturn(returnOrder);
 
+        sendReturnActionEvent("APPROVE_RETURN", returnId, updated, principal);
+
         log.info("Approved return: {}", returnId);
         return ResponseEntity.ok(updated);
     }
@@ -190,7 +207,63 @@ public class ReturnController {
         returnOrder.setReturnStatus(ReturnStatusEnum.REJECTED);
         ReturnOrder updated = returnOrderService.updateReturn(returnOrder);
 
+        sendReturnActionEvent("REJECT_RETURN", returnId, updated, principal);
+
         log.info("Rejected return: {}", returnId);
         return ResponseEntity.ok(updated);
+    }
+
+    /**
+     * Sends APPROVE_RETURN or REJECT_RETURN Kafka event to the platform's fast topic.
+     * Resolves channelId and platformName via: returnOrder.orderId → order → channel → platform.
+     */
+    private void sendReturnActionEvent(String taskType, String returnId,
+                                        ReturnOrder returnOrder, UserPrincipal principal) {
+        try {
+            Optional<Order> orderOpt = orderRepository.findById(returnOrder.getOrderId());
+            if (orderOpt.isEmpty()) {
+                log.error("{}: order not found for return {}", taskType, returnId);
+                return;
+            }
+            String channelId = orderOpt.get().getChannelId();
+
+            Optional<Channel> channelOpt = channelRepository.findById(channelId);
+            if (channelOpt.isEmpty()) {
+                log.error("{}: channel not found: {}", taskType, channelId);
+                return;
+            }
+            String platformId = channelOpt.get().getPlatformId();
+
+            Optional<Platform> platformOpt = platformRepository.findById(platformId);
+            if (platformOpt.isEmpty()) {
+                log.error("{}: platform not found: {}", taskType, platformId);
+                return;
+            }
+            String platformName = platformOpt.get().getPlatformName();
+
+            ObjectNode header = objectMapper.createObjectNode();
+            header.put("taskType", taskType);
+            header.put("merchantId", principal.getMerchantId());
+            header.put("platformId", platformId);
+            header.put("channelId", channelId);
+            header.put("requestId", NanoIdUtil.generate());
+            header.put("timestamp", java.time.Instant.now().toString());
+            header.put("source", "api");
+            header.put("version", 1);
+            header.put("isRollback", false);
+
+            ObjectNode body = objectMapper.createObjectNode();
+            body.put("returnId", returnId);
+
+            ObjectNode message = objectMapper.createObjectNode();
+            message.set("header", header);
+            message.set("body", body);
+
+            String topic = TopicConstants.platformFastTopic(platformName);
+            kafkaTemplate.send(topic, returnId, message);
+            log.info("{}: sent to topic {} for return {}", taskType, topic, returnId);
+        } catch (Exception e) {
+            log.error("{}: failed to send Kafka event for return {}", taskType, returnId, e);
+        }
     }
 }

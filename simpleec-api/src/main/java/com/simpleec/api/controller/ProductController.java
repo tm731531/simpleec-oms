@@ -1,5 +1,6 @@
 package com.simpleec.api.controller;
 
+import com.simpleec.api.security.UserPrincipal;
 import com.simpleec.core.entity.Product;
 import com.simpleec.core.service.ProductService;
 import lombok.RequiredArgsConstructor;
@@ -9,6 +10,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Optional;
@@ -26,14 +28,15 @@ public class ProductController {
 
     /**
      * 查詢商品列表（分頁）
-     * GET /api/products?merchantId=M001&page=0&size=10
+     * GET /api/products?page=0&size=10
      */
     @GetMapping
     public ResponseEntity<Page<Product>> listProducts(
-            @RequestParam String merchantId,
+            @AuthenticationPrincipal UserPrincipal principal,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
 
+        String merchantId = principal.getMerchantId();
         Pageable pageable = PageRequest.of(page, size);
         Page<Product> products = productService.findByMerchantId(merchantId, pageable);
 
@@ -46,28 +49,30 @@ public class ProductController {
      * GET /api/products/{productId}
      */
     @GetMapping("/{productId}")
-    public ResponseEntity<Product> getProduct(@PathVariable String productId) {
+    public ResponseEntity<Product> getProduct(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable String productId) {
         Optional<Product> product = productService.findById(productId);
 
-        if (product.isPresent()) {
+        if (product.isPresent() && principal.getMerchantId().equals(product.get().getMerchantId())) {
             log.info("Retrieved product: {}", productId);
             return ResponseEntity.ok(product.get());
         } else {
-            log.warn("Product not found: {}", productId);
+            log.warn("Product not found or access denied: {}", productId);
             return ResponseEntity.notFound().build();
         }
     }
 
     /**
      * 根據 SKU 查詢商品
-     * GET /api/products/sku/{sku}?merchantId=M001
+     * GET /api/products/sku/{sku}
      */
     @GetMapping("/sku/{sku}")
     public ResponseEntity<Product> getProductBySku(
-            @PathVariable String sku,
-            @RequestParam String merchantId) {
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable String sku) {
 
-        Optional<Product> product = productService.findBySku(merchantId, sku);
+        Optional<Product> product = productService.findBySku(principal.getMerchantId(), sku);
 
         if (product.isPresent()) {
             return ResponseEntity.ok(product.get());
@@ -78,15 +83,16 @@ public class ProductController {
 
     /**
      * 搜尋商品（SKU 模糊搜尋）
-     * GET /api/products/search?merchantId=M001&skuPattern=PROD&page=0&size=10
+     * GET /api/products/search?skuPattern=PROD&page=0&size=10
      */
     @GetMapping("/search")
     public ResponseEntity<Page<Product>> searchProducts(
-            @RequestParam String merchantId,
+            @AuthenticationPrincipal UserPrincipal principal,
             @RequestParam String skuPattern,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
 
+        String merchantId = principal.getMerchantId();
         Pageable pageable = PageRequest.of(page, size);
         Page<Product> products = productService.searchBySku(merchantId, skuPattern, pageable);
 
@@ -100,8 +106,11 @@ public class ProductController {
      * POST /api/products
      */
     @PostMapping
-    public ResponseEntity<Product> createProduct(@RequestBody Product product) {
+    public ResponseEntity<Product> createProduct(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @RequestBody Product product) {
         try {
+            product.setMerchantId(principal.getMerchantId());
             Product created = productService.createProduct(product);
             log.info("Created product: {} (SKU: {})", created.getId(), created.getSku());
             return ResponseEntity.status(HttpStatus.CREATED).body(created);
@@ -117,37 +126,37 @@ public class ProductController {
      */
     @PatchMapping("/{productId}")
     public ResponseEntity<Product> updateProduct(
+            @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable String productId,
             @RequestBody Product productUpdate) {
 
         Optional<Product> existing = productService.findById(productId);
 
-        if (existing.isPresent()) {
-            Product product = existing.get();
-
-            // 更新允許修改的欄位
-            if (productUpdate.getProductName() != null) {
-                product.setProductName(productUpdate.getProductName());
-            }
-            if (productUpdate.getCostPrice() != null) {
-                product.setCostPrice(productUpdate.getCostPrice());
-            }
-            if (productUpdate.getSuggestPrice() != null) {
-                product.setSuggestPrice(productUpdate.getSuggestPrice());
-            }
-            if (productUpdate.getQuantity() != null) {
-                product.setQuantity(productUpdate.getQuantity());
-            }
-            if (productUpdate.getStatus() != null) {
-                product.setStatus(productUpdate.getStatus());
-            }
-
-            Product updated = productService.updateProduct(product);
-            log.info("Updated product: {}", productId);
-            return ResponseEntity.ok(updated);
-        } else {
+        if (existing.isEmpty() || !principal.getMerchantId().equals(existing.get().getMerchantId())) {
             return ResponseEntity.notFound().build();
         }
+
+        Product product = existing.get();
+
+        if (productUpdate.getProductName() != null) {
+            product.setProductName(productUpdate.getProductName());
+        }
+        if (productUpdate.getCostPrice() != null) {
+            product.setCostPrice(productUpdate.getCostPrice());
+        }
+        if (productUpdate.getSuggestPrice() != null) {
+            product.setSuggestPrice(productUpdate.getSuggestPrice());
+        }
+        if (productUpdate.getQuantity() != null) {
+            product.setQuantity(productUpdate.getQuantity());
+        }
+        if (productUpdate.getStatus() != null) {
+            product.setStatus(productUpdate.getStatus());
+        }
+
+        Product updated = productService.updateProduct(product);
+        log.info("Updated product: {}", productId);
+        return ResponseEntity.ok(updated);
     }
 
     /**
@@ -156,8 +165,14 @@ public class ProductController {
      */
     @PatchMapping("/{productId}/quantity")
     public ResponseEntity<Void> updateQuantity(
+            @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable String productId,
             @RequestParam int quantity) {
+
+        Optional<Product> existing = productService.findById(productId);
+        if (existing.isEmpty() || !principal.getMerchantId().equals(existing.get().getMerchantId())) {
+            return ResponseEntity.notFound().build();
+        }
 
         try {
             productService.updateQuantity(productId, quantity);
@@ -171,14 +186,15 @@ public class ProductController {
 
     /**
      * 查詢庫存不足的商品
-     * GET /api/products/low-stock?merchantId=M001&page=0&size=10
+     * GET /api/products/low-stock?page=0&size=10
      */
     @GetMapping("/low-stock")
     public ResponseEntity<Page<Product>> getLowStockProducts(
-            @RequestParam String merchantId,
+            @AuthenticationPrincipal UserPrincipal principal,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
 
+        String merchantId = principal.getMerchantId();
         Pageable pageable = PageRequest.of(page, size);
         Page<Product> products = productService.findLowStock(merchantId, pageable);
 

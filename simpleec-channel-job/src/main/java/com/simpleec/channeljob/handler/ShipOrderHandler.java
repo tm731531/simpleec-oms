@@ -59,7 +59,8 @@ public class ShipOrderHandler {
             lineItemIds = String.join(",", ids);
         }
 
-        if ("cyberbiz".equalsIgnoreCase(platformCode)) {
+        JsonNode capabilities = channelService.getPlatformCapabilities(channelId);
+        if (capabilities.path("supportsShipment").asBoolean(false)) {
             Channel channel = channelService.getChannel(channelId);
             if (channel == null) {
                 log.error("SHIP_ORDER: channel not found: {}", channelId);
@@ -82,8 +83,8 @@ public class ShipOrderHandler {
                 throw new RuntimeException("SHIP_ORDER failed for orderId=" + channelOrderId, e);
             }
         } else {
-            log.warn("SHIP_ORDER not yet implemented: platform={}, channel={}, orderId={}, tracking={}, carrier={}",
-                    platformCode, channelId, channelOrderId, trackingNumber, carrier);
+            log.warn("SHIP_ORDER not supported for channel={} (supportsShipment=false): orderId={}, tracking={}, carrier={}",
+                    channelId, channelOrderId, trackingNumber, carrier);
         }
     }
 }
