@@ -2,7 +2,6 @@ package com.simpleec.channeljob.handler;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.simpleec.channel.adapter.ChannelAdapter;
-import com.simpleec.channel.adapter.CyberbizAdapter;
 import com.simpleec.channeljob.entity.Channel;
 import com.simpleec.channeljob.service.ChannelService;
 import com.simpleec.common.constants.TopicConstants;
@@ -56,10 +55,9 @@ public class FetchReturnsHandler {
                 return;
             }
             try {
-                CyberbizAdapter adapter = (CyberbizAdapter) cyberbizAdapter;
-                adapter.setCredentials(channel.getToken(), channel.getToken2());
+                cyberbizAdapter.setCredentials(channel.getToken(), channel.getToken2());
 
-                List<Map<String, Object>> returns = adapter.fetchReturnsByTimestamp(baseTimestamp);
+                List<Map<String, Object>> returns = cyberbizAdapter.fetchReturnsByTimestamp(baseTimestamp);
                 if (returns == null) {
                     log.warn("FETCH_RETURNS: adapter returned null, treating as empty list for channel={}", channelId);
                     returns = java.util.Collections.emptyList();

@@ -81,9 +81,40 @@ public interface ChannelAdapter {
     List<Map<String, Object>> fetchReturns(String channelId, String timeRange) throws Exception;
 
     /**
+     * 拉取退貨列表（根據時間戳）
+     * Cyberbiz 使用；其他平台 override 或保留預設例外。
+     *
+     * @param baseTimestamp epoch seconds
+     * @return 退貨記錄列表
+     */
+    default List<Map<String, Object>> fetchReturnsByTimestamp(long baseTimestamp) throws Exception {
+        throw new UnsupportedOperationException("fetchReturnsByTimestamp not supported for this platform");
+    }
+
+    /**
      * 執行出貨
      */
     void shipOrder(String orderId, Map<String, Object> shippingInfo) throws Exception;
+
+    /**
+     * 通知平台退貨已核准
+     * Cyberbiz 使用；其他平台 override 或保留預設例外。
+     *
+     * @param channelOrderId 平台訂單 ID
+     */
+    default void approveReturn(String channelOrderId) throws Exception {
+        throw new UnsupportedOperationException("approveReturn not supported for this platform");
+    }
+
+    /**
+     * 通知平台退貨已拒絕
+     * Cyberbiz 使用；其他平台 override 或保留預設例外。
+     *
+     * @param channelOrderId 平台訂單 ID
+     */
+    default void rejectReturn(String channelOrderId) throws Exception {
+        throw new UnsupportedOperationException("rejectReturn not supported for this platform");
+    }
 
     /**
      * 更新庫存

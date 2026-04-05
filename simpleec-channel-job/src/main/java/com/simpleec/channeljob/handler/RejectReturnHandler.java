@@ -2,7 +2,6 @@ package com.simpleec.channeljob.handler;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.simpleec.channel.adapter.ChannelAdapter;
-import com.simpleec.channel.adapter.CyberbizAdapter;
 import com.simpleec.channeljob.entity.Channel;
 import com.simpleec.channeljob.entity.OrderRef;
 import com.simpleec.channeljob.entity.ReturnOrderRef;
@@ -57,9 +56,8 @@ public class RejectReturnHandler {
                 return;
             }
             try {
-                CyberbizAdapter adapter = (CyberbizAdapter) cyberbizAdapter;
-                adapter.setCredentials(channel.getToken(), channel.getToken2());
-                adapter.rejectReturn(channelOrderId);
+                cyberbizAdapter.setCredentials(channel.getToken(), channel.getToken2());
+                cyberbizAdapter.rejectReturn(channelOrderId);
                 log.info("REJECT_RETURN success: platform={} channel={} orderId={} returnId={} reason={}",
                         platformCode, channelId, channelOrderId, returnId, reason);
             } catch (Exception e) {
