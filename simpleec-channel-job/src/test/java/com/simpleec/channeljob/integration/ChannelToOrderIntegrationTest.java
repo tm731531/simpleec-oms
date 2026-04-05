@@ -204,7 +204,7 @@ class ChannelToOrderIntegrationTest {
         assertEquals("ORDER_UPSERT", header.get("taskType").asText());
         assertEquals(testChannelId, header.get("channelId").asText());
         assertEquals(testMerchantId, header.get("merchantId").asText());
-        assertEquals("1.0", header.get("version").asText());
+        assertEquals(1, header.get("version").asInt());
 
         // Verify messageId is not empty
         assertNotNull(header.get("messageId").asText());

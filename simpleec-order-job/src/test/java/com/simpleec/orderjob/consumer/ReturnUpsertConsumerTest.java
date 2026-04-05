@@ -132,7 +132,7 @@ class ReturnUpsertConsumerTest {
         header.put("merchantId", "MERCHANT_001");
         header.put("channelId", "shopee");
         header.put("timestamp", java.time.Instant.now().toString());
-        header.put("version", "1.0");
+        header.put("version", 1);
         message.set("header", header);
 
         ObjectNode body = objectMapper.createObjectNode();

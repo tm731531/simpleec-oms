@@ -103,7 +103,7 @@ public class SchedulerJobService {
             header.put("taskType", taskType);
             header.put("timestamp", DateUtil.now());
             header.put("platform", platform);
-            header.put("version", "1.0");
+            header.put("version", 1);
 
             // Body（針對 FETCH_ORDERS 和 FETCH_RETURNS 的最小訊息體）
             ObjectNode body = objectMapper.createObjectNode();

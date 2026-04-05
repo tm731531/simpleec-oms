@@ -97,7 +97,7 @@ class OrderUpsertConsumerTest {
         header.put("channelId", testChannelId);
         header.put("merchantId", testMerchantId);
         header.put("timestamp", Instant.now().toString());
-        header.put("version", "1.0");
+        header.put("version", 1);
         message.set("header", header);
 
         ObjectNode body = objectMapper.createObjectNode();
@@ -492,7 +492,7 @@ class OrderUpsertConsumerTest {
         header.put("channelId", channelId);
         header.put("merchantId", merchantId);
         header.put("timestamp", Instant.now().toString());
-        header.put("version", "1.0");
+        header.put("version", 1);
         message.set("header", header);
 
         // Body
@@ -537,7 +537,7 @@ class OrderUpsertConsumerTest {
         header.put("channelId", channelId);
         header.put("merchantId", merchantId);
         header.put("timestamp", Instant.now().toString());
-        header.put("version", "1.0");
+        header.put("version", 1);
         message.set("header", header);
 
         // Body

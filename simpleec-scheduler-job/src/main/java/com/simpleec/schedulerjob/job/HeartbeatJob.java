@@ -44,9 +44,12 @@ public class HeartbeatJob {
             // Header
             ObjectNode header = objectMapper.createObjectNode();
             header.put("messageId", NanoIdUtil.generate());
+            header.put("requestId", "req_" + NanoIdUtil.generate());
             header.put("taskType", TaskTypeEnum.HEARTBEAT.getCode());
             header.put("timestamp", DateUtil.now());
+            header.put("source", "scheduler");
             header.put("version", 1);
+            header.put("isRollback", false);
 
             // Body (時間戳和分鐘位用於路由決策)
             ObjectNode body = objectMapper.createObjectNode();

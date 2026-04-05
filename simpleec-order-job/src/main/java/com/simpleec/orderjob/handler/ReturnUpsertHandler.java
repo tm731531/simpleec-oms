@@ -61,8 +61,8 @@ public class ReturnUpsertHandler {
             log.warn("Redis dedup check failed for return {}, proceeding with DB check", channelRefundId, e);
         }
 
-        // 第 2 步：檢查資料庫中是否已存在
-        Optional<ReturnOrder> existingReturn = returnOrderService.findByChannelRefundId(channelRefundId);
+        // 第 2 步：檢查資料庫中是否已存在（scoped to channel — DB-C4 fix）
+        Optional<ReturnOrder> existingReturn = returnOrderService.findByChannelIdAndChannelRefundId(channelId, channelRefundId);
 
         ReturnOrder returnOrder;
         if (existingReturn.isPresent()) {
@@ -108,6 +108,7 @@ public class ReturnUpsertHandler {
         ReturnOrder returnOrder = new ReturnOrder();
         returnOrder.setMerchantId(merchantId);
         returnOrder.setChannelRefundId(channelRefundId);
+        returnOrder.setChannelId(channelId);  // DB-C3
 
         // 填充退貨數據
         populateReturnFromData(returnOrder, channelId, returnDataJson);
@@ -168,6 +169,14 @@ public class ReturnUpsertHandler {
                 LocalDateTime.parse(returnDataJson.get("requestedAt").asText())
             );
         }
+
+        // DB-C3: populate channelOrderId and currency
+        returnOrder.setChannelId(channelId);
+        if (returnDataJson.has("channelOrderId") && !returnDataJson.get("channelOrderId").isNull()) {
+            returnOrder.setChannelOrderId(returnDataJson.get("channelOrderId").asText());
+        }
+        String currency = returnDataJson.has("currency") ? returnDataJson.get("currency").asText("TWD") : "TWD";
+        returnOrder.setCurrency(currency.isBlank() ? "TWD" : currency);
     }
 
     /**

@@ -20,9 +20,14 @@ import java.util.List;
 public interface ReturnOrderRepository extends JpaRepository<ReturnOrder, String> {
 
     /**
-     * 根據通路退貨 ID 查詢
+     * 根據通路退貨 ID 查詢（跨通路，僅用於舊版相容）
      */
     Optional<ReturnOrder> findByChannelRefundId(String channelRefundId);
+
+    /**
+     * 根據通路 ID + 通路退貨 ID 查詢（fixes DB-C4: scoped dedup）
+     */
+    Optional<ReturnOrder> findByChannelIdAndChannelRefundId(String channelId, String channelRefundId);
 
     /**
      * 查詢訂單的退貨

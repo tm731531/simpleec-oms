@@ -52,6 +52,24 @@ public class ReturnOrder {
     private String channelRefundId;
 
     /**
+     * 通路 ID（added in V6, DB-C3）
+     */
+    @Column(name = "channel_id", length = 20)
+    private String channelId;
+
+    /**
+     * 通路訂單 ID（added in V6, DB-C3）
+     */
+    @Column(name = "channel_order_id", length = 100)
+    private String channelOrderId;
+
+    /**
+     * 貨幣代碼（added in V6, DB-C3）
+     */
+    @Column(name = "currency", length = 3, nullable = false)
+    private String currency = "TWD";
+
+    /**
      * 退貨狀態
      */
     @Column(name = "refund_status", length = 20, nullable = false)

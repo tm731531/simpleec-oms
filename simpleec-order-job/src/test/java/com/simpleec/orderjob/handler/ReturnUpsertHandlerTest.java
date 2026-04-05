@@ -85,7 +85,7 @@ class ReturnUpsertHandlerTest {
         );
 
         // 驗證：ReturnOrderService 不被呼叫
-        verify(returnOrderService, never()).findByChannelRefundId(any());
+        verify(returnOrderService, never()).findByChannelIdAndChannelRefundId(any(), any());
         verify(returnOrderService, never()).createReturn(any());
         verify(returnOrderService, never()).updateReturn(any());
 
@@ -106,7 +106,7 @@ class ReturnUpsertHandlerTest {
         when(redisValueOperations.get(redisKey)).thenReturn(null);
 
         // DB 中無此退貨
-        when(returnOrderService.findByChannelRefundId(channelReturnId)).thenReturn(Optional.empty());
+        when(returnOrderService.findByChannelIdAndChannelRefundId(channelId, channelReturnId)).thenReturn(Optional.empty());
 
         // 設置 Mock 返回的 ReturnOrder（DB INSERT 後）
         ReturnOrder savedReturn = new ReturnOrder();
@@ -142,7 +142,7 @@ class ReturnUpsertHandlerTest {
         verify(redisValueOperations).set(
             eq(redisKey),
             eq(returnHash),
-            eq(Duration.ofDays(7))
+            eq(Duration.ofHours(24))
         );
     }
 
@@ -169,7 +169,7 @@ class ReturnUpsertHandlerTest {
         existingReturn.setRefundAmount(new BigDecimal("50.00"));  // 舊金額
         existingReturn.setCreatedAt(LocalDateTime.now().minusHours(1));
 
-        when(returnOrderService.findByChannelRefundId(channelReturnId))
+        when(returnOrderService.findByChannelIdAndChannelRefundId(channelId, channelReturnId))
             .thenReturn(Optional.of(existingReturn));
 
         // 設置 Mock 返回的更新後 ReturnOrder
@@ -206,7 +206,7 @@ class ReturnUpsertHandlerTest {
         verify(redisValueOperations).set(
             eq(redisKey),
             eq(returnHash),
-            eq(Duration.ofDays(7))
+            eq(Duration.ofHours(24))
         );
     }
 }

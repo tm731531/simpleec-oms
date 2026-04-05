@@ -60,6 +60,10 @@ public class FetchReturnsHandler {
                 adapter.setCredentials(channel.getToken(), channel.getToken2());
 
                 List<Map<String, Object>> returns = adapter.fetchReturnsByTimestamp(baseTimestamp);
+                if (returns == null) {
+                    log.warn("FETCH_RETURNS: adapter returned null, treating as empty list for channel={}", channelId);
+                    returns = java.util.Collections.emptyList();
+                }
                 log.info("FETCH_RETURNS: fetched {} return records for channel={}", returns.size(), channelId);
 
                 int published = 0;

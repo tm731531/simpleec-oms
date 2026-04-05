@@ -215,7 +215,7 @@ class ChannelToOrderE2ETest {
         header.put("channelId", "cyberbiz");
         header.put("merchantId", "M001");
         header.put("timestamp", Instant.now().toString());
-        header.put("version", "1.0");
+        header.put("version", 1);
 
         ObjectNode body = objectMapper.createObjectNode();
         body.put("channelOrderId", channelOrderId);
@@ -235,7 +235,7 @@ class ChannelToOrderE2ETest {
         header.put("channelId", "cyberbiz");
         header.put("merchantId", "M001");
         header.put("timestamp", Instant.now().toString());
-        header.put("version", "1.0");
+        header.put("version", 1);
 
         ObjectNode body = objectMapper.createObjectNode();
         body.put("channelOrderId", channelOrderId);

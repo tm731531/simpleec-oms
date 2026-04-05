@@ -253,11 +253,13 @@ public class SchedulerEventHandler {
 
         ObjectNode header = objectMapper.createObjectNode();
         header.put("messageId", NanoIdUtil.generate());
+        header.put("requestId", "req_" + NanoIdUtil.generate());
         header.put("taskType", taskType.getCode());
         header.put("merchantId", merchantId);
         header.put("timestamp", DateUtil.toIsoString(timestamp));
         header.put("source", "scheduler");
         header.put("version", 1);
+        header.put("isRollback", false);
 
         ObjectNode body = objectMapper.createObjectNode();
         body.put("merchantId", merchantId);

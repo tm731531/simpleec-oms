@@ -127,7 +127,7 @@ public class ModeBOrderListHandler {
         header.put("taskType", TaskTypeEnum.FETCH_ORDER_DETAIL.getCode());
         header.put("channelId", channelId);
         header.put("merchantId", merchantId);
-        header.put("timestamp", Instant.ofEpochSecond(baseTimestamp).toString());
+        header.put("timestamp", Instant.now().toString());
         header.put("version", 1);
         message.set("header", header);
 

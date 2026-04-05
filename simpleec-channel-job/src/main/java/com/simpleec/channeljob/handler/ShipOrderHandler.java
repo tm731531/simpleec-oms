@@ -42,6 +42,10 @@ public class ShipOrderHandler {
             return;
         }
         String channelOrderId = orderRef.getChannelOrderId();
+        if (channelOrderId == null || channelOrderId.isBlank()) {
+            log.error("SHIP_ORDER: channelOrderId is missing for orderId={}", orderId);
+            return;
+        }
         String trackingNumber = body.path("trackingNumber").asText("");
         String carrier        = body.path("carrier").asText("other");
 

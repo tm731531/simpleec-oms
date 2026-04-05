@@ -260,7 +260,7 @@ public class ReturnController {
             message.set("body", body);
 
             String topic = TopicConstants.platformFastTopic(platformName);
-            kafkaTemplate.send(topic, returnId, message);
+            kafkaTemplate.send(topic, channelId, message);  // partition by channelId per contract §4.7
             log.info("{}: sent to topic {} for return {}", taskType, topic, returnId);
         } catch (Exception e) {
             log.error("{}: failed to send Kafka event for return {}", taskType, returnId, e);
