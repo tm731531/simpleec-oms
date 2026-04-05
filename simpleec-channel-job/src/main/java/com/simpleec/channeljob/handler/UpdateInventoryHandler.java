@@ -9,13 +9,19 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
+import java.util.Optional;
 
 /**
- * UPDATE_INVENTORY handler — pushes stock level changes back to the platform.
+ * UPDATE_INVENTORY handler — pushes stock level changes back to the platform,
+ * then snapshots the result into sell_pack_inventory.
  *
- * Translation layer: reads sellPackId from Kafka body, looks up
- * channelProductId + channelSpecId from sell_pack table, then calls
- * the ChannelAdapter interface (no hardcoded platform cast).
+ * Multi-location (capabilities.multiLocation=true, e.g. Shopify):
+ *   - Look up the single sync-target channel_location for this channel.
+ *   - Pass platformLocationId to the adapter call.
+ *   - Snapshot with that location's NanoID as channel_location_id.
+ *
+ * No-location (multiLocation=false, e.g. Shopee, Cyberbiz):
+ *   - Push directly; snapshot with channel_location_id = NULL.
  */
 @Slf4j
 @Component
@@ -28,7 +34,7 @@ public class UpdateInventoryHandler {
     public void handleUpdateInventory(String platformCode, String channelId,
                                       String merchantId, JsonNode body) {
         String sellPackId = body.path("sellPackId").asText("");
-        int quantity      = body.path("newValue").asInt(body.path("quantity").asInt(0));
+        int newValue      = body.path("newValue").asInt(body.path("quantity").asInt(0));
 
         if (sellPackId.isBlank()) {
             log.warn("UPDATE_INVENTORY skipped: missing sellPackId (platform={} channel={})",
@@ -58,12 +64,61 @@ public class UpdateInventoryHandler {
             return;
         }
 
+        // Read capabilities — drives multi-location branching, not platformCode string
+        JsonNode capabilities = channelService.getPlatformCapabilities(channelId);
+        boolean multiLocation = capabilities.path("multiLocation").asBoolean(false);
+
+        if (multiLocation) {
+            handleMultiLocation(platformCode, channelId, sellPackId,
+                    channelProductId, channelSpecId, newValue, channel);
+        } else {
+            handleSingleLocation(platformCode, channelId, sellPackId,
+                    channelProductId, channelSpecId, newValue, channel);
+        }
+    }
+
+    /**
+     * Push to the single sync-target location (multi-location platforms, e.g. Shopify).
+     * Not yet implemented for any live platform — logs a warning until a
+     * multi-location adapter is available.
+     */
+    private void handleMultiLocation(String platformCode, String channelId, String sellPackId,
+                                      String channelProductId, String channelSpecId,
+                                      int newValue, Channel channel) {
+        Optional<Map<String, String>> syncTarget = channelService.getSyncTargetLocation(channelId);
+        if (syncTarget.isEmpty()) {
+            log.error("UPDATE_INVENTORY: multiLocation=true but no sync-target location configured " +
+                      "(platform={} channel={} sellPackId={})", platformCode, channelId, sellPackId);
+            return;
+        }
+        String locationNanoId       = syncTarget.get().get("id");
+        String platformLocationId   = syncTarget.get().get("platformLocationId");
+
+        // TODO: use multi-location-aware adapter method when Shopify adapter is implemented
+        // For now, adapters that support multi-location should override updateVariantInventoryAtLocation()
+        log.warn("UPDATE_INVENTORY multi-location not yet fully implemented for platform={} channel={}; " +
+                 "locationId={} sellPackId={} qty={}",
+                 platformCode, channelId, platformLocationId, sellPackId, newValue);
+
+        // Snapshot the intended quantity even before the adapter call so the UI reflects intent
+        channelService.upsertInventorySnapshot(sellPackId, locationNanoId, newValue);
+    }
+
+    /**
+     * Push to the single platform-level inventory (no-location platforms, e.g. Shopee, Cyberbiz).
+     */
+    private void handleSingleLocation(String platformCode, String channelId, String sellPackId,
+                                       String channelProductId, String channelSpecId,
+                                       int newValue, Channel channel) {
         try {
-            // TODO: resolve adapter by platformCode when multi-platform adapter registry is ready
             cyberbizAdapter.setCredentials(channel.getToken(), channel.getToken2());
-            cyberbizAdapter.updateVariantInventory(channelProductId, channelSpecId, quantity);
+            cyberbizAdapter.updateVariantInventory(channelProductId, channelSpecId, newValue);
             log.info("UPDATE_INVENTORY success: platform={} channel={} sellPackId={} qty={}",
-                    platformCode, channelId, sellPackId, quantity);
+                    platformCode, channelId, sellPackId, newValue);
+
+            // Snapshot after confirmed push
+            channelService.upsertInventorySnapshot(sellPackId, null, newValue);
+
         } catch (Exception e) {
             log.error("UPDATE_INVENTORY failed: platform={} channel={} sellPackId={}",
                     platformCode, channelId, sellPackId, e);

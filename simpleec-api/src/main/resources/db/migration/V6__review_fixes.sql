@@ -11,6 +11,14 @@
 --   supportsShipment, supportsReturnApproval, supportsReturnFetch
 
 -- ============================================================
+-- DB-C1: Fix ship_options column type JSON → JSONB on platform table
+-- Entity declares jsonb; DDL had JSON (non-binary, no indexing, no operators)
+-- ============================================================
+
+ALTER TABLE public.platform
+    ALTER COLUMN ship_options TYPE JSONB USING ship_options::jsonb;
+
+-- ============================================================
 -- DB-C2: Replace COALESCE UNIQUE constraint with partial indexes
 -- ============================================================
 
