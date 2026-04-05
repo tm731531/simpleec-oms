@@ -129,6 +129,10 @@ services:
   simpleec-tempo:
     image: grafana/tempo:2.6.1
     container_name: simpleec-tempo
+    command: ["-config.file=/etc/tempo.yml"]
+    volumes:
+    - ./docker/tempo/tempo.yml:/etc/tempo.yml:ro
+    - tempo-data:/var/tempo
     ports:
     - 3200:3200
     restart: unless-stopped
@@ -764,3 +768,6 @@ services:
       simpleec-api:
         condition: service_healthy
     restart: unless-stopped
+
+volumes:
+  tempo-data:

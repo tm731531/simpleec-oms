@@ -40,7 +40,8 @@ public class SecurityConfig {
                 .requestMatchers("/api/health", "/api/version",
                     "/actuator/**", "/api/actuator/**",
                     "/api/auth/**", "/api/admin/auth/**",
-                    "/api/user/channels/platforms", "/api/enums/**").permitAll()
+                    "/api/user/channels/platforms", "/api/enums/**",
+                    "/error").permitAll()
                 .requestMatchers("/api/admin/**").hasAuthority("ROLE_PLATFORM_ADMIN")
                 .anyRequest().authenticated()
             )

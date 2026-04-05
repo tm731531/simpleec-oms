@@ -21,7 +21,7 @@
 -- ---------------------------------------------------------------------------
 INSERT INTO public.platform_account (id, name, email, password)
 VALUES ('pa_admin_001', 'SimpleEC Admin', 'admin@simpleec.com',
-        'pass123456');  -- dev only: plaintext, BCrypt via passwordEncoder or direct match
+        '$2b$12$jKIOpO7v1mehCEufB19nWug6lfBrqrwxBL/YN8Gb6RYtzLL9Nuep6');  -- dev: BCrypt of pass123456
 
 -- ---------------------------------------------------------------------------
 -- global_config
@@ -59,13 +59,13 @@ INSERT INTO public.account (
     account_tel, is_main_account, access_level, merchant_id, status
 ) VALUES
 ('a_admin_001', '管理員', 'admin@a00000.com',
- 'pass123456',
+ '$2b$12$I1eQ2y/TJ05L/4evbbRYOec6ifdMbaaZR04iJbyDm2FCThIxuT.Dq',  -- pass123456
  '0900000000', true, 9, 'm_test_001', 'enable'),
 ('a_main_001', '王大明', 'wang@health-food.com.tw',
- 'password',
+ '$2b$12$7WTVXC.rTvP9zlVjoHZ8au9nfWIrNEF/nNEEPA57/UHagKfRjytNm',  -- password
  '0912345678', true, 9, 'm_test_001', 'enable'),
 ('a_sub_001', '李小華', 'lee@health-food.com.tw',
- 'password',
+ '$2b$12$6rr4f0m0i.8FReMRnDBP1.tVxeHf8kasRwaMKu6mdyWe656tcyjMe',  -- password
  '0923456789', false, 5, 'm_test_001', 'enable');
 
 -- ---------------------------------------------------------------------------

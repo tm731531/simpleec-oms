@@ -43,8 +43,8 @@ CREATE TABLE public.sell_pack_inventory (
     CONSTRAINT fk_sell_pack_inventory_pack FOREIGN KEY (sell_pack_id)
         REFERENCES public.sell_pack (id) ON UPDATE CASCADE ON DELETE CASCADE,
     CONSTRAINT fk_sell_pack_inventory_location FOREIGN KEY (channel_location_id)
-        REFERENCES public.channel_location (id) ON UPDATE CASCADE ON DELETE CASCADE,
-    CONSTRAINT uq_sell_pack_inventory UNIQUE (sell_pack_id, COALESCE(channel_location_id, ''))
+        REFERENCES public.channel_location (id) ON UPDATE CASCADE ON DELETE CASCADE
+    -- Uniqueness enforced by partial indexes in V6 (COALESCE in inline UNIQUE is non-standard)
 );
 
 CREATE INDEX idx_sell_pack_inventory_pack ON public.sell_pack_inventory (sell_pack_id);

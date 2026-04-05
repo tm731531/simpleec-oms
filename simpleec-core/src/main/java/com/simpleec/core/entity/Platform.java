@@ -12,8 +12,7 @@ import org.hibernate.annotations.UpdateTimestamp;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
-import java.sql.Types;
-import org.hibernate.annotations.JdbcTypeCode;
+import com.simpleec.core.converter.JsonNodeConverter;
 
 /**
  * 銷售平台實體
@@ -76,7 +75,7 @@ public class Platform {
     /**
      * 配送選項 JSON (平台支援的物流方式等)
      */
-    @JdbcTypeCode(Types.OTHER)
+    @Convert(converter = JsonNodeConverter.class)
     @Column(name = "ship_options", columnDefinition = "jsonb")
     private JsonNode shipOptions;
 
@@ -91,7 +90,7 @@ public class Platform {
      * 使用方式：
      *   capabilities.path("multiLocation").asBoolean(false)
      */
-    @JdbcTypeCode(Types.OTHER)
+    @Convert(converter = JsonNodeConverter.class)
     @Column(name = "capabilities", columnDefinition = "jsonb", nullable = false)
     private JsonNode capabilities;
 
