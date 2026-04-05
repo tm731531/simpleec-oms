@@ -6,6 +6,17 @@
 
 ---
 
+## 修復狀態摘要
+
+**Date fixed:** 2026-04-06
+| 狀態 | 數量 | 項目 |
+|------|------|------|
+| ✅ FIXED | 5 | K-C1, K-C3, M-1, M-2, M-3 |
+| ✅ FALSE POSITIVE | 1 | K-C2 |
+| ⚠️ OPEN | 0 | — |
+
+---
+
 ## Overall Assessment
 
 The implementation is solid in its core structure. Header building, schema validation, MDC tracing, DLT routing, and the translation layer (NanoID-only in message bodies) are all present and largely correct. The main issues are:
@@ -61,6 +72,8 @@ The implementation is solid in its core structure. Header building, schema valid
 
 ### C-1: Scheduler FETCH_ORDERS / FETCH_RETURNS header missing `merchantId` and `isRollback`
 
+**狀態**: ✅ FIXED — `merchantId` and `isRollback` added to header; non-standard `priority` field removed.
+
 **File:** `simpleec-scheduler-job/src/main/java/com/simpleec/schedulerjob/handler/SchedulerEventHandler.java`
 **Method:** `buildFetchOrdersMessage()` — lines 220-239
 
@@ -95,6 +108,8 @@ header.remove("priority");                            // remove non-standard fie
 
 ### C-2: Scheduler heartbeat body uses ISO-8601 string but `SchedulerConsumer` reads it as `asLong()`
 
+**狀態**: ✅ FALSE POSITIVE — `HeartbeatJob` sends epoch millis as a long; `asLong()` works correctly. No fix needed.
+
 **File:** `simpleec-scheduler-job/src/main/java/com/simpleec/schedulerjob/consumer/SchedulerConsumer.java`
 **Line:** 68
 
@@ -122,6 +137,8 @@ Also verify `HeartbeatJob.java` to confirm what format it publishes in the heart
 
 ### C-3: Scheduler FETCH_ORDERS / FETCH_RETURNS body violates the "timestamp-only" contract
 
+**狀態**: ✅ FIXED — Body now contains `{"timestamp":"..."}` ISO-8601 string; empty `fetchSpec` object removed.
+
 **File:** `SchedulerEventHandler.java` — `buildFetchOrdersMessage()`, lines 232-234
 
 **Problem:**
@@ -147,6 +164,8 @@ body.put("timestamp", DateUtil.toIsoString(timestamp));   // ISO-8601 string
 ## Moderate Issues
 
 ### M-1: `ModeBOrderListHandler` produces incomplete `FETCH_ORDER_DETAIL` headers
+
+**狀態**: ✅ FIXED — Header now uses integer `version: 1`; `requestId`, `source`, `isRollback`, `platformId` added; `messageId` removed; `Instant.now()` replaced with correct timestamp.
 
 **File:** `simpleec-channel-job/src/main/java/com/simpleec/channeljob/handler/ModeBOrderListHandler.java`
 **Method:** `sendFetchDetailMessage()` — lines 123-131
@@ -186,6 +205,8 @@ header.put("isRollback", false);
 
 ### M-2: `ReturnUpsertConsumer` routes `FORMAT_ERROR` to `task.failed` instead of `task.dlt`
 
+**狀態**: ✅ FIXED — `FORMAT_ERROR` catch block now sends to `TopicConstants.TASK_DLT` directly.
+
 **File:** `simpleec-order-job/src/main/java/com/simpleec/orderjob/consumer/ReturnUpsertConsumer.java`
 **Lines:** 141-148
 
@@ -210,6 +231,8 @@ kafkaTemplate.send(TopicConstants.TASK_DLT, "ReturnUpsert", wrappedMessage.toStr
 ---
 
 ### M-3: `TaskBackendListener` missing `SchemaVersionHandler` and `TaskMdcHelper`
+
+**狀態**: ✅ FIXED — `SchemaVersionHandler.validate()` now called before dispatch; `TaskMdcHelper.set()/clear()` added with proper try/finally structure; unsupported schema version routed to `task.dlt`.
 
 **File:** `simpleec-backend-job/src/main/java/com/simpleec/backendJob/consumer/TaskBackendListener.java`
 

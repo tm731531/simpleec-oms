@@ -156,7 +156,7 @@ JSONB is used where structure varies per platform or the field is a flexible key
 | `sell_pack` | `channel_spec_attrs` | Platform-specific spec attributes (e.g., `{color: "紅色", size: "M"}`). |
 | `sell_pack` | `sync_status` | Sync state tracking: `pending \| syncing \| completed \| failed`. |
 | `sell_pack` | `platform_metadata` | Platform IDs that don't fit the generic schema (added V3). e.g., `{"shopify": {"inventory_item_id": "457924702"}}` |
-| `platform` | `ship_options` | Platform-level shipping option definitions. |
+| `platform` | `ship_options` | Platform-level shipping option definitions. **Type: JSONB** (changed from JSON in V6). |
 | `platform` | `capabilities` | Feature flags per platform (added V5). e.g., `{"multiLocation": true}`. |
 | `failed_task_logs` | `payload` | Original Kafka message payload for failed tasks. |
 
@@ -192,9 +192,10 @@ V2__shipment_workflow.sql
 V3__sell_pack_platform_metadata.sql
 V4__channel_location_and_inventory.sql
 V5__platform_capabilities.sql
+V6__review_fixes.sql
 ```
 
-**Current highest migration: V5.** The next migration must be `V6__...sql`.
+**Current highest migration: V6.** The next migration must be `V7__...sql`.
 
 **Rules:**
 1. Never skip a version number. V1, V2, V3… sequential only.
@@ -205,7 +206,7 @@ V5__platform_capabilities.sql
 
 **Migration template:**
 ```sql
--- V6: Short description of what this migration does and why
+-- V7: Short description of what this migration does and why
 -- Relates to: [link to issue or design doc if applicable]
 
 ALTER TABLE public.some_table
@@ -213,6 +214,52 @@ ALTER TABLE public.some_table
 
 CREATE INDEX idx_some_table_new_column ON public.some_table (new_column);
 ```
+
+### V6 Migration Summary (`V6__review_fixes.sql`, 2026-04-06)
+
+Three schema fixes applied from a comprehensive review pass:
+
+**DB-C1 — `platform.ship_options`: JSON → JSONB**
+
+```sql
+ALTER TABLE public.platform
+    ALTER COLUMN ship_options TYPE JSONB USING ship_options::jsonb;
+```
+
+Rationale: The entity declared the column as `jsonb` but the DDL had `JSON` (non-binary, no GIN indexing, no JSONB operators). Changed to match the entity and enable future operator use.
+
+**DB-C2 — `sell_pack_inventory` UNIQUE constraint replaced with partial indexes**
+
+The old inline `UNIQUE (sell_pack_id, COALESCE(channel_location_id, ''))` constraint is non-standard in PostgreSQL — function calls in inline UNIQUE constraints are not supported. Replaced with two partial unique indexes:
+
+```sql
+-- Unique per sell_pack when there is no location (Shopee, Cyberbiz, Shopline, etc.)
+CREATE UNIQUE INDEX uq_sell_pack_inv_no_loc
+    ON public.sell_pack_inventory (sell_pack_id)
+    WHERE channel_location_id IS NULL;
+
+-- Unique per (sell_pack, location) for multi-location platforms (e.g. Shopify)
+CREATE UNIQUE INDEX uq_sell_pack_inv_with_loc
+    ON public.sell_pack_inventory (sell_pack_id, channel_location_id)
+    WHERE channel_location_id IS NOT NULL;
+```
+
+Rationale: The two indexes together enforce the same business invariant as the old constraint (at most one inventory row per sell_pack per location, where "no location" is treated as its own unique slot), but using valid PostgreSQL syntax and with correct NULL semantics.
+
+**DB-C3 — `refund_orders` new columns: `channel_id`, `channel_order_id`, `currency`**
+
+```sql
+ALTER TABLE public.refund_orders
+    ADD COLUMN IF NOT EXISTS channel_id       VARCHAR(20),
+    ADD COLUMN IF NOT EXISTS channel_order_id VARCHAR(100),
+    ADD COLUMN IF NOT EXISTS currency         VARCHAR(3) NOT NULL DEFAULT 'TWD';
+```
+
+- FK: `channel_id → channel.id ON UPDATE CASCADE ON DELETE SET NULL` (nullable; channel deletion should not delete refund history)
+- Index: `(channel_id)` for fast channel-scoped lookups
+- Index: `(channel_id, channel_refund_id)` for dedup queries scoped to channel (fixes DB-C4: `findByChannelRefundId` must be scoped to channel, not global)
+
+Rationale: Required for Translation Layer compliance — outbound refund actions need `channel_order_id` to call the platform API. The composite index enables efficient dedup checks when ingesting returns from a channel.
 
 ---
 
@@ -302,9 +349,22 @@ NULL is semantically meaningful in some cases. Use it deliberately, not by omiss
 -- (standard UNIQUE constraint treats two NULLs as not equal, which is wrong here)
 CREATE UNIQUE INDEX idx_sellpack_upsert_key
     ON public.sell_pack (channel_id, channel_product_id, COALESCE(channel_spec_id, ''));
+```
 
-CREATE UNIQUE INDEX uq_sell_pack_inventory
-    ON public.sell_pack_inventory (sell_pack_id, COALESCE(channel_location_id, ''));
+> **Rule: UNIQUE constraints in PostgreSQL do not support function calls (e.g. `COALESCE`).** An inline `UNIQUE (COALESCE(col, ''))` is non-standard and may be rejected depending on PG version. Use partial unique indexes instead when NULL must be treated as a distinct key value.
+
+**Partial unique indexes for nullable business keys** — preferred pattern when a column may be NULL and NULL values must be treated as distinct participants in the uniqueness guarantee:
+
+```sql
+-- sell_pack_inventory: one row per sell_pack with no location (platforms without multi-location)
+CREATE UNIQUE INDEX uq_sell_pack_inv_no_loc
+    ON public.sell_pack_inventory (sell_pack_id)
+    WHERE channel_location_id IS NULL;
+
+-- one row per (sell_pack, location) for multi-location platforms (e.g. Shopify)
+CREATE UNIQUE INDEX uq_sell_pack_inv_with_loc
+    ON public.sell_pack_inventory (sell_pack_id, channel_location_id)
+    WHERE channel_location_id IS NOT NULL;
 ```
 
 **Single sync-target constraint (partial unique index):**

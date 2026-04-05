@@ -341,6 +341,48 @@ if (channelId == null || channelId.isBlank()) {
 2. Reject requests where required fields are null or blank with `400 Bad Request`.
 3. Return `404` (not `403`) when a resource doesn't belong to the authenticated merchant.
 
+**`merchantId` must always come from the JWT — never from request parameters.**
+
+Accepting `merchantId` as a `@RequestParam` or in a request body field that the caller can control is a tenant-isolation vulnerability. Every user-facing endpoint derives the merchant scope exclusively from `principal.getMerchantId()`:
+
+```java
+// CORRECT — merchantId is always from the JWT principal
+@GetMapping
+public ResponseEntity<Page<Product>> listProducts(
+        @AuthenticationPrincipal UserPrincipal principal,
+        @RequestParam(defaultValue = "0") int page,
+        @RequestParam(defaultValue = "10") int size) {
+    String merchantId = principal.getMerchantId();  // ← always from token
+    ...
+}
+
+// CORRECT — on create, forcibly set merchantId from principal; ignore any value in the body
+@PostMapping
+public ResponseEntity<Product> createProduct(
+        @AuthenticationPrincipal UserPrincipal principal,
+        @RequestBody Product product) {
+    product.setMerchantId(principal.getMerchantId());  // ← overrides anything the caller sent
+    ...
+}
+
+// WRONG — never accept merchantId from the caller
+@GetMapping
+public ResponseEntity<?> listProducts(
+        @RequestParam String merchantId,  // ← security hole: caller can specify any merchant
+        ...) { ... }
+```
+
+**Merchants cannot access or modify each other's products (or any other resource).** For single-resource endpoints (`GET /{id}`, `PATCH /{id}`, `DELETE /{id}`), always verify ownership before proceeding:
+
+```java
+Optional<Product> product = productService.findById(productId);
+if (product.isEmpty() || !principal.getMerchantId().equals(product.get().getMerchantId())) {
+    return ResponseEntity.notFound().build();  // 404 in both cases — do not reveal existence
+}
+```
+
+This pattern applies to all resource types: products, orders, sell-packs, channels, refunds, shipments, etc.
+
 ---
 
 ## 10. Security

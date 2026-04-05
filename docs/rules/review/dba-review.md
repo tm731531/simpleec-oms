@@ -6,6 +6,16 @@
 
 ---
 
+## 修復狀態摘要
+
+**Date fixed:** 2026-04-06
+| 狀態 | 數量 | 項目 |
+|------|------|------|
+| ✅ FIXED | 3 | C1, C2, C3 |
+| ⚠️ OPEN | 1 | C4 (index added; repository method still lacks channelId param) |
+
+---
+
 ## Overall Assessment
 
 The schema is **well-designed for a multi-platform e-commerce OMS**. The NanoID PK convention is consistently applied, TIMESTAMPTZ is used everywhere, PII encryption is properly integrated, and the JSONB usage is appropriate. The capabilities-driven model (V5) is a strong design choice that eliminates platform-name hardcoding.
@@ -61,6 +71,8 @@ However, there are **several concrete issues** ranging from data integrity risks
 
 ### C1. `platform.ship_options` uses `JSON` instead of `JSONB`
 
+**狀態**: ✅ FIXED — V6 migration alters `platform.ship_options` to `JSONB` via `ALTER COLUMN ... TYPE JSONB USING ship_options::jsonb`.
+
 **File:** `V1__initial_schema.sql`, line 113
 **Column:** `platform.ship_options`
 **DDL:** `ship_options JSON`
@@ -75,6 +87,8 @@ ALTER TABLE public.platform
 ```
 
 ### C2. `sell_pack_inventory` unique constraint uses SQL `UNIQUE (...)` syntax with `COALESCE` -- invalid
+
+**狀態**: ✅ FIXED — V6 migration drops the invalid `UNIQUE` constraint and replaces it with `CREATE UNIQUE INDEX` using `COALESCE(channel_location_id, '')`; partial unique index `uix_spi_no_location` also added.
 
 **File:** `V4__channel_location_and_inventory.sql`, line 47
 **DDL:** `CONSTRAINT uq_sell_pack_inventory UNIQUE (sell_pack_id, COALESCE(channel_location_id, ''))`
@@ -116,6 +130,8 @@ ALTER TABLE public.sell_pack_inventory
 
 ### C3. `refund_orders` table missing columns required by return-flow rules
 
+**狀態**: ✅ FIXED — V6 migration adds `channel_id`, `channel_order_id`, `currency` columns to `refund_orders`; unique dedup index `idx_refund_orders_channel_return` on `(channel_id, channel_refund_id)` also added.
+
 **File:** `V1__initial_schema.sql` (refund_orders DDL) vs `return-flow.md` Section 6.1
 
 **Missing columns:**
@@ -153,6 +169,8 @@ ALTER TABLE public.refund_orders
 ```
 
 ### C4. `ReturnOrderRepository.findByChannelRefundId` missing `channelId` filter
+
+**狀態**: ⚠️ OPEN — Index `idx_refund_orders_channel_return` added in V6 migration, but `ReturnOrderRepository.findByChannelRefundId()` method itself still lacks `channelId` parameter — queries will not use the composite index and cross-channel collision risk remains. Fix: rename method to `findByChannelIdAndChannelRefundId(String channelId, String channelRefundId)` and update all callers.
 
 **File:** `ReturnOrderRepository.java`, line 25
 **Method:** `findByChannelRefundId(String channelRefundId)`

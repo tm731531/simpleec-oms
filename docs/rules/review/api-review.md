@@ -6,6 +6,16 @@
 
 ---
 
+## 修復狀態摘要
+
+**Date fixed:** 2026-04-06
+| 狀態 | 數量 | 項目 |
+|------|------|------|
+| ✅ FIXED | 4 | C-2, C-3, C-13, C-14 |
+| ⚠️ OPEN | 10+ | C-1, C-4~C-12, all M/G items |
+
+---
+
 ## Overall Assessment
 
 The API layer has solid foundations: `/api` prefix is consistently applied across all controllers, JWT auth filter and SecurityConfig are correctly structured, PII decryption is generally handled, and tenant isolation (`merchantId` checks) is present in most endpoints. However there are several **critical security holes** (unauthenticated admin endpoints, plain-text password support in production code, direct Repository access from controllers bypassing Service layer), and a significant number of **rule-book / flow gaps** where the implementation does not match the specification.
@@ -59,6 +69,8 @@ However, none of the four admin controllers declare `@PreAuthorize("hasAuthority
 
 ### C-2 — Plain-text password comparison in `AuthController.login()` (line 52–54)
 
+**狀態**: ✅ FIXED — Plain-text password fallback `|| password.equals(...)` branch removed; BCrypt-only comparison enforced.
+
 **File:** `AuthController.java` lines 51–56
 
 ```java
@@ -73,6 +85,8 @@ This allows authentication with a plain-text password if a BCrypt hash compariso
 ---
 
 ### C-3 — `ProductController` (`/api/products`) is completely unauthenticated — accepts any `merchantId` parameter
+
+**狀態**: ✅ FIXED — All endpoints now inject `@AuthenticationPrincipal UserPrincipal principal`; `merchantId` request parameter removed; `principal.getMerchantId()` used for tenant scoping.
 
 **File:** `ProductController.java` lines 31–36, 49, 67, 84–88, 103, 119
 
@@ -220,6 +234,8 @@ The endpoint accepts the raw `Channel` entity as request body. `Channel` contain
 
 ### C-13 — `ReturnController` (`/api/returns`) `approveReturn` / `rejectReturn` do NOT send Kafka events
 
+**狀態**: ✅ FIXED — `APPROVE_RETURN` and `REJECT_RETURN` Kafka events now published to `{platform}.fast`; endpoints return `202 Accepted`.
+
 **File:** `ReturnController.java` lines 157–195
 
 The rule book (`return-flow.md §2`, `§3.3`) specifies:
@@ -233,6 +249,8 @@ The actual implementation just updates `returnStatus` to `APPROVED`/`REJECTED` i
 ---
 
 ### C-14 — `UserRefundController` approve/reject actions (`PATCH /{id}`) do NOT send Kafka events
+
+**狀態**: ✅ FIXED — `APPROVE_RETURN` / `REJECT_RETURN` Kafka events now published; endpoints return `202 Accepted`.
 
 **File:** `UserRefundController.java` lines 88–106
 

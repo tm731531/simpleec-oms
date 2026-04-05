@@ -94,14 +94,18 @@
 
 ### 2.3 POST /api/returns/{id}/approve
 
-- Response: `{ "requestId": "...", "message": "Approve request sent" }`
-- 非同步處理，成功後退貨狀態由 Channel Job 回寫更新
-- 若平台不支援此操作（Shopify），API 返回 `422 Unprocessable Entity`
+- 更新 DB 狀態 → `APPROVED`，**然後**發送 `APPROVE_RETURN` Kafka 事件至 `{platform}.fast` topic
+- Channel context 解析路徑：`returnOrder.orderId → order.channelId → channel.platformId → platform.platformName → topic`
+- Response: `{ "requestId": "...", "message": "Approve request sent" }`（HTTP 200，回傳更新後的退貨物件）
+- 非同步：Channel Job 收到訊息後才呼叫平台 API；實際平台狀態由後續 RETURN_ACTION_CONFIRMED 回寫
+- Kafka 發送失敗時只記 error log，不回滾 DB 狀態（避免 UI 不一致）
 
 ### 2.4 POST /api/returns/{id}/reject
 
-- Request Body（選填）: `{ "reason": "拒絕原因" }`
-- Response: `{ "requestId": "...", "message": "Reject request sent" }`
+- 更新 DB 狀態 → `REJECTED`，**然後**發送 `REJECT_RETURN` Kafka 事件至 `{platform}.fast` topic
+- Channel context 解析路徑同上（approve）
+- Request Body（選填）: `{ "reason": "拒絕原因" }`（reason 目前存 DB，不帶入 Kafka body）
+- Response: HTTP 200，回傳更新後的退貨物件
 
 ### 2.5 UI 顯示要求
 
@@ -168,19 +172,19 @@
 - `channelOrderId`：平台原始訂單 ID（ReturnUpsertHandler 用此查詢 `orders` 表取得 `orderId`）
 - `channelReturnId`：平台退貨單號（去重依據之一）
 
-### 3.3 API → {platform}.fast（APPROVE_RETURN）
+### 3.3 API → {platform}.fast（APPROVE_RETURN / REJECT_RETURN）
 
 ```json
 {
   "header": {
     "taskType": "APPROVE_RETURN",
     "merchantId": "merch_nanoId20chars",
-    "platformId": "shopee",
+    "platformId": "platform_nanoId20ch",
     "channelId": "chan_nanoId20chars",
     "requestId": "req_nanoId20chars",
     "timestamp": "2026-04-05T09:10:00Z",
     "source": "api",
-    "version": "1.0",
+    "version": 1,
     "isRollback": false
   },
   "body": {
@@ -192,7 +196,9 @@
 **關鍵規則：**
 - `body.returnId` 為 **OMS NanoID**，**不是** channelReturnId
 - Channel Job 翻譯：`returnId` → `channelReturnId`（查 `refund_orders` 表）
-- REJECT_RETURN body 結構相同，可加選填 `reason` 欄位
+- `header.version` 為整數 `1`（不是字串 `"1.0"`）
+- REJECT_RETURN：header.taskType 改為 `"REJECT_RETURN"`，body 結構相同（reason 選填，但目前不帶入 Kafka body）
+- Topic 解析：`ReturnController` 透過 `returnOrder.orderId → order.channelId → channel.platformId → platform.platformName` 取得平台名稱，再呼叫 `TopicConstants.platformFastTopic(platformName)`
 
 ### 3.4 Channel Job → task.backend（RETURN_ACTION_CONFIRMED）
 
@@ -445,6 +451,15 @@ GET /v1/orders/{id}/returns
 - [ ] APPROVE_RETURN / REJECT_RETURN 送至 `{platform}.fast` topic
 - [ ] APPROVE_RETURN / REJECT_RETURN body 中 `returnId` 為 OMS NanoID（不是 channelReturnId）
 - [ ] Channel Job 翻譯：`returnId` → `channelReturnId`（查 `refund_orders` 表）
+- [ ] `header.version` 為整數 `1`（不是字串 `"1.0"`）
+
+### 核准 / 拒絕事件發送
+
+- [ ] `POST /api/returns/{id}/approve` 在更新 DB 狀態為 APPROVED 後，確實送出 `APPROVE_RETURN` Kafka 事件
+- [ ] `POST /api/returns/{id}/reject` 在更新 DB 狀態為 REJECTED 後，確實送出 `REJECT_RETURN` Kafka 事件
+- [ ] 事件送至正確的 `{platformName}.fast` topic（驗證 platformName 解析路徑：orderId → channelId → platformId → platformName）
+- [ ] Kafka 發送失敗時：error log 記錄，不拋出例外，不回滾 DB 狀態
+- [ ] Channel Job 確認收到 APPROVE_RETURN / REJECT_RETURN 後呼叫平台 API，再回送 RETURN_ACTION_CONFIRMED
 
 ### 資料正確性
 

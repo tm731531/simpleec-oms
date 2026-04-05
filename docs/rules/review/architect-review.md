@@ -7,6 +7,16 @@
 
 ---
 
+## 修復狀態摘要
+
+**Date fixed:** 2026-04-06
+| 狀態 | 數量 | 項目 |
+|------|------|------|
+| ✅ FIXED | 3 | ARCH-C1, ARCH-C4, ARCH-C5 |
+| ⚠️ OPEN | 2+ | CRIT-2 (DB access by Channel Job), CRIT-3 (order_status_logs), MOD items, GAPs |
+
+---
+
 ## Overall Assessment
 
 The architecture is fundamentally sound: the header/body Kafka envelope, the three-layer separation (Scheduler / Channel Job / Handler), the NanoID primary key strategy, PII encryption via `EncryptedAttributeConverter`, and the capabilities-driven model are all well-designed and correctly documented. However, the implementation lags behind the rules in several critical areas. Four handlers in `simpleec-channel-job` contain hardcoded `"cyberbiz".equalsIgnoreCase(platformCode)` checks -- a direct violation of the capabilities model. The Channel Job module has extensive DB access via JPA repositories, contradicting the "Channel Job must not access DB" rule. The `UpdateInventoryHandler` has no multi-location logic despite V4 migration and entity being in place. Several backend handlers documented in the rules (e.g., `ShipOrderConfirmedHandler`, `ReturnActionConfirmedHandler`) do not exist in the codebase. The `OrderUpsertConsumer` does not write `order_status_logs`, violating the order processing flow rules. These issues are tractable but represent real gaps between documented architecture and running code.
@@ -50,6 +60,8 @@ The architecture is fundamentally sound: the header/body Kafka envelope, the thr
 ## Critical Issues (must fix before production)
 
 ### CRIT-1: Hardcoded platform name checks in 4 Channel Job handlers
+
+**狀態**: ✅ FIXED — All 4 handlers (`ShipOrderHandler`, `ApproveReturnHandler`, `RejectReturnHandler`, `FetchReturnsHandler`) now use `ChannelAdapterRegistry` keyed by `platformCode`; `"cyberbiz".equalsIgnoreCase(...)` checks removed; behavior driven by `platform.capabilities` flags.
 
 **Rule violated:** `tech/capabilities-model.md` Section 6 -- "The following patterns are forbidden in all modules."
 
@@ -102,6 +114,8 @@ The architecture is fundamentally sound: the header/body Kafka envelope, the thr
 
 ### CRIT-4: UpdateInventoryHandler ignores multi-location and async inventory
 
+**狀態**: ✅ FIXED — `UpdateInventoryHandler` now reads `platform.capabilities`; implements multi-location branch (queries `ChannelLocation` for `is_sync_target`, uses `platform_metadata.inventory_item_id`); non-multiLocation path uses `channelProductId + channelSpecId`; `sell_pack_inventory` snapshot upserted after success; adapter registry replaces hardcoded `cyberbizAdapter`.
+
 **Rule violated:** `flows/inventory-sync.md` Sections 4.3-4.5 (multiLocation and asyncInventory handling). `tech/capabilities-model.md` Section 9 (relationship to sell_pack_inventory).
 
 **Location:** `UpdateInventoryHandler.java` -- the entire file:
@@ -126,6 +140,8 @@ The architecture is fundamentally sound: the header/body Kafka envelope, the thr
 ---
 
 ### CRIT-5: Redis TTL set to 7 days instead of 24 hours
+
+**狀態**: ✅ FIXED — All 4 occurrences of `Duration.ofDays(7)` changed to `Duration.ofHours(24)` (`OrderUpsertConsumer` lines 194 & 222; `ReturnUpsertHandler` lines 84 & 97).
 
 **Rule violated:** `tech/cache.md` Section 2 -- "TTL: 24 hours. Set on write. Do not extend TTL on read."
 

@@ -316,20 +316,30 @@ if (body.isRollback()) {
 }
 ```
 
-### 5.5 狀態變更日誌
-每次 UPDATE 時，若 status 有變：
+### 5.5 狀態變更日誌（QA-C6）
+`handleOrderUpsert()` 在訂單寫入 DB 後，嘗試寫入 `order_status_logs`。
 
+**觸發條件：**
+
+| 情況 | fromStatus | toStatus | 寫入？ |
+|------|-----------|---------|-------|
+| INSERT（新訂單） | `null` | `<新狀態>` | ✅ 寫入 |
+| UPDATE，status 有變 | `<舊狀態>` | `<新狀態>` | ✅ 寫入 |
+| UPDATE，status 未變 | — | — | ❌ 不寫入 |
+
+**欄位：**
 ```java
-if (!existing.getStatus().equals(newStatus)) {
-    orderStatusLogRepo.insert(OrderStatusLog.builder()
-        .orderId(order.getId())
-        .fromStatus(existing.getStatus())
-        .toStatus(newStatus)
-        .changedAt(Instant.now())
-        .source("ORDER_UPSERT")
-        .build());
-}
+OrderStatusLog.builder()
+    .id(NanoIdUtil.generate())
+    .orderId(savedOrder.getId())
+    .fromStatus(isNewOrder ? null : oldStatus)   // INSERT 時為 null
+    .toStatus(newStatus)
+    .operator("system")
+    .remark("ORDER_UPSERT from channel " + channelId)
+    .build();
 ```
+
+**非致命性：** 寫入失敗只記錄 `WARN` 日誌，不影響訂單 upsert 的整體成功。
 
 ---
 
@@ -526,6 +536,12 @@ try {
 - [ ] OMS 接受任何狀態轉換（不拋 InvalidStateTransitionException 或類似）
 - [ ] 狀態變更時，`order_status_logs` 有新增一筆紀錄
 - [ ] `order_status_logs` 中的舊紀錄沒有被修改或刪除
+
+### order_status_logs 寫入驗證（QA-C6）
+- [ ] **新訂單 INSERT**：`order_status_logs` 寫入一筆，`from_status = NULL`，`to_status = <初始狀態>`，`operator = 'system'`，`remark` 含 `ORDER_UPSERT from channel <channelId>`
+- [ ] **UPDATE，status 有變**：`order_status_logs` 寫入一筆，`from_status = <舊狀態>`，`to_status = <新狀態>`
+- [ ] **UPDATE，status 未變**：`order_status_logs` **不寫入**新紀錄
+- [ ] **Redis 故障、`order_status_logs` 寫入失敗**：整體 upsert 仍返回成功，僅記錄 WARN 日誌（非致命）
 
 ### Shopee 特有驗證
 - [ ] `get_order_detail` 帶了 `optional_fields`（items、address、pay_time）

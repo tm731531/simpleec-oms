@@ -150,29 +150,43 @@ Channel Job 負責將 body 中的 `sellPackId`（NanoID）轉換為平台可識�
 ### 4.3 多地點平台（multiLocation=true）
 
 ```java
-boolean isMultiLocation = platform.capabilities.path("multiLocation").asBoolean(false);
+boolean multiLocation = capabilities.path("multiLocation").asBoolean(false);
 
-if (isMultiLocation) {
-    // 1. 查詢 is_sync_target = true 的地點
-    ChannelLocation syncTarget = channelLocationRepo.findSyncTarget(channelId);
+if (multiLocation) {
+    // 1. 查詢 is_sync_target = true 的唯一地點
+    Optional<Map<String, String>> syncTarget = channelService.getSyncTargetLocation(channelId);
+    if (syncTarget.isEmpty()) {
+        log.error("multiLocation=true but no sync-target location configured (channel={})", channelId);
+        return;
+    }
+    String locationNanoId     = syncTarget.get().get("id");
+    String platformLocationId = syncTarget.get().get("platformLocationId");
 
-    // 2. 取得 inventory_item_id（Shopify 特有，存在 platform_metadata JSONB）
-    String inventoryItemId = sellPack.getPlatformMetadata().path("inventory_item_id").asText();
+    // 2. 呼叫平台 API（TODO: Shopify adapter 尚未實作）
+    //    當前實作：記錄 warn log，等 adapter 就緒後補上實際 API 呼叫
+    log.warn("UPDATE_INVENTORY multi-location not yet fully implemented for channel={} location={}",
+             channelId, platformLocationId);
 
-    // 3. 呼叫平台 API
-    platformApi.setInventoryLevel(inventoryItemId, syncTarget.getChannelLocationId(), newValue);
+    // 3. 即使 adapter 未呼叫，仍先寫入 snapshot（反映意圖，UI 可即時顯示）
+    channelService.upsertInventorySnapshot(sellPackId, locationNanoId, newValue);
 }
 ```
 
-- `inventory_item_id` 存在 `sell_pack.platform_metadata` JSONB，不是 variant_id
-- 查詢 `channel_location` 時必須加 `channel_id = ?` 條件（避免跨 channel 污染）
+- 能力旗標：`capabilities.path("multiLocation").asBoolean(false)`（永遠不 hardcode 平台名稱）
+- `getSyncTargetLocation(channelId)` 回傳 `{ id: locationNanoId, platformLocationId: ... }`
+- `inventory_item_id`（Shopify 特有）存在 `sell_pack.platform_metadata` JSONB，不是 variant_id
+- Shopify adapter 實作後再補上實際 `setInventoryLevel()` 呼叫；目前 stub 並提前寫 snapshot
 
 ### 4.4 無地點平台（multiLocation=false）
 
 ```java
-if (!isMultiLocation) {
-    // channelProductId + channelSpecId 即可
-    platformApi.updateInventory(channelProductId, channelSpecId, newValue);
+if (!multiLocation) {
+    // 1. 呼叫平台 API（以 cyberbizAdapter 為例；未來可依 platformCode 路由到對應 adapter）
+    adapter.setCredentials(channel.getToken(), channel.getToken2());
+    adapter.updateVariantInventory(channelProductId, channelSpecId, newValue);
+
+    // 2. 確認推送成功後，以 channel_location_id = NULL 寫入 snapshot
+    channelService.upsertInventorySnapshot(sellPackId, null, newValue);
 }
 ```
 
@@ -194,22 +208,35 @@ if (isAsync) {
 ## 5. 後端 Job
 
 ### 5.1 同步結果寫回 DB
-Channel Job 呼叫平台 API 成功後，**在同一個 job 內**更新快照：
+snapshot **直接由 Channel Job 在同一個 job 內透過 JDBC upsert 寫入**，不經 Kafka 傳回後端。
+呼叫入口：`channelService.upsertInventorySnapshot(sellPackId, locationNanoId, quantity)`
+
+因為 `channel_location_id` 可能為 NULL，無法用單一 ON CONFLICT 子句同時覆蓋兩種情況，
+改用兩條 **partial index** upsert：
 
 ```sql
-INSERT INTO sell_pack_inventory (
-    id, sell_pack_id, channel_id, channel_location_id, quantity, last_synced_at, sync_status
-) VALUES (...)
-ON CONFLICT (sell_pack_id, channel_id, channel_location_id)
+-- 無地點平台（channel_location_id IS NULL）
+INSERT INTO sell_pack_inventory (id, sell_pack_id, channel_id, channel_location_id, quantity, last_synced_at)
+VALUES (...)
+ON CONFLICT (sell_pack_id, channel_id)
+    WHERE channel_location_id IS NULL
 DO UPDATE SET
     quantity = EXCLUDED.quantity,
-    last_synced_at = EXCLUDED.last_synced_at,
-    sync_status = 'synced';
+    last_synced_at = NOW();
+
+-- 多地點平台（channel_location_id IS NOT NULL）
+INSERT INTO sell_pack_inventory (id, sell_pack_id, channel_id, channel_location_id, quantity, last_synced_at)
+VALUES (...)
+ON CONFLICT (sell_pack_id, channel_id, channel_location_id)
+    WHERE channel_location_id IS NOT NULL
+DO UPDATE SET
+    quantity = EXCLUDED.quantity,
+    last_synced_at = NOW();
 ```
 
 ### 5.2 多地點 vs 無地點的 channel_location_id
-- 多地點平台：`channel_location_id = syncTarget.id`
-- 無地點平台：`channel_location_id = NULL`
+- 多地點平台：`channel_location_id = syncTarget.id`（locationNanoId，非 platformLocationId）
+- 無地點平台：`channel_location_id = NULL`（傳 `null` 進 `upsertInventorySnapshot`）
 
 ### 5.3 失敗處理
 ```java

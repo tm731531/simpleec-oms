@@ -35,8 +35,22 @@ No schema migration is needed when adding a new capability key. The application 
 | `multiLocation` | boolean | `false` | Platform has per-location inventory management (Shopify = true). When true, inventory is tracked per `channel_location`; when false, `channel_location_id` is NULL in `sell_pack_inventory`. |
 | `webhook` | boolean | `false` | Platform supports push event delivery. When true, OMS registers webhook endpoints with the platform. When false, OMS uses scheduled polling only. |
 | `asyncInventory` | boolean | `false` | Platform inventory write operations are async and return a `task_id`. When true, Channel Job must persist `task_id` and poll for completion. When false, inventory update response is final. |
+| `supportsShipment` | boolean | `false` | Platform supports the SHIP_ORDER callback API. When `true`, `ShipOrderHandler` calls the platform's fulfillment endpoint. When `false`, the handler skips the outbound call (platform does not expose a ship API). |
+| `supportsReturnApproval` | boolean | `false` | Platform supports APPROVE_RETURN / REJECT_RETURN callback APIs. When `true`, `ApproveReturnHandler` and `RejectReturnHandler` call the platform's refund approval/rejection endpoints. When `false`, handlers skip the outbound call. |
+| `supportsReturnFetch` | boolean | `false` | Platform supports a FETCH_RETURNS API. When `true`, `FetchReturnsHandler` actively polls the platform for return/refund records. When `false`, returns are only known via inbound webhook or order status data. |
 
-All three keys are boolean. Additional capability types (string, integer) may be added in the future — document them here before implementing.
+All keys are boolean. Additional capability types (string, integer) may be added in the future — document them here before implementing.
+
+### Handler → Capability Key Reference
+
+| Handler | Capability Key Checked | Behaviour when `false` |
+|---------|----------------------|------------------------|
+| `ShipOrderHandler` | `supportsShipment` | Skips outbound platform API call; logs warning |
+| `ApproveReturnHandler` | `supportsReturnApproval` | Skips outbound platform API call; logs warning |
+| `RejectReturnHandler` | `supportsReturnApproval` | Skips outbound platform API call; logs warning |
+| `FetchReturnsHandler` | `supportsReturnFetch` | Skips polling; no return records fetched from platform |
+
+These handlers replaced previous `"cyberbiz".equalsIgnoreCase(platformCode)` guards (removed in V6). Adding a new platform that supports these APIs requires only setting the capability in a Flyway migration — no handler code changes.
 
 ---
 
@@ -46,7 +60,7 @@ All three keys are boolean. Additional capability types (string, integer) may be
 |----------|-----------------|-------|
 | Shopify | `{"multiLocation": true}` | All other capabilities default to false |
 | Shopee | `{"asyncInventory": true}` | `update_stock` returns task_id |
-| Cyberbiz | `{}` | All defaults apply; no webhook support |
+| Cyberbiz | `{"supportsShipment": true, "supportsReturnApproval": true, "supportsReturnFetch": true}` | Added by V6 migration. Supports SHIP_ORDER, APPROVE/REJECT_RETURN, and FETCH_RETURNS APIs. |
 | Shopline | `{"webhook": true}` | Open API supports webhooks |
 | Momo | `{}` | All defaults |
 | Yahoo | `{}` | All defaults |

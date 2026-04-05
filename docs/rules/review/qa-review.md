@@ -7,6 +7,16 @@
 
 ---
 
+## 修復狀態摘要
+
+**Date fixed:** 2026-04-06
+| 狀態 | 數量 | 項目 |
+|------|------|------|
+| ✅ FIXED | 3 | CRIT-1, CRIT-6, CRIT-7 |
+| ⚠️ OPEN | 4 | CRIT-2, CRIT-3, CRIT-4, CRIT-5 (plus all MOD items) |
+
+---
+
 ## Overall Assessment
 
 The codebase has a **clear architectural vision** and correct high-level flow. The unit test layer (Mockito-based) covers the core Kafka consumer paths. However, there are **five critical gaps** that carry real data-loss or silent-corruption risk in production:
@@ -130,6 +140,9 @@ Test coverage is reasonable for the order/return Kafka consumer layer but has ze
 ## 🔴 Critical Quality Issues
 
 ### CRIT-1: `UpdateInventoryHandler` — sell_pack_inventory never updated after push
+
+**狀態**: ✅ FIXED — After successful platform push, `sell_pack_inventory` is now upserted with updated `quantity`, `last_synced_at`, and `sync_status = 'synced'` via `upsertInventorySnapshot()`.
+
 **File:** `simpleec-channel-job/src/main/java/com/simpleec/channeljob/handler/UpdateInventoryHandler.java:61-71`
 
 After calling `cyberbizAdapter.updateVariantInventory()`, the handler logs success and returns. There is no write to `sell_pack_inventory` (quantity + last_synced_at + sync_status). The inventory snapshot is permanently stale.
@@ -226,6 +239,9 @@ if (isRollback && order.getChannelCreatedAt() != null) {
 ---
 
 ### CRIT-6: `OrderUpsertConsumer` — `order_status_logs` never written on status change
+
+**狀態**: ✅ FIXED — UPDATE branch now compares `existing.getStatus()` vs new status; when changed, inserts `OrderStatusLog` record with `fromStatus`, `toStatus`, `changedAt`, `source`; new order INSERT also writes an initial status log entry.
+
 **File:** `simpleec-order-job/src/main/java/com/simpleec/orderjob/consumer/OrderUpsertConsumer.java:172-205`
 
 The UPDATE branch (line 182) compares hashes and calls `updateOrderFromData()`. Nowhere in this path is `order_status_logs` written. The rule requires inserting a log row when `status` changes.
@@ -248,6 +264,9 @@ if (!existing.getStatus().equals(newStatus)) {
 ---
 
 ### CRIT-7: `ReturnUpsertConsumer` — FORMAT_ERROR routed to `task.failed` instead of `task.dlt`
+
+**狀態**: ✅ FIXED — `IllegalArgumentException` catch block now sends to `TopicConstants.TASK_DLT`; same as kafka-review M-2 fix.
+
 **File:** `simpleec-order-job/src/main/java/com/simpleec/orderjob/consumer/ReturnUpsertConsumer.java:143-151`
 
 ```java
