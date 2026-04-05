@@ -4,7 +4,9 @@ import com.simpleec.channeljob.entity.Channel;
 import com.simpleec.channeljob.entity.ChannelMessage;
 import com.simpleec.channeljob.repository.ChannelRepository;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import java.util.Map;
 
 /**
  * Service for channel operations
@@ -15,9 +17,11 @@ import org.springframework.stereotype.Service;
 public class ChannelService {
 
     private final ChannelRepository channelRepository;
+    private final JdbcTemplate jdbcTemplate;
 
-    public ChannelService(ChannelRepository channelRepository) {
+    public ChannelService(ChannelRepository channelRepository, JdbcTemplate jdbcTemplate) {
         this.channelRepository = channelRepository;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     /**
@@ -67,5 +71,27 @@ public class ChannelService {
     public Channel getChannel(String channelId) {
         return channelRepository.findById(channelId)
             .orElse(null);
+    }
+
+    /**
+     * Look up sell_pack's platform-specific IDs by internal sellPackId.
+     * Used by outbound handlers (UPDATE_INVENTORY, UPDATE_PRICE) to translate
+     * OMS IDs → platform IDs at the Channel Job layer.
+     *
+     * @return Map with "channelProductId" and "channelSpecId", or null if not found
+     */
+    public Map<String, String> getSellPackChannelIds(String sellPackId) {
+        var rows = jdbcTemplate.queryForList(
+            "SELECT channel_product_id, channel_spec_id FROM sell_pack WHERE id = ?",
+            sellPackId);
+        if (rows.isEmpty()) {
+            log.warn("sell_pack not found: {}", sellPackId);
+            return null;
+        }
+        var row = rows.get(0);
+        return Map.of(
+            "channelProductId", row.get("channel_product_id") != null ? row.get("channel_product_id").toString() : "",
+            "channelSpecId", row.get("channel_spec_id") != null ? row.get("channel_spec_id").toString() : ""
+        );
     }
 }

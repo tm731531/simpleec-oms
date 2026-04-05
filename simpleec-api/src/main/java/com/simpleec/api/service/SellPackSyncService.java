@@ -66,9 +66,8 @@ public class SellPackSyncService {
 
                     Map<String, Object> body = new HashMap<>();
                     body.put("sellPackId", sellPack.getId());
-                    body.put("channelProductId", sellPack.getChannelProductId());
-                    body.put("channelSpecId", sellPack.getChannelSpecId());
                     body.put("operation", operation);
+                    body.put("oldValue", oldValue);
                     body.put("newValue", newValue);
 
                     Map<String, Object> message = new HashMap<>();

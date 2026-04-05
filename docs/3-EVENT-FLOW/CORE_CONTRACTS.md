@@ -520,3 +520,29 @@ easystore 訂單 API：
 - TTL = 7 天
 - Hash 變更檢測：Channel Job 讀取，Process Job 寫入
 - 詳見：`REDIS_DEDUPLICATION.md`
+
+---
+
+## 9. Translation Layer Rule — Channel Job 是唯一翻譯器
+
+**This is a non-negotiable architectural constraint.**
+
+Channel Job is the ONLY component in the system that knows platform-specific IDs.
+All Kafka messages on all topics MUST use internal OMS IDs (NanoID) only.
+
+### 9.1 Outbound Action Messages (OMS → Channel Job → Platform)
+Platform IDs MUST NOT appear in message bodies. Channel Job translates internally:
+
+| TaskType | Message body contains | Channel Job looks up | Then calls platform with |
+|---|---|---|---|
+| UPDATE_INVENTORY | `sellPackId` | `sell_pack WHERE id = ?` → `channel_product_id`, `channel_spec_id` | platform variant update API |
+| UPDATE_PRICE | `sellPackId` | `sell_pack WHERE id = ?` → `channel_product_id`, `channel_spec_id` | platform price update API |
+| SHIP_ORDER | `orderId` | `orders WHERE id = ?` → `channel_order_id` | platform ship API |
+| APPROVE_RETURN | `returnId` | `refund_orders WHERE id = ?` → `channel_order_id` | platform return approve API |
+| REJECT_RETURN | `returnId` | `refund_orders WHERE id = ?` → `channel_order_id` | platform return reject API |
+
+### 9.2 Inbound Flow Exception
+ORDER_UPSERT and RETURN_UPSERT messages sent FROM Channel Job TO `order.process`/`return.process` MAY include `channelOrderId`/`channelRefundId` — because the internal OMS record does not exist yet for new inbound data. The backend handler creates the record and assigns the internal ID.
+
+### 9.3 Why This Matters
+If platform IDs leak into messages, every new channel integration requires hunting down all message senders and handlers. With this rule, adding a new channel only requires a new ChannelAdapter implementation — no message contract changes.

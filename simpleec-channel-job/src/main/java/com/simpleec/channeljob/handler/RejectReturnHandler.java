@@ -4,6 +4,10 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.simpleec.channel.adapter.ChannelAdapter;
 import com.simpleec.channel.adapter.CyberbizAdapter;
 import com.simpleec.channeljob.entity.Channel;
+import com.simpleec.channeljob.entity.OrderRef;
+import com.simpleec.channeljob.entity.ReturnOrderRef;
+import com.simpleec.channeljob.repository.OrderRefRepository;
+import com.simpleec.channeljob.repository.ReturnOrderRefRepository;
 import com.simpleec.channeljob.service.ChannelService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -11,6 +15,9 @@ import org.springframework.stereotype.Component;
 
 /**
  * REJECT_RETURN handler — notifies the platform that a return has been rejected.
+ *
+ * Translation layer: reads returnId (OMS NanoID) from body, looks up channel_order_id via
+ * refund_orders → orders.
  *
  * Cyberbiz: PUT /v1/orders/{order_id}/manual_return  operation=manual_return_refuse
  */
@@ -21,12 +28,26 @@ public class RejectReturnHandler {
 
     private final ChannelService channelService;
     private final ChannelAdapter cyberbizAdapter;
+    private final OrderRefRepository orderRefRepository;
+    private final ReturnOrderRefRepository returnOrderRefRepository;
 
     public void handleRejectReturn(String platformCode, String channelId,
                                    String merchantId, JsonNode body) {
-        String channelOrderId = body.path("channelOrderId").asText("unknown");
-        String returnId       = body.path("returnId").asText("unknown");
-        String reason         = body.path("reason").asText("");
+        String returnId = body.path("returnId").asText("unknown");
+        String reason   = body.path("reason").asText("");
+
+        // Translation: returnId → orderId → channelOrderId
+        ReturnOrderRef returnRef = returnOrderRefRepository.findById(returnId).orElse(null);
+        if (returnRef == null) {
+            log.error("REJECT_RETURN: return order not found in DB: {}", returnId);
+            return;
+        }
+        OrderRef orderRef = orderRefRepository.findById(returnRef.getOrderId()).orElse(null);
+        if (orderRef == null) {
+            log.error("REJECT_RETURN: parent order not found in DB: {}", returnRef.getOrderId());
+            return;
+        }
+        String channelOrderId = orderRef.getChannelOrderId();
 
         if ("cyberbiz".equalsIgnoreCase(platformCode)) {
             Channel channel = channelService.getChannel(channelId);

@@ -81,6 +81,21 @@ public class Platform {
     private JsonNode shipOptions;
 
     /**
+     * 平台能力旗標 JSON（驅動業務邏輯，避免 hardcode 平台名稱判斷）
+     *
+     * 已知 key:
+     *   multiLocation  boolean  true = 平台有倉庫/位置概念（如 Shopify），庫存需按 location 管理
+     *   webhook        boolean  true = 平台主動推送事件
+     *   asyncInventory boolean  true = 庫存更新為非同步（需等待回調）
+     *
+     * 使用方式：
+     *   capabilities.path("multiLocation").asBoolean(false)
+     */
+    @JdbcTypeCode(Types.OTHER)
+    @Column(name = "capabilities", columnDefinition = "jsonb", nullable = false)
+    private JsonNode capabilities;
+
+    /**
      * 建立時間
      */
     @CreationTimestamp

@@ -326,7 +326,6 @@ public class UserOrderController {
 
                     Map<String, Object> body = new HashMap<>();
                     body.put("orderId", order.getId());
-                    body.put("channelOrderId", order.getChannelOrderId());
                     if (trackingNumber != null) body.put("trackingNumber", trackingNumber);
                     if (carrier != null) body.put("carrier", carrier);
 

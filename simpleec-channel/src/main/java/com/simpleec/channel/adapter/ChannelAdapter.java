@@ -91,7 +91,32 @@ public interface ChannelAdapter {
     void updateInventory(String productId, int quantity) throws Exception;
 
     /**
+     * 更新庫存（variant 級別，需要 channelProductId + channelSpecId）
+     * Channel Job 從 sell_pack 表查出平台 ID 後調用此方法。
+     */
+    default void updateVariantInventory(String channelProductId, String channelSpecId, int quantity) throws Exception {
+        // Default: fall back to simple updateInventory (ignores channelSpecId)
+        updateInventory(channelProductId, quantity);
+    }
+
+    /**
+     * 更新價格（variant 級別，需要 channelProductId + channelSpecId）
+     * Channel Job 從 sell_pack 表查出平台 ID 後調用此方法。
+     */
+    default void updateVariantPrice(String channelProductId, String channelSpecId, String price) throws Exception {
+        throw new UnsupportedOperationException("updateVariantPrice not implemented for this platform");
+    }
+
+    /**
      * 驗證連接是否正常
      */
     boolean testConnection() throws Exception;
+
+    /**
+     * 設置 API credentials（由 Channel Job handler 調用）
+     * 每個平台 adapter 可 override 此方法設定自己的認證方式。
+     */
+    default void setCredentials(String token, String secret) {
+        // no-op by default; adapters that need credentials should override
+    }
 }

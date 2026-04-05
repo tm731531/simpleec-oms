@@ -84,6 +84,14 @@ public class SellPack {
     @Column(name = "channel_spec_attrs", columnDefinition = "jsonb")
     private String channelSpecAttrs;
 
+    /**
+     * 平台特定 metadata（以平台名稱為 key）
+     * 用於存放無法塞入通用欄位的平台 ID。
+     * 例如 Shopify: { "shopify": { "inventory_item_id": "457924702", "location_id": "905684977" } }
+     */
+    @Column(name = "platform_metadata", columnDefinition = "jsonb")
+    private String platformMetadata;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;

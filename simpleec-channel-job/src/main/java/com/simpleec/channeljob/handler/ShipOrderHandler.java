@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.simpleec.channel.adapter.ChannelAdapter;
 import com.simpleec.channel.adapter.CyberbizAdapter;
 import com.simpleec.channeljob.entity.Channel;
+import com.simpleec.channeljob.entity.OrderRef;
+import com.simpleec.channeljob.repository.OrderRefRepository;
 import com.simpleec.channeljob.service.ChannelService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -16,6 +18,8 @@ import java.util.Map;
 /**
  * SHIP_ORDER handler — pushes shipment info (tracking number, carrier) back to the platform.
  *
+ * Translation layer: reads orderId (OMS NanoID) from body, looks up channel_order_id from DB.
+ *
  * Cyberbiz: POST /v1/orders/{order_id}/fulfillments/custom_shipping
  */
 @Slf4j
@@ -25,10 +29,19 @@ public class ShipOrderHandler {
 
     private final ChannelService channelService;
     private final ChannelAdapter cyberbizAdapter;
+    private final OrderRefRepository orderRefRepository;
 
     public void handleShipOrder(String platformCode, String channelId,
                                 String merchantId, JsonNode body) {
-        String channelOrderId = body.path("channelOrderId").asText(body.path("orderId").asText("unknown"));
+        String orderId = body.path("orderId").asText("unknown");
+
+        // Translation: OMS orderId → platform channelOrderId
+        OrderRef orderRef = orderRefRepository.findById(orderId).orElse(null);
+        if (orderRef == null) {
+            log.error("SHIP_ORDER: order not found in DB: {}", orderId);
+            return;
+        }
+        String channelOrderId = orderRef.getChannelOrderId();
         String trackingNumber = body.path("trackingNumber").asText("");
         String carrier        = body.path("carrier").asText("other");
 

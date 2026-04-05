@@ -1,5 +1,7 @@
 # SimpleEC OMS — Claude Session Guide
 
+## Domain Brain: oms-event-driven, design-principles, kafka-message-queue, cyberbiz-open-api, shopee-open-api, shopify-open-api, shopline-open-api, ecommerce-platform-api-notes
+
 > 多平台電商訂單管理系統。Spring Boot 3.5 + Kafka + PostgreSQL + Redis。
 > 整合 Momo / Shopee / Yahoo / PChome / Cyberbiz，統一管理商品、訂單、出貨與庫存。
 
@@ -320,7 +322,19 @@ isRollback=true (回補訂單)：
 ```
 適用於：FETCH_ORDERS, FETCH_ORDER_DETAIL, PROCESS_ORDER, SHIP_ORDER 及所有退貨相關 TaskType
 
-### 4. 分頁策略封裝（完全隱藏於 Channel Job）
+### 5. Translation Layer Rule（強制）— Channel Job 是唯一翻譯器
+
+**違反此規則 = 架構退化，每加一個通路就要改一遍。**
+
+- 所有 Kafka 訊息必須使用 OMS 內部 NanoID，禁止帶平台 ID（channelOrderId, channelProductId, channelSpecId 等）
+- Outbound action 訊息規則：
+  - UPDATE_INVENTORY / UPDATE_PRICE → body 帶 `sellPackId`，handler 查 sell_pack 取 channel ID
+  - SHIP_ORDER → body 帶 `orderId`，handler 查 orders 取 channel_order_id
+  - APPROVE_RETURN / REJECT_RETURN → body 帶 `returnId`，handler 查 refund_orders 取 channel_order_id
+- Inbound 例外：ORDER_UPSERT、RETURN_UPSERT 可帶 channelOrderId（因為內部 ID 尚未建立）
+- 詳見 `docs/3-EVENT-FLOW/CORE_CONTRACTS.md` §Translation Layer Rule
+
+### 6. 分頁策略封裝（完全隱藏於 Channel Job）
 - Shopee: Cursor-based pagination
 - Momo: Offset-based pagination + item-level 聚合
 - Yahoo: 時間範圍查詢（無分頁概念）

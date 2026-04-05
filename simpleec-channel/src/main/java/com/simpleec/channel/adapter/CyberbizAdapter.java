@@ -32,6 +32,7 @@ public class CyberbizAdapter implements ChannelAdapter {
      * @param token  Channel.token（作為 username）
      * @param secret Channel.token2（作為 secret key）
      */
+    @Override
     public void setCredentials(String token, String secret) {
         this.token = token;
         this.secret = secret;
@@ -495,6 +496,7 @@ public class CyberbizAdapter implements ChannelAdapter {
      * @param channelSpecId    Cyberbiz variant ID（sell_pack.channel_spec_id）
      * @param quantity         新的庫存量
      */
+    @Override
     public void updateVariantInventory(String channelProductId, String channelSpecId, int quantity) throws Exception {
         Map<String, String> params = new java.util.LinkedHashMap<>();
         params.put("inventory_quantity", String.valueOf(quantity));
@@ -514,6 +516,7 @@ public class CyberbizAdapter implements ChannelAdapter {
      * @param channelSpecId    Cyberbiz variant ID
      * @param price            新的售價（字串，保留小數點精度）
      */
+    @Override
     public void updateVariantPrice(String channelProductId, String channelSpecId, String price) throws Exception {
         Map<String, String> params = new java.util.LinkedHashMap<>();
         params.put("price", price);

@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
+
 /**
  * FETCH_RETURNS handler — fetches return/refund records from the platform
  * and publishes RETURN_UPSERT events to return.process.
@@ -75,13 +76,7 @@ public class FetchReturnsHandler {
                 log.error("FETCH_RETURNS failed for platform={} channel={}", platformCode, channelId, e);
             }
         } else {
-            // Other platforms: publish placeholder so the message isn't silently dropped
-            try {
-                publishReturnPlaceholder(platformCode, channelId, merchantId);
-            } catch (Exception e) {
-                log.error("Failed to publish FETCH_RETURNS placeholder for platform={}, channel={}",
-                        platformCode, channelId, e);
-            }
+            log.info("FETCH_RETURNS not yet implemented for platform={}, skipping", platformCode);
         }
     }
 
@@ -160,36 +155,4 @@ public class FetchReturnsHandler {
                 });
     }
 
-    private void publishReturnPlaceholder(String platformCode, String channelId, String merchantId)
-            throws Exception {
-        ObjectNode message = objectMapper.createObjectNode();
-
-        ObjectNode header = objectMapper.createObjectNode();
-        header.put("messageId", "msg_" + NanoIdUtil.generate());
-        header.put("requestId", "req_" + NanoIdUtil.generate());
-        header.put("taskType", TaskTypeEnum.RETURN_UPSERT.getCode());
-        header.put("platformId", platformCode);
-        header.put("channelId", channelId);
-        header.put("merchantId", merchantId);
-        header.put("timestamp", Instant.now().toString());
-        header.put("source", "channel_job");
-        header.put("version", 1);
-        header.put("isRollback", false);
-
-        ObjectNode body = objectMapper.createObjectNode();
-        body.put("stub", true);
-        body.put("note", "FETCH_RETURNS not yet implemented for platform: " + platformCode);
-
-        message.set("header", header);
-        message.set("body", body);
-
-        kafkaTemplate.send(TopicConstants.RETURN_PROCESS, channelId, message)
-                .whenComplete((result, ex) -> {
-                    if (ex != null) {
-                        log.error("Failed to publish FETCH_RETURNS placeholder for channel={}", channelId, ex);
-                    } else {
-                        log.info("Published FETCH_RETURNS placeholder: channel={} platform={}", channelId, platformCode);
-                    }
-                });
-    }
 }

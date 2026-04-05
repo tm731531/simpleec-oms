@@ -1,6 +1,6 @@
 # SimpleEC OMS — 資料庫 Schema 設計
 
-> 版本: v4（2026-02-09）
+> 版本: v5（2026-04-05）
 >
 > **PK 規則: 所有表的 PK 都是 VARCHAR(20)，程式端用 NanoID 產生。**
 
@@ -149,7 +149,10 @@ CREATE TABLE public.platform (
     actived          BOOLEAN       NOT NULL DEFAULT true,
     queue_topic      VARCHAR(128),
     currency         VARCHAR(3)    DEFAULT 'TWD',
-    ship_options     JSON,
+    ship_options     JSONB,
+    capabilities     JSONB         NOT NULL DEFAULT '{}',
+    -- known keys: multiLocation bool, webhook bool, asyncInventory bool
+    -- e.g. Shopify: {"multiLocation": true}
     created_at       TIMESTAMPTZ   NOT NULL DEFAULT now(),
     updated_at       TIMESTAMPTZ   NOT NULL DEFAULT now(),
     PRIMARY KEY (id)
@@ -329,6 +332,8 @@ CREATE TABLE public.sell_pack (
     selling_price        DECIMAL(12,2),          -- 通路售價
     quantity             INTEGER       NOT NULL DEFAULT 0,
     status               VARCHAR(20)   NOT NULL DEFAULT 'draft',
+    platform_metadata    JSONB,                  -- 平台特定 metadata（以平台名為 key）
+                                                 -- 例: { "shopify": { "inventory_item_id": "457924702", "location_id": "905684977" } }
     last_sync_at         TIMESTAMPTZ,
     created_at           TIMESTAMPTZ   NOT NULL DEFAULT now(),
     updated_at           TIMESTAMPTZ   NOT NULL DEFAULT now(),
@@ -359,6 +364,62 @@ CREATE UNIQUE INDEX idx_sellpack_upsert_key
   → sell_pack.sku → 查 product（by merchant_id + sku）
   → 找到 → sell_pack.product_id = product.id
   → 找不到 → 自動建立 product（sku 從平台取）
+```
+
+---
+
+### channel_location — 通路倉庫位置（僅有 location 概念的平台，如 Shopify）
+
+> 無 location 概念的平台（Shopee、Cyberbiz、Shopline 等）不建資料。
+> `is_sync_target = true` 代表 OMS 執行 UPDATE_INVENTORY 時推送到此 location。
+> 每個 channel 只能有一個 sync target（DB unique index 保證）。
+
+```sql
+CREATE TABLE public.channel_location (
+    id                   VARCHAR(20)  NOT NULL,
+    merchant_id          VARCHAR(20)  NOT NULL,
+    channel_id           VARCHAR(20)  NOT NULL,
+    platform_location_id VARCHAR(256) NOT NULL,  -- e.g. Shopify location_id
+    location_name        VARCHAR(256),
+    is_sync_target       BOOLEAN      NOT NULL DEFAULT false,
+    created_at           TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at           TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    PRIMARY KEY (id),
+    CONSTRAINT fk_channel_location_channel FOREIGN KEY (channel_id)
+        REFERENCES public.channel (id) ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT uq_channel_location UNIQUE (channel_id, platform_location_id)
+);
+
+CREATE UNIQUE INDEX idx_channel_location_one_sync_target
+    ON public.channel_location (channel_id) WHERE is_sync_target = true;
+```
+
+---
+
+### sell_pack_inventory — 賣場檔庫存快照（per sell_pack × per location）
+
+> `sell_pack.quantity` = OMS 主庫存（internal master）
+> `sell_pack_inventory` = 各平台庫存同步快照
+>
+> 無 location 概念的平台（Shopee、Cyberbiz）：一筆，`channel_location_id = NULL`
+> 有 location 概念的平台（Shopify）：多筆，每個倉庫一筆
+
+```sql
+CREATE TABLE public.sell_pack_inventory (
+    id                  VARCHAR(20)  NOT NULL,
+    sell_pack_id        VARCHAR(20)  NOT NULL,
+    channel_location_id VARCHAR(20),             -- NULL = 平台無 location 概念
+    quantity            INTEGER      NOT NULL DEFAULT 0,
+    last_synced_at      TIMESTAMPTZ,
+    created_at          TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at          TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    PRIMARY KEY (id),
+    CONSTRAINT fk_sell_pack_inventory_pack FOREIGN KEY (sell_pack_id)
+        REFERENCES public.sell_pack (id) ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT fk_sell_pack_inventory_location FOREIGN KEY (channel_location_id)
+        REFERENCES public.channel_location (id) ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT uq_sell_pack_inventory UNIQUE (sell_pack_id, COALESCE(channel_location_id, ''))
+);
 ```
 
 ---
