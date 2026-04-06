@@ -134,18 +134,20 @@ public class UserOrderController {
         // Set encryption context for decrypting PII fields in Order entities
         EncryptionContext.setMerchantId(principal.getMerchantId());
         try {
-            // 轉換 1-indexed 頁碼到 0-indexed (Spring Data 期望的格式)
+            // 最新訂單優先：COALESCE(channel_created_at, created_at) DESC，用 native query 支持
             PageRequest pageable = PageRequest.of(page - 1, pageSize);
             Page<Order> orders;
             if (status != null) {
                 try {
                     OrderStatusEnum statusEnum = OrderStatusEnum.fromCode(status);
-                    orders = orderRepository.findByMerchantIdAndOrderStatus(principal.getMerchantId(), statusEnum, pageable);
+                    orders = orderRepository.findByMerchantIdAndOrderStatusOrderByNewest(
+                        principal.getMerchantId(), statusEnum.getCode(), pageable);
                 } catch (IllegalArgumentException e) { orders = Page.empty(); }
             } else if (channelId != null) {
-                orders = orderRepository.findByMerchantIdAndChannelId(principal.getMerchantId(), channelId, pageable);
+                orders = orderRepository.findByMerchantIdAndChannelIdOrderByNewest(
+                    principal.getMerchantId(), channelId, pageable);
             } else {
-                orders = orderRepository.findByMerchantId(principal.getMerchantId(), pageable);
+                orders = orderRepository.findByMerchantIdOrderByNewest(principal.getMerchantId(), pageable);
             }
 
             // 轉換 Order 到 OrderVO，並填充 platform 信息

@@ -26,14 +26,39 @@ public interface OrderRepository extends JpaRepository<Order, String> {
     Optional<Order> findByChannelIdAndChannelOrderId(String channelId, String channelOrderId);
 
     /**
+     * 查詢商家的訂單（分頁），以最新訂單優先
+     * 排序：COALESCE(channel_created_at, created_at) DESC
+     */
+    @Query(value = "SELECT * FROM orders WHERE merchant_id = :merchantId ORDER BY COALESCE(channel_created_at, created_at) DESC",
+           countQuery = "SELECT COUNT(*) FROM orders WHERE merchant_id = :merchantId",
+           nativeQuery = true)
+    Page<Order> findByMerchantIdOrderByNewest(@Param("merchantId") String merchantId, Pageable pageable);
+
+    /**
      * 查詢商家的訂單（分頁）
      */
     Page<Order> findByMerchantId(String merchantId, Pageable pageable);
 
     /**
+     * 查詢特定狀態的訂單（分頁），以最新訂單優先
+     */
+    @Query(value = "SELECT * FROM orders WHERE merchant_id = :merchantId AND order_status = :status ORDER BY COALESCE(channel_created_at, created_at) DESC",
+           countQuery = "SELECT COUNT(*) FROM orders WHERE merchant_id = :merchantId AND order_status = :status",
+           nativeQuery = true)
+    Page<Order> findByMerchantIdAndOrderStatusOrderByNewest(@Param("merchantId") String merchantId, @Param("status") String status, Pageable pageable);
+
+    /**
      * 查詢特定狀態的訂單（分頁）
      */
     Page<Order> findByMerchantIdAndOrderStatus(String merchantId, OrderStatusEnum status, Pageable pageable);
+
+    /**
+     * 查詢特定通路的訂單（分頁），以最新訂單優先
+     */
+    @Query(value = "SELECT * FROM orders WHERE merchant_id = :merchantId AND channel_id = :channelId ORDER BY COALESCE(channel_created_at, created_at) DESC",
+           countQuery = "SELECT COUNT(*) FROM orders WHERE merchant_id = :merchantId AND channel_id = :channelId",
+           nativeQuery = true)
+    Page<Order> findByMerchantIdAndChannelIdOrderByNewest(@Param("merchantId") String merchantId, @Param("channelId") String channelId, Pageable pageable);
 
     /**
      * 查詢特定通路的訂單（分頁）
