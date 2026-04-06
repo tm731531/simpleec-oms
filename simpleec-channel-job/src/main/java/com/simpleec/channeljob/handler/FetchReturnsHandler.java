@@ -2,6 +2,7 @@ package com.simpleec.channeljob.handler;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.simpleec.channel.adapter.ChannelAdapter;
+import com.simpleec.channel.registry.ChannelAdapterRegistry;
 import com.simpleec.channeljob.entity.Channel;
 import com.simpleec.channeljob.service.ChannelService;
 import com.simpleec.common.constants.TopicConstants;
@@ -40,7 +41,7 @@ public class FetchReturnsHandler {
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final ObjectMapper objectMapper;
     private final ChannelService channelService;
-    private final ChannelAdapter cyberbizAdapter;
+    private final ChannelAdapterRegistry adapterRegistry;
 
     public void handleFetchReturns(String platformCode, String channelId,
                                    String merchantId, long baseTimestamp) {
@@ -55,9 +56,10 @@ public class FetchReturnsHandler {
                 return;
             }
             try {
-                cyberbizAdapter.setCredentials(channel.getToken(), channel.getToken2());
+                ChannelAdapter adapter = adapterRegistry.getAdapter(platformCode);
+                adapter.setCredentials(channelId, channel.getToken(), channel.getToken2());
 
-                List<Map<String, Object>> returns = cyberbizAdapter.fetchReturnsByTimestamp(baseTimestamp);
+                List<Map<String, Object>> returns = adapter.fetchReturnsByTimestamp(baseTimestamp);
                 if (returns == null) {
                     log.warn("FETCH_RETURNS: adapter returned null, treating as empty list for channel={}", channelId);
                     returns = java.util.Collections.emptyList();

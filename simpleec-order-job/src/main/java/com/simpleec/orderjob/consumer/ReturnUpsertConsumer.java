@@ -63,7 +63,7 @@ public class ReturnUpsertConsumer {
             SchemaVersionHandler.validate(json);
         } catch (UnsupportedSchemaVersionException e) {
             log.error("Unsupported schema version in RETURN_UPSERT message: {}", e.getMessage());
-            kafkaTemplate.send(TopicConstants.TASK_DLT, "ReturnUpsert", json);
+            kafkaTemplate.send(TopicConstants.TASK_DLT, "ReturnUpsert", messageJson);
             return;
         }
 

@@ -24,18 +24,56 @@ import java.util.*;
 public class CyberbizAdapter implements ChannelAdapter {
 
     private final CyberbizApiClient cyberbizApiClient;
-    private String token;      // 由 handler 設置（作為 username）
-    private String secret;     // 由 handler 設置（Channel.token2）
+
+    /**
+     * Per-channel credentials store.
+     * Key = channelId, Value = [token, secret].
+     * ConcurrentHashMap eliminates the race condition where thread A sets credentials
+     * and thread B immediately overwrites them before thread A uses them.
+     */
+    private final java.util.concurrent.ConcurrentHashMap<String, String[]> credsByChannel =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * Thread-local tracking of the channelId set by the current thread.
+     * Allows credential lookup in interface methods that have no channelId parameter
+     * (e.g. updateVariantInventory, approveReturn) after the handler calls setCredentials().
+     */
+    private final ThreadLocal<String> currentChannelId = new ThreadLocal<>();
 
     /**
      * 設置 Cyberbiz API credentials（由 handler 調用）
-     * @param token  Channel.token（作為 username）
-     * @param secret Channel.token2（作為 secret key）
+     * @param channelId channel instance ID (used as key)
+     * @param token     Channel.token（作為 username）
+     * @param secret    Channel.token2（作為 secret key）
      */
     @Override
-    public void setCredentials(String token, String secret) {
-        this.token = token;
-        this.secret = secret;
+    public void setCredentials(String channelId, String token, String secret) {
+        credsByChannel.put(channelId, new String[]{token, secret});
+        currentChannelId.set(channelId);
+    }
+
+    /**
+     * Returns the [token, secret] pair for the given channelId, or throws if not set.
+     */
+    private String[] requireCreds(String channelId) {
+        String[] c = credsByChannel.get(channelId);
+        if (c == null) {
+            throw new IllegalStateException("No credentials for channel: " + channelId + " — call setCredentials() first");
+        }
+        return c;
+    }
+
+    /**
+     * Returns the [token, secret] pair for the channel set by the current thread via setCredentials().
+     * Used by interface methods that have no channelId parameter.
+     */
+    private String[] requireCredsForCurrentThread() {
+        String channelId = currentChannelId.get();
+        if (channelId == null) {
+            throw new IllegalStateException("No active channel — call setCredentials(channelId, token, secret) first");
+        }
+        return requireCreds(channelId);
     }
 
     @Override
@@ -63,10 +101,8 @@ public class CyberbizAdapter implements ChannelAdapter {
     public List<Map<String, Object>> fetchOrders(String channelId, String timeRange) throws Exception {
         log.info("Fetching Cyberbiz complete orders for channel {} with timeRange: {}", channelId, timeRange);
 
-        if (token == null || token.isEmpty() || secret == null || secret.isEmpty()) {
-            log.error("Credentials not set for channel {}", channelId);
-            throw new IllegalArgumentException("Credentials not set - call setCredentials() first");
-        }
+        String[] c = requireCreds(channelId);
+        String token = c[0]; String secret = c[1];
 
         // Mode A: 直接使用 1 天時間窗口（Cyberbiz API 特性）
         long now = Instant.now().getEpochSecond();
@@ -100,16 +136,14 @@ public class CyberbizAdapter implements ChannelAdapter {
     public List<String> fetchOrderList(String channelId, String timeRange) throws Exception {
         log.info("Fetching Cyberbiz order list for channel {} with timeRange: {}", channelId, timeRange);
 
-        if (token == null || token.isEmpty() || secret == null || secret.isEmpty()) {
-            log.error("Credentials not set for channel {}", channelId);
-            throw new IllegalArgumentException("Credentials not set - call setCredentials() first");
-        }
+        String[] c = requireCreds(channelId);
+        String token = c[0]; String secret = c[1];
 
         Set<String> orderIds = new LinkedHashSet<>();
 
         // 第一次呼叫：查詢該時段內建立的訂單
         try {
-            List<String> createdOrders = fetchOrdersCreatedInTimeRange(timeRange);
+            List<String> createdOrders = fetchOrdersCreatedInTimeRange(token, secret, timeRange);
             orderIds.addAll(createdOrders);
             log.debug("Fetched {} orders created in timeRange from Cyberbiz", createdOrders.size());
         } catch (Exception e) {
@@ -119,7 +153,7 @@ public class CyberbizAdapter implements ChannelAdapter {
 
         // 第二次呼叫：查詢該時段內更新的訂單
         try {
-            List<String> updatedOrders = fetchOrdersUpdatedInTimeRange(timeRange);
+            List<String> updatedOrders = fetchOrdersUpdatedInTimeRange(token, secret, timeRange);
             orderIds.addAll(updatedOrders);
             log.debug("Fetched {} orders updated in timeRange from Cyberbiz", updatedOrders.size());
         } catch (Exception e) {
@@ -146,16 +180,14 @@ public class CyberbizAdapter implements ChannelAdapter {
     public List<String> fetchOrderListByTimestamp(String channelId, long baseTimestamp) throws Exception {
         log.info("Fetching Cyberbiz order list for channel {} using baseTimestamp: {}", channelId, baseTimestamp);
 
-        if (token == null || token.isEmpty() || secret == null || secret.isEmpty()) {
-            log.error("Credentials not set for channel {}", channelId);
-            throw new IllegalArgumentException("Credentials not set - call setCredentials() first");
-        }
+        String[] c = requireCreds(channelId);
+        String token = c[0]; String secret = c[1];
 
         Set<String> orderIds = new LinkedHashSet<>();
 
         // 第一次呼叫：查詢該時段內建立的訂單（7 天窗口）
         try {
-            List<String> createdOrders = fetchOrdersCreatedInTimeRangeByTimestamp(baseTimestamp);
+            List<String> createdOrders = fetchOrdersCreatedInTimeRangeByTimestamp(token, secret, baseTimestamp);
             orderIds.addAll(createdOrders);
             log.debug("Fetched {} orders created in timeRange from Cyberbiz", createdOrders.size());
         } catch (Exception e) {
@@ -165,7 +197,7 @@ public class CyberbizAdapter implements ChannelAdapter {
 
         // 第二次呼叫：查詢該時段內更新的訂單（1 天窗口）
         try {
-            List<String> updatedOrders = fetchOrdersUpdatedInTimeRangeByTimestamp(baseTimestamp);
+            List<String> updatedOrders = fetchOrdersUpdatedInTimeRangeByTimestamp(token, secret, baseTimestamp);
             orderIds.addAll(updatedOrders);
             log.debug("Fetched {} orders updated in timeRange from Cyberbiz", updatedOrders.size());
         } catch (Exception e) {
@@ -182,7 +214,7 @@ public class CyberbizAdapter implements ChannelAdapter {
      *
      * 時間窗口：baseTimestamp - 7 天 ～ baseTimestamp
      */
-    private List<String> fetchOrdersCreatedInTimeRangeByTimestamp(long baseTimestamp) {
+    private List<String> fetchOrdersCreatedInTimeRangeByTimestamp(String token, String secret, long baseTimestamp) {
         log.debug("Fetching orders created relative to baseTimestamp: {}", baseTimestamp);
         // Cyberbiz start_time 需要 7 天的時間窗口才能找到訂單
         long sevenDaysAgo = baseTimestamp - (7 * 86400);  // 7 days before baseTimestamp
@@ -194,7 +226,7 @@ public class CyberbizAdapter implements ChannelAdapter {
      *
      * 時間窗口：baseTimestamp - 1 天 ～ baseTimestamp
      */
-    private List<String> fetchOrdersUpdatedInTimeRangeByTimestamp(long baseTimestamp) {
+    private List<String> fetchOrdersUpdatedInTimeRangeByTimestamp(String token, String secret, long baseTimestamp) {
         log.debug("Fetching orders updated relative to baseTimestamp: {}", baseTimestamp);
         long oneDayAgo = baseTimestamp - 86400;  // 1 day before baseTimestamp
         return cyberbizApiClient.getOrdersUpdatedInTimeRange(token, secret, oneDayAgo, baseTimestamp);
@@ -210,7 +242,7 @@ public class CyberbizAdapter implements ChannelAdapter {
      * @deprecated 使用 {@link #fetchOrderListByTimestamp(String, long)} 代替
      */
     @Deprecated(since = "1.0", forRemoval = false)
-    private List<String> fetchOrdersCreatedInTimeRange(String timeRange) {
+    private List<String> fetchOrdersCreatedInTimeRange(String token, String secret, String timeRange) {
         log.debug("Fetching orders created in timeRange: {} (using current time as base)", timeRange);
         long now = Instant.now().getEpochSecond();
         long sevenDaysAgo = now - (7 * 86400);  // 7 days window for testing
@@ -227,7 +259,7 @@ public class CyberbizAdapter implements ChannelAdapter {
      * @deprecated 使用 {@link #fetchOrderListByTimestamp(String, long)} 代替
      */
     @Deprecated(since = "1.0", forRemoval = false)
-    private List<String> fetchOrdersUpdatedInTimeRange(String timeRange) {
+    private List<String> fetchOrdersUpdatedInTimeRange(String token, String secret, String timeRange) {
         log.debug("Fetching orders updated in timeRange: {} (using current time as base)", timeRange);
         long now = Instant.now().getEpochSecond();
         long oneDayAgo = now - 86400;  // 24 hour window for updated orders
@@ -247,10 +279,8 @@ public class CyberbizAdapter implements ChannelAdapter {
     public Map<String, Object> fetchOrderDetail(String channelId, String orderId) throws Exception {
         log.info("Fetching order detail from Cyberbiz for channelId: {}, orderId: {}", channelId, orderId);
 
-        if (token == null || token.isEmpty() || secret == null || secret.isEmpty()) {
-            log.error("Credentials not set for channel {}", channelId);
-            throw new IllegalArgumentException("Credentials not set - call setCredentials() first");
-        }
+        String[] c = requireCreds(channelId);
+        String token = c[0]; String secret = c[1];
 
         // Call the API client to get raw Cyberbiz order data
         Map<String, Object> raw = cyberbizApiClient.getOrderDetail(token, secret, orderId);
@@ -366,10 +396,8 @@ public class CyberbizAdapter implements ChannelAdapter {
     public List<Map<String, Object>> fetchReturns(String channelId, String timeRange) throws Exception {
         log.info("Fetching returns from Cyberbiz for channel {} with timeRange: {}", channelId, timeRange);
 
-        if (token == null || token.isEmpty() || secret == null || secret.isEmpty()) {
-            log.error("Credentials not set for channel {}", channelId);
-            throw new IllegalArgumentException("Credentials not set - call setCredentials() first");
-        }
+        String[] c = requireCreds(channelId);
+        String token = c[0]; String secret = c[1];
 
         long now = Instant.now().getEpochSecond();
         long oneHourAgo = now - 3600;  // 1 hour window for recent refunds
@@ -385,10 +413,10 @@ public class CyberbizAdapter implements ChannelAdapter {
      * @param channelId 通路 ID（credentials 必須已透過 setCredentials() 設置）
      * @return 所有商品列表
      */
+    @Override
     public List<Map<String, Object>> fetchProducts(String channelId) throws Exception {
-        if (token == null || token.isEmpty() || secret == null || secret.isEmpty()) {
-            throw new IllegalArgumentException("Credentials not set for channel " + channelId);
-        }
+        String[] c = requireCreds(channelId);
+        String token = c[0]; String secret = c[1];
 
         List<Map<String, Object>> allProducts = new ArrayList<>();
         int page = 1;
@@ -422,6 +450,11 @@ public class CyberbizAdapter implements ChannelAdapter {
      */
     @Override
     public void shipOrder(String orderId, Map<String, Object> shippingInfo) throws Exception {
+        // channelId must be included in shippingInfo so we can look up per-channel credentials
+        String channelId    = shippingInfo.getOrDefault("channelId", "").toString();
+        String[] c = requireCreds(channelId);
+        String token = c[0]; String secret = c[1];
+
         String lineItemIds  = shippingInfo.getOrDefault("lineItemIds", "").toString();
         String tracking     = shippingInfo.getOrDefault("trackingNumber", "").toString();
         String carrier      = shippingInfo.getOrDefault("carrier", "other").toString();
@@ -469,10 +502,8 @@ public class CyberbizAdapter implements ChannelAdapter {
     public List<Map<String, Object>> fetchOrdersByTimestamp(String channelId, long baseTimestamp) throws Exception {
         log.info("Fetching Cyberbiz complete orders for channel {} using baseTimestamp: {}", channelId, baseTimestamp);
 
-        if (token == null || token.isEmpty() || secret == null || secret.isEmpty()) {
-            log.error("Credentials not set for channel {}", channelId);
-            throw new IllegalArgumentException("Credentials not set - call setCredentials() first");
-        }
+        String[] c = requireCreds(channelId);
+        final String token = c[0]; final String secret = c[1];
 
         // 使用 LinkedHashMap 去重：key = order id，value = order data
         Map<Integer, Map<String, Object>> ordersMap = new LinkedHashMap<>();
@@ -557,6 +588,8 @@ public class CyberbizAdapter implements ChannelAdapter {
      */
     @Override
     public void updateVariantInventory(String channelProductId, String channelSpecId, int quantity) throws Exception {
+        String[] c = requireCredsForCurrentThread();
+        String token = c[0]; String secret = c[1];
         Map<String, String> params = new java.util.LinkedHashMap<>();
         params.put("inventory_quantity", String.valueOf(quantity));
         boolean ok = cyberbizApiClient.updateProductVariant(token, secret, channelProductId, channelSpecId, params);
@@ -577,6 +610,8 @@ public class CyberbizAdapter implements ChannelAdapter {
      */
     @Override
     public void updateVariantPrice(String channelProductId, String channelSpecId, String price) throws Exception {
+        String[] c = requireCredsForCurrentThread();
+        String token = c[0]; String secret = c[1];
         Map<String, String> params = new java.util.LinkedHashMap<>();
         params.put("price", price);
         boolean ok = cyberbizApiClient.updateProductVariant(token, secret, channelProductId, channelSpecId, params);
@@ -593,6 +628,8 @@ public class CyberbizAdapter implements ChannelAdapter {
      * @param channelOrderId Cyberbiz 訂單 ID
      */
     public void approveReturn(String channelOrderId) throws Exception {
+        String[] c = requireCredsForCurrentThread();
+        String token = c[0]; String secret = c[1];
         boolean ok = cyberbizApiClient.updateOrderManualReturn(token, secret, channelOrderId, "manual_returning");
         if (!ok) {
             throw new RuntimeException("Cyberbiz approveReturn failed: orderId=" + channelOrderId);
@@ -607,6 +644,8 @@ public class CyberbizAdapter implements ChannelAdapter {
      * @param channelOrderId Cyberbiz 訂單 ID
      */
     public void rejectReturn(String channelOrderId) throws Exception {
+        String[] c = requireCredsForCurrentThread();
+        String token = c[0]; String secret = c[1];
         boolean ok = cyberbizApiClient.updateOrderManualReturn(token, secret, channelOrderId, "manual_return_refuse");
         if (!ok) {
             throw new RuntimeException("Cyberbiz rejectReturn failed: orderId=" + channelOrderId);
@@ -625,6 +664,9 @@ public class CyberbizAdapter implements ChannelAdapter {
      * @return list of return records, each containing a "channelOrderId" field
      */
     public List<Map<String, Object>> fetchReturnsByTimestamp(long baseTimestamp) throws Exception {
+        String[] c = requireCredsForCurrentThread();
+        String token = c[0]; String secret = c[1];
+
         List<Map<String, Object>> result = new ArrayList<>();
 
         long oneHourAgo = baseTimestamp - 3600;

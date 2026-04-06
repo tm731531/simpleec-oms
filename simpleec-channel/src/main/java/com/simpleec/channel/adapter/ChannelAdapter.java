@@ -146,8 +146,23 @@ public interface ChannelAdapter {
     /**
      * 設置 API credentials（由 Channel Job handler 調用）
      * 每個平台 adapter 可 override 此方法設定自己的認證方式。
+     *
+     * @param channelId channel instance ID (used as key for concurrent credential storage)
+     * @param token     platform API token (Channel.token)
+     * @param secret    platform API secret (Channel.token2)
      */
-    default void setCredentials(String token, String secret) {
+    default void setCredentials(String channelId, String token, String secret) {
         // no-op by default; adapters that need credentials should override
+    }
+
+    /**
+     * Fetch product catalogue (variants) from the platform.
+     * Used by SYNC_PACK flow to build sell_pack records.
+     *
+     * @param channelId channel instance ID
+     * @return list of products, each with a "variants" list
+     */
+    default List<Map<String, Object>> fetchProducts(String channelId) throws Exception {
+        throw new UnsupportedOperationException("fetchProducts not supported for platform: " + getPlatformCode());
     }
 }

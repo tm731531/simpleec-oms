@@ -2,6 +2,7 @@ package com.simpleec.channeljob.handler;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.simpleec.channel.adapter.ChannelAdapter;
+import com.simpleec.channel.registry.ChannelAdapterRegistry;
 import com.simpleec.channeljob.entity.Channel;
 import com.simpleec.channeljob.entity.OrderRef;
 import com.simpleec.channeljob.entity.ReturnOrderRef;
@@ -26,7 +27,7 @@ import org.springframework.stereotype.Component;
 public class ApproveReturnHandler {
 
     private final ChannelService channelService;
-    private final ChannelAdapter cyberbizAdapter;
+    private final ChannelAdapterRegistry adapterRegistry;
     private final OrderRefRepository orderRefRepository;
     private final ReturnOrderRefRepository returnOrderRefRepository;
 
@@ -55,8 +56,9 @@ public class ApproveReturnHandler {
                 return;
             }
             try {
-                cyberbizAdapter.setCredentials(channel.getToken(), channel.getToken2());
-                cyberbizAdapter.approveReturn(channelOrderId);
+                ChannelAdapter adapter = adapterRegistry.getAdapter(platformCode);
+                adapter.setCredentials(channelId, channel.getToken(), channel.getToken2());
+                adapter.approveReturn(channelOrderId);
                 log.info("APPROVE_RETURN success: platform={} channel={} orderId={} returnId={}",
                         platformCode, channelId, channelOrderId, returnId);
             } catch (Exception e) {

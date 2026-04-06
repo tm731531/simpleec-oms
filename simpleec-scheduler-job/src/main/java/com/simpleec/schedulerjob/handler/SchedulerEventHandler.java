@@ -128,7 +128,7 @@ public class SchedulerEventHandler {
                     String topic = TopicConstants.platformSlowTopic(platformId);
                     ObjectNode message = buildFetchOrdersMessage(TaskTypeEnum.FETCH_ORDERS, timestamp, channel);
 
-                    kafkaTemplate.send(topic, message.get("header").get("requestId").asText(), message);
+                    kafkaTemplate.send(topic, channel.getId(), message);
                     log.debug("Sent FETCH_ORDERS to {} topic for channel {}", topic, channel.getId());
                 } catch (Exception e) {
                     log.error("Error dispatching FETCH_ORDERS for channel {}", channel.getId(), e);
@@ -161,7 +161,7 @@ public class SchedulerEventHandler {
                     String topic = TopicConstants.platformSlowTopic(platformId);
                     ObjectNode message = buildFetchOrdersMessage(TaskTypeEnum.FETCH_RETURNS, timestamp, channel);
 
-                    kafkaTemplate.send(topic, message.get("header").get("requestId").asText(), message);
+                    kafkaTemplate.send(topic, channel.getId(), message);
                     log.debug("Sent FETCH_RETURNS to {} topic for channel {}", topic, channel.getId());
                 } catch (Exception e) {
                     log.error("Error dispatching FETCH_RETURNS for channel {}", channel.getId(), e);
@@ -233,7 +233,6 @@ public class SchedulerEventHandler {
         header.put("priority", "NORMAL");
 
         ObjectNode body = objectMapper.createObjectNode();
-        body.put("timestamp", DateUtil.toIsoString(timestamp));
 
         message.set("header", header);
         message.set("body", body);

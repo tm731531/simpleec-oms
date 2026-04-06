@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.simpleec.channel.adapter.ChannelAdapter;
-import com.simpleec.channel.adapter.CyberbizAdapter;
 import com.simpleec.channeljob.entity.Channel;
 import com.simpleec.channeljob.service.ChannelService;
 import com.simpleec.common.enums.TaskTypeEnum;
@@ -55,19 +54,17 @@ public class ModeBOrderListHandler {
         log.info("Processing Mode B order list for {} from {} (baseTimestamp: {})", merchantId, channelId, baseTimestamp);
 
         try {
-            // 若是 CyberbizAdapter，設置 token 和 token2
-            if (adapter instanceof CyberbizAdapter) {
-                Channel channel = channelService.getChannel(channelId);
-                if (channel == null) {
-                    throw new IllegalArgumentException("Channel not found for: " + channelId);
-                }
-                String token = channel.getToken();
-                String token2 = channel.getToken2();
-                if (token == null || token.isEmpty() || token2 == null || token2.isEmpty()) {
-                    throw new IllegalArgumentException("Channel credentials not fully configured for: " + channelId);
-                }
-                ((CyberbizAdapter) adapter).setCredentials(token, token2);
+            // Set credentials for any adapter that requires them (via ChannelAdapter interface)
+            Channel channel = channelService.getChannel(channelId);
+            if (channel == null) {
+                throw new IllegalArgumentException("Channel not found for: " + channelId);
             }
+            String token = channel.getToken();
+            String token2 = channel.getToken2();
+            if (token == null || token.isEmpty() || token2 == null || token2.isEmpty()) {
+                throw new IllegalArgumentException("Channel credentials not fully configured for: " + channelId);
+            }
+            adapter.setCredentials(channelId, token, token2);
 
             // 第 1 步：從 API 拉取訂單 ID 列表（不含詳情）
             // 傳遞 baseTimestamp 作為時間窗口的基礎（心跳時間戳）
@@ -124,10 +121,13 @@ public class ModeBOrderListHandler {
         // 構建 header
         ObjectNode header = objectMapper.createObjectNode();
         header.put("messageId", "msg_" + NanoIdUtil.generate());
+        header.put("requestId", "req_" + NanoIdUtil.generate());
         header.put("taskType", TaskTypeEnum.FETCH_ORDER_DETAIL.getCode());
         header.put("channelId", channelId);
         header.put("merchantId", merchantId);
-        header.put("timestamp", Instant.now().toString());
+        header.put("platformId", adapter.getPlatformCode());
+        header.put("source", "channel_job");
+        header.put("timestamp", Instant.ofEpochSecond(baseTimestamp).toString());
         header.put("version", 1);
         message.set("header", header);
 

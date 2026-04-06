@@ -51,9 +51,8 @@ public class HeartbeatJob {
             header.put("version", 1);
             header.put("isRollback", false);
 
-            // Body (時間戳和分鐘位用於路由決策)
+            // Body (分鐘位用於路由決策；timestamp 已在 header 中)
             ObjectNode body = objectMapper.createObjectNode();
-            body.put("timestamp", now);
             body.put("minute", instant.getEpochSecond() / 60);
             body.put("minuteOfHour", instant.atZone(java.time.ZoneId.of("UTC")).getMinute());
             body.put("secondOfMinute", instant.atZone(java.time.ZoneId.of("UTC")).getSecond());

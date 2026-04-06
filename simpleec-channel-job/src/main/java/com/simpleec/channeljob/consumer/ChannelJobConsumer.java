@@ -1,7 +1,7 @@
 package com.simpleec.channeljob.consumer;
 
 import com.simpleec.channel.adapter.ChannelAdapter;
-import com.simpleec.channel.adapter.CyberbizAdapter;
+import com.simpleec.channel.registry.ChannelAdapterRegistry;
 import com.simpleec.channeljob.entity.Channel;
 import com.simpleec.channeljob.handler.ApproveReturnHandler;
 import com.simpleec.channeljob.handler.FetchReturnsHandler;
@@ -67,6 +67,7 @@ public class ChannelJobConsumer {
     private final ChannelService channelService;
     private final HealthCheckService healthCheckService;
     private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final ChannelAdapterRegistry adapterRegistry;
 
     @Autowired(required = false)
     private KafkaListenerEndpointRegistry kafkaListenerEndpointRegistry;
@@ -79,12 +80,6 @@ public class ChannelJobConsumer {
 
     @Autowired(required = false)
     private org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory<String, Object> kafkaListenerContainerFactory;
-
-    // Platform-specific adapters (must be registered as Spring beans)
-    private final ChannelAdapter shopifyAdapter;
-    private final ChannelAdapter easystoreAdapter;
-    private final ChannelAdapter shopeeAdapter;
-    private final ChannelAdapter cyberbizAdapter;
 
     @Value("${JOB_CHANNEL_TOPICS:}")
     private String topicsConfig;
@@ -286,25 +281,17 @@ public class ChannelJobConsumer {
         try {
             // Use path() instead of get() to handle missing fields safely
             String timeRange = body.path("timeRange").asText("last_5_minutes");
-            ChannelAdapter adapter = getAdapter(platformCode);
+            ChannelAdapter adapter = adapterRegistry.getAdapter(platformCode);
 
-            if (adapter == null) {
-                log.error("No adapter found for platform: {}", platformCode);
-                return;
+            // Set credentials for any adapter that requires them
+            com.simpleec.channeljob.entity.Channel channel = channelService.getChannel(channelId);
+            if (channel == null) {
+                throw new IllegalArgumentException("Channel not found for: " + channelId);
             }
-
-            // 若是 CyberbizAdapter，設置 token 和 token2
-            if (adapter instanceof CyberbizAdapter) {
-                com.simpleec.channeljob.entity.Channel channel = channelService.getChannel(channelId);
-                if (channel == null) {
-                    throw new IllegalArgumentException("Channel not found for: " + channelId);
-                }
-                String token = channel.getToken();
-                String token2 = channel.getToken2();
-                if (token == null || token.isEmpty() || token2 == null || token2.isEmpty()) {
-                    throw new IllegalArgumentException("Channel credentials not fully configured for: " + channelId);
-                }
-                ((CyberbizAdapter) adapter).setCredentials(token, token2);
+            String token = channel.getToken();
+            String token2 = channel.getToken2();
+            if (token != null && !token.isEmpty()) {
+                adapter.setCredentials(channelId, token, token2 != null ? token2 : "");
             }
 
             // 根據 Mode 調用不同的處理邏輯
@@ -330,18 +317,14 @@ public class ChannelJobConsumer {
      */
     private void handleSyncPack(String platformCode, String channelId, String merchantId) {
         try {
-            ChannelAdapter adapter = getAdapter(platformCode);
-            if (adapter == null) {
+            ChannelAdapter adapter;
+            try {
+                adapter = adapterRegistry.getAdapter(platformCode);
+            } catch (IllegalArgumentException e) {
                 log.error("No adapter found for platform: {}", platformCode);
                 return;
             }
 
-            if (!(adapter instanceof CyberbizAdapter)) {
-                log.warn("SYNC_PACK not supported for platform: {} (only cyberbiz implemented)", platformCode);
-                return;
-            }
-
-            CyberbizAdapter cyberbiz = (CyberbizAdapter) adapter;
             com.simpleec.channeljob.entity.Channel channel = channelService.getChannel(channelId);
             if (channel == null) {
                 log.error("Channel not found: {}", channelId);
@@ -353,9 +336,9 @@ public class ChannelJobConsumer {
                 log.error("Channel credentials not configured for SYNC_PACK: {}", channelId);
                 return;
             }
-            cyberbiz.setCredentials(token, token2);
+            adapter.setCredentials(channelId, token, token2);
 
-            syncPackChannelHandler.handleSyncPack(platformCode, channelId, merchantId, cyberbiz);
+            syncPackChannelHandler.handleSyncPack(platformCode, channelId, merchantId, adapter);
 
         } catch (Exception e) {
             log.error("Error handling SYNC_PACK for platform={} channel={}", platformCode, channelId, e);
@@ -381,12 +364,7 @@ public class ChannelJobConsumer {
     private void handleFetchOrderDetail(String platformCode, String channelId, String merchantId,
                                         String channelOrderId) {
         try {
-            ChannelAdapter adapter = getAdapter(platformCode);
-
-            if (adapter == null) {
-                log.error("No adapter found for platform: {}", platformCode);
-                return;
-            }
+            ChannelAdapter adapter = adapterRegistry.getAdapter(platformCode);
 
             // Mode B: 拉取單筆訂單詳情
             modeBOrderDetailHandler.handleModeBOrderDetail(merchantId, channelId, channelOrderId, adapter);
@@ -394,25 +372,6 @@ public class ChannelJobConsumer {
 
         } catch (Exception e) {
             log.error("Error handling FETCH_ORDER_DETAIL for {}", channelOrderId, e);
-        }
-    }
-
-    /**
-     * 根據 platform code 獲取適配器
-     */
-    private ChannelAdapter getAdapter(String platformCode) {
-        switch (platformCode.toLowerCase()) {
-            case "shopify":
-                return shopifyAdapter;
-            case "easystore":
-                return easystoreAdapter;
-            case "shopee":
-                return shopeeAdapter;
-            case "cyberbiz":
-                return cyberbizAdapter;
-            default:
-                log.warn("Unknown platform: {}", platformCode);
-                return null;
         }
     }
 

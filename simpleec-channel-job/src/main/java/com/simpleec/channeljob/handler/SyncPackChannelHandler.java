@@ -1,6 +1,6 @@
 package com.simpleec.channeljob.handler;
 
-import com.simpleec.channel.adapter.CyberbizAdapter;
+import com.simpleec.channel.adapter.ChannelAdapter;
 import com.simpleec.common.constants.TopicConstants;
 import com.simpleec.common.enums.TaskTypeEnum;
 import com.simpleec.common.util.NanoIdUtil;
@@ -45,7 +45,7 @@ public class SyncPackChannelHandler {
      * @param adapter      CyberbizAdapter with credentials already set
      */
     public void handleSyncPack(String platformCode, String channelId,
-                               String merchantId, CyberbizAdapter adapter) {
+                               String merchantId, ChannelAdapter adapter) {
         log.info("SYNC_PACK started: platform={}, channel={}, merchant={}", platformCode, channelId, merchantId);
 
         List<Map<String, Object>> products;

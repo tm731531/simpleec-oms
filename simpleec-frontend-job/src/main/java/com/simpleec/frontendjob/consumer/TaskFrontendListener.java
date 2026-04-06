@@ -2,11 +2,15 @@ package com.simpleec.frontendjob.consumer;
 
 import com.simpleec.frontendjob.broadcaster.EventBroadcaster;
 import com.simpleec.frontendjob.broadcaster.FrontendEvent;
+import com.simpleec.common.constants.TopicConstants;
+import com.simpleec.common.kafka.SchemaVersionHandler;
+import com.simpleec.common.kafka.UnsupportedSchemaVersionException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Component;
 import java.time.LocalDateTime;
@@ -18,12 +22,20 @@ import java.time.format.DateTimeFormatter;
 public class TaskFrontendListener {
     private final EventBroadcaster eventBroadcaster;
     private final ObjectMapper objectMapper;
+    private final KafkaTemplate<String, Object> kafkaTemplate;
     private static final DateTimeFormatter ISO_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'");
 
     @KafkaListener(topics = "task.frontend", groupId = "frontend-job-group", concurrency = "4")
     public void consumeFrontendTask(@Payload String message) {
         try {
             JsonNode json = objectMapper.readTree(message);
+            try {
+                SchemaVersionHandler.validate(json);
+            } catch (UnsupportedSchemaVersionException e) {
+                log.error("Unsupported schema version in frontend message: {}", e.getMessage());
+                kafkaTemplate.send(TopicConstants.TASK_DLT, "TaskFrontend", message);
+                return;
+            }
             JsonNode header = json.get("header");
             JsonNode body = json.get("body");
 

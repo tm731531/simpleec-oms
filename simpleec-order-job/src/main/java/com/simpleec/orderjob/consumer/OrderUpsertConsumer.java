@@ -63,7 +63,7 @@ public class OrderUpsertConsumer {
             SchemaVersionHandler.validate(json);
         } catch (UnsupportedSchemaVersionException e) {
             log.error("Unsupported schema version in ORDER_UPSERT message: {}", e.getMessage());
-            kafkaTemplate.send(TopicConstants.TASK_DLT, "OrderUpsert", json);
+            kafkaTemplate.send(TopicConstants.TASK_DLT, "OrderUpsert", messageJson);
             return;
         }
 

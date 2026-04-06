@@ -32,13 +32,6 @@ public class ReturnOrderService {
     }
 
     /**
-     * 根據通路退貨 ID 查詢（跨通路，僅用於舊版相容）
-     */
-    public Optional<ReturnOrder> findByChannelRefundId(String channelRefundId) {
-        return returnOrderRepository.findByChannelRefundId(channelRefundId);
-    }
-
-    /**
      * 根據通路 ID + 通路退貨 ID 查詢（DB-C4: scoped dedup）
      */
     public Optional<ReturnOrder> findByChannelIdAndChannelRefundId(String channelId, String channelRefundId) {

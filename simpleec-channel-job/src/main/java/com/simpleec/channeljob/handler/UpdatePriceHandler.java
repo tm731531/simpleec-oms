@@ -2,6 +2,7 @@ package com.simpleec.channeljob.handler;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.simpleec.channel.adapter.ChannelAdapter;
+import com.simpleec.channel.registry.ChannelAdapterRegistry;
 import com.simpleec.channeljob.entity.Channel;
 import com.simpleec.channeljob.service.ChannelService;
 import lombok.RequiredArgsConstructor;
@@ -23,7 +24,7 @@ import java.util.Map;
 public class UpdatePriceHandler {
 
     private final ChannelService channelService;
-    private final ChannelAdapter cyberbizAdapter;
+    private final ChannelAdapterRegistry adapterRegistry;
 
     public void handleUpdatePrice(String platformCode, String channelId,
                                   String merchantId, JsonNode body) {
@@ -59,9 +60,9 @@ public class UpdatePriceHandler {
         }
 
         try {
-            // TODO: resolve adapter by platformCode when multi-platform adapter registry is ready
-            cyberbizAdapter.setCredentials(channel.getToken(), channel.getToken2());
-            cyberbizAdapter.updateVariantPrice(channelProductId, channelSpecId, newPrice);
+            ChannelAdapter adapter = adapterRegistry.getAdapter(platformCode);
+            adapter.setCredentials(channelId, channel.getToken(), channel.getToken2());
+            adapter.updateVariantPrice(channelProductId, channelSpecId, newPrice);
             log.info("UPDATE_PRICE success: platform={} channel={} sellPackId={} price={}",
                     platformCode, channelId, sellPackId, newPrice);
         } catch (Exception e) {
