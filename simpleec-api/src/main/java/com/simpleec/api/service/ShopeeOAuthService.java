@@ -203,7 +203,8 @@ public class ShopeeOAuthService {
         Channel channel = channelRepository.findById(channelId)
             .orElseThrow(() -> new IllegalArgumentException("Channel not found: " + channelId));
 
-        channel.setToken(null);
+        // token 欄位 NOT NULL — 用空字串表示「未連接」，ChannelVO 會回傳 oauthStatus=NOT_CONNECTED
+        channel.setToken("");
         channel.setToken2(null);
         channel.setToken3(null);
         channel.setToken4(null);
@@ -275,8 +276,9 @@ public class ShopeeOAuthService {
     }
 
     private ShopeeAppCredentials loadAppCredentials() {
-        Platform platform = platformRepository.findByPlatformName("shopee")
-            .orElseThrow(() -> new IllegalStateException("Shopee platform not configured in DB"));
+        // Platform.id = "shopee" (not platformName — platformName is the display name like "Shopee蝦皮")
+        Platform platform = platformRepository.findById("shopee")
+            .orElseThrow(() -> new IllegalStateException("Shopee platform not configured in DB (id='shopee')"));
         return new ShopeeAppCredentials(platform.getCredential1(), platform.getCredential2());
     }
 

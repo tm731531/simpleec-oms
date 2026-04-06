@@ -46,45 +46,68 @@ public class ShopeeCallbackController {
                 <body>
                 <p>授權成功，正在關閉視窗...</p>
                 <script>
-                  if (window.opener) {
-                    window.opener.postMessage(
-                      { type: 'shopee_oauth_success', channelId: '%s' },
-                      '*'
-                    );
-                    window.close();
-                  } else {
-                    window.location.href = '/channels/%s?oauth=success';
-                  }
+                  (function() {
+                    var channelId = '%s';
+                    if (window.opener && !window.opener.closed) {
+                      try {
+                        window.opener.postMessage(
+                          { type: 'shopee_oauth_success', channelId: channelId },
+                          window.location.origin
+                        );
+                      } catch (e) {
+                        // cross-origin fallback: use '*' if same-origin fails
+                        window.opener.postMessage(
+                          { type: 'shopee_oauth_success', channelId: channelId },
+                          '*'
+                        );
+                      }
+                      setTimeout(function() { window.close(); }, 500);
+                    } else {
+                      window.location.replace('/channels/' + channelId + '?oauth=success');
+                    }
+                  })();
                 </script>
                 </body>
                 </html>
-                """.formatted(channelId, channelId);
+                """.formatted(channelId);
 
             return ResponseEntity.ok(html);
 
         } catch (Exception e) {
             log.error("Shopee OAuth callback failed", e);
 
+            String safeMsg = e.getMessage() == null ? "Unknown error" : e.getMessage()
+                .replace("'", "\\'").replace("\n", " ");
             String html = """
                 <!DOCTYPE html>
                 <html>
                 <head><meta charset="UTF-8"><title>授權失敗</title></head>
                 <body>
-                <p>授權失敗：%s</p>
+                <p>授權失敗，正在關閉視窗...</p>
                 <script>
-                  if (window.opener) {
-                    window.opener.postMessage(
-                      { type: 'shopee_oauth_error', message: '%s' },
-                      '*'
-                    );
-                    window.close();
-                  } else {
-                    window.location.href = '/channels?oauth=error';
-                  }
+                  (function() {
+                    var msg = '%s';
+                    if (window.opener && !window.opener.closed) {
+                      try {
+                        window.opener.postMessage(
+                          { type: 'shopee_oauth_error', message: msg },
+                          window.location.origin
+                        );
+                      } catch (e) {
+                        window.opener.postMessage(
+                          { type: 'shopee_oauth_error', message: msg },
+                          '*'
+                        );
+                      }
+                      setTimeout(function() { window.close(); }, 500);
+                    } else {
+                      window.location.replace('/channels?oauth=error');
+                    }
+                  })();
                 </script>
                 </body>
                 </html>
-                """.formatted(e.getMessage(), e.getMessage());
+                """.formatted(safeMsg);
 
             return ResponseEntity.badRequest().body(html);
         }

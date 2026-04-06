@@ -1,6 +1,6 @@
 # SimpleEC OMS - 当前运维状态 (Feb 25, 2026)
 
-## 📊 系統狀態：✅ 完全運行 (All Systems Operational) — 2026-04-06 更新
+## 📊 系統狀態：✅ 完全運行 (All Systems Operational) — 2026-04-06 更新（Shopee OAuth）
 
 ### 核心系统
 | 组件 | 状态 | 备注 |
@@ -39,6 +39,37 @@
 
 ### 新增公开端点
 - ✅ `GET /api/enums/order-statuses` → 200 (返回所有订单状态)
+- ✅ `GET /callback/shopee` → Shopee OAuth callback（公開，無 JWT）
+
+### Shopee OAuth 端點（需 JWT）
+- ✅ `GET /api/user/channels/{id}/shopee/auth-url` → 生成授權 URL
+- ✅ `POST /api/user/channels/{id}/shopee/refresh-token` → 手動強制刷新
+- ✅ `POST /api/user/channels/{id}/shopee/disconnect` → 斷開授權
+
+---
+
+## 🔧 Shopee OAuth Token 管理 (2026-04-06)
+
+### commit: a740d9e
+
+**功能：Shopee OAuth 2.0 授權流程 + Token 生命週期管理**
+
+#### 新增元件
+- `ChannelVO` — Channel API 回傳改用 VO，token1~5 遮罩顯示（前4...後4），含 oauthStatus
+- `ShopeeOAuthService` — auth URL 生成（state→Redis）/ code exchange / refreshWithLock / disconnect
+- `ShopeeCallbackController` — public GET /callback/shopee，postMessage 關小視窗
+- `ShopeeTokenRefreshHandler` — BackendJob，每小時掃 expires_at < now+90min 的 Shopee channel
+- `SchedulerEventHandler` — minuteOfHour==0 新增 SHOPEE_TOKEN_REFRESH dispatch
+
+#### 設計要點
+- **Token 欄位語意**：token=access_token (4h), token2=refresh_token (30d), token3=shop_id, token4=expires_at
+- **分散式鎖**：Redis key `shopee:token:refresh:lock:{channelId}` TTL 30s，多 instance 不並發刷新同一 channel
+- **Popup 流程**：前端 `window.open` 小視窗，callback 後 `postMessage` 通知主頁面，不離開 Channel 頁面
+- **oauthStatus**：NOT_CONNECTED / CONNECTED / EXPIRING_SOON（≤60min）/ EXPIRED
+- **手動填 token** 仍保留（PUT /api/user/channels/{id} 的 token1~5）供非 OAuth 平台使用
+
+#### 文件
+詳見 `docs/7-IMPLEMENTATION/SHOPEE_OAUTH_GUIDE.md`
 
 ---
 

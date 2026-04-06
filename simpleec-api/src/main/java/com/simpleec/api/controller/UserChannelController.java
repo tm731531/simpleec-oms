@@ -3,6 +3,7 @@ package com.simpleec.api.controller;
 import com.simpleec.api.security.UserPrincipal;
 import com.simpleec.api.service.ShopeeOAuthService;
 import com.simpleec.api.vo.ChannelVO;
+import com.simpleec.core.crypto.EncryptionContext;
 import com.simpleec.core.entity.Channel;
 import com.simpleec.core.entity.Platform;
 import com.simpleec.core.repository.ChannelRepository;
@@ -16,7 +17,6 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 /**
  * 用戶通路管理控制器
@@ -24,6 +24,8 @@ import java.util.Optional;
  * Token 欄位：回傳 ChannelVO（遮罩顯示），不回傳原始 token 值
  * OAuth 平台（如 Shopee）額外提供：auth-url / refresh-token / disconnect
  * 非 OAuth 平台：直接 PUT token1~5
+ *
+ * ⚠️ 所有讀取/寫入加密欄位的操作必須包在 EncryptionContext.setMerchantId / clear() 之間
  */
 @Slf4j
 @RestController
@@ -43,11 +45,17 @@ public class UserChannelController {
     public ResponseEntity<List<ChannelVO>> listChannels(
         @AuthenticationPrincipal UserPrincipal principal
     ) {
-        List<Channel> channels = channelRepository.findByMerchantId(principal.getMerchantId());
-        List<ChannelVO> vos = channels.stream()
-            .map(c -> ChannelVO.from(c, findPlatform(c.getPlatformId())))
-            .toList();
-        return ResponseEntity.ok(vos);
+        String merchantId = principal.getMerchantId();
+        EncryptionContext.setMerchantId(merchantId);
+        try {
+            List<Channel> channels = channelRepository.findByMerchantId(merchantId);
+            List<ChannelVO> vos = channels.stream()
+                .map(c -> ChannelVO.from(c, findPlatform(c.getPlatformId())))
+                .toList();
+            return ResponseEntity.ok(vos);
+        } finally {
+            EncryptionContext.clear();
+        }
     }
 
     @GetMapping("/{id}")
@@ -55,10 +63,16 @@ public class UserChannelController {
         @PathVariable String id,
         @AuthenticationPrincipal UserPrincipal principal
     ) {
-        return channelRepository.findById(id)
-            .filter(c -> c.getMerchantId().equals(principal.getMerchantId()))
-            .map(c -> ResponseEntity.ok(ChannelVO.from(c, findPlatform(c.getPlatformId()))))
-            .orElse(ResponseEntity.notFound().build());
+        String merchantId = principal.getMerchantId();
+        EncryptionContext.setMerchantId(merchantId);
+        try {
+            return channelRepository.findById(id)
+                .filter(c -> c.getMerchantId().equals(merchantId))
+                .map(c -> ResponseEntity.ok(ChannelVO.from(c, findPlatform(c.getPlatformId()))))
+                .orElse(ResponseEntity.notFound().build());
+        } finally {
+            EncryptionContext.clear();
+        }
     }
 
     @GetMapping("/platforms")
@@ -79,9 +93,15 @@ public class UserChannelController {
         @RequestBody Channel channel,
         @AuthenticationPrincipal UserPrincipal principal
     ) {
-        channel.setMerchantId(principal.getMerchantId());
-        Channel saved = channelRepository.save(channel);
-        return ResponseEntity.ok(ChannelVO.from(saved, findPlatform(saved.getPlatformId())));
+        String merchantId = principal.getMerchantId();
+        channel.setMerchantId(merchantId);
+        EncryptionContext.setMerchantId(merchantId);
+        try {
+            Channel saved = channelRepository.save(channel);
+            return ResponseEntity.ok(ChannelVO.from(saved, findPlatform(saved.getPlatformId())));
+        } finally {
+            EncryptionContext.clear();
+        }
     }
 
     /**
@@ -94,22 +114,28 @@ public class UserChannelController {
         @RequestBody Channel updateData,
         @AuthenticationPrincipal UserPrincipal principal
     ) {
-        return channelRepository.findById(id)
-            .filter(c -> c.getMerchantId().equals(principal.getMerchantId()))
-            .map(channel -> {
-                if (updateData.getChannelName() != null)  channel.setChannelName(updateData.getChannelName());
-                if (updateData.getChannelSn() != null)    channel.setChannelSn(updateData.getChannelSn());
-                if (updateData.getToken() != null)        channel.setToken(updateData.getToken());
-                if (updateData.getToken2() != null)       channel.setToken2(updateData.getToken2());
-                if (updateData.getToken3() != null)       channel.setToken3(updateData.getToken3());
-                if (updateData.getToken4() != null)       channel.setToken4(updateData.getToken4());
-                if (updateData.getToken5() != null)       channel.setToken5(updateData.getToken5());
-                if (updateData.getWriteActived() != null) channel.setWriteActived(updateData.getWriteActived());
-                if (updateData.getEnableSync() != null)   channel.setEnableSync(updateData.getEnableSync());
-                Channel updated = channelRepository.save(channel);
-                return ResponseEntity.ok(ChannelVO.from(updated, findPlatform(updated.getPlatformId())));
-            })
-            .orElse(ResponseEntity.notFound().build());
+        String merchantId = principal.getMerchantId();
+        EncryptionContext.setMerchantId(merchantId);
+        try {
+            return channelRepository.findById(id)
+                .filter(c -> c.getMerchantId().equals(merchantId))
+                .map(channel -> {
+                    if (updateData.getChannelName() != null)  channel.setChannelName(updateData.getChannelName());
+                    if (updateData.getChannelSn() != null)    channel.setChannelSn(updateData.getChannelSn());
+                    if (updateData.getToken() != null)        channel.setToken(updateData.getToken());
+                    if (updateData.getToken2() != null)       channel.setToken2(updateData.getToken2());
+                    if (updateData.getToken3() != null)       channel.setToken3(updateData.getToken3());
+                    if (updateData.getToken4() != null)       channel.setToken4(updateData.getToken4());
+                    if (updateData.getToken5() != null)       channel.setToken5(updateData.getToken5());
+                    if (updateData.getWriteActived() != null) channel.setWriteActived(updateData.getWriteActived());
+                    if (updateData.getEnableSync() != null)   channel.setEnableSync(updateData.getEnableSync());
+                    Channel updated = channelRepository.save(channel);
+                    return ResponseEntity.ok(ChannelVO.from(updated, findPlatform(updated.getPlatformId())));
+                })
+                .orElse(ResponseEntity.notFound().build());
+        } finally {
+            EncryptionContext.clear();
+        }
     }
 
     @PutMapping("/{id}/toggle-status")
@@ -117,23 +143,26 @@ public class UserChannelController {
         @PathVariable String id,
         @AuthenticationPrincipal UserPrincipal principal
     ) {
-        return channelRepository.findById(id)
-            .filter(c -> c.getMerchantId().equals(principal.getMerchantId()))
-            .map(channel -> {
-                channel.setActived(!channel.getActived());
-                Channel updated = channelRepository.save(channel);
-                return ResponseEntity.ok(ChannelVO.from(updated, findPlatform(updated.getPlatformId())));
-            })
-            .orElse(ResponseEntity.notFound().build());
+        String merchantId = principal.getMerchantId();
+        EncryptionContext.setMerchantId(merchantId);
+        try {
+            return channelRepository.findById(id)
+                .filter(c -> c.getMerchantId().equals(merchantId))
+                .map(channel -> {
+                    channel.setActived(!channel.getActived());
+                    Channel updated = channelRepository.save(channel);
+                    return ResponseEntity.ok(ChannelVO.from(updated, findPlatform(updated.getPlatformId())));
+                })
+                .orElse(ResponseEntity.notFound().build());
+        } finally {
+            EncryptionContext.clear();
+        }
     }
 
     // ──────────────────────────────────────────────────────────
     // Shopee OAuth 端點
     // ──────────────────────────────────────────────────────────
 
-    /**
-     * 生成 Shopee 授權 URL（前端用小視窗打開）。
-     */
     @GetMapping("/{id}/shopee/auth-url")
     public ResponseEntity<Map<String, String>> getShopeeAuthUrl(
         @PathVariable String id,
@@ -148,50 +177,58 @@ public class UserChannelController {
             .orElse(ResponseEntity.notFound().build());
     }
 
-    /**
-     * 手動強制刷新 Shopee token（不等排程）。
-     */
     @PostMapping("/{id}/shopee/refresh-token")
     public ResponseEntity<ChannelVO> refreshShopeeToken(
         @PathVariable String id,
         @AuthenticationPrincipal UserPrincipal principal
     ) {
-        return channelRepository.findById(id)
-            .filter(c -> c.getMerchantId().equals(principal.getMerchantId()))
-            .map(c -> {
-                shopeeOAuthService.forceRefreshToken(id);
-                // 重新讀 DB 取最新 token 狀態
-                Channel updated = channelRepository.findById(id).orElse(c);
-                return ResponseEntity.ok(ChannelVO.from(updated, findPlatform(updated.getPlatformId())));
-            })
-            .orElse(ResponseEntity.notFound().build());
+        String merchantId = principal.getMerchantId();
+        EncryptionContext.setMerchantId(merchantId);
+        try {
+            return channelRepository.findById(id)
+                .filter(c -> c.getMerchantId().equals(merchantId))
+                .map(c -> {
+                    shopeeOAuthService.forceRefreshToken(id);
+                    Channel updated = channelRepository.findById(id).orElse(c);
+                    return ResponseEntity.ok(ChannelVO.from(updated, findPlatform(updated.getPlatformId())));
+                })
+                .orElse(ResponseEntity.notFound().build());
+        } finally {
+            EncryptionContext.clear();
+        }
     }
 
-    /**
-     * 斷開 Shopee 授權（清空 token，停用同步）。
-     */
     @PostMapping("/{id}/shopee/disconnect")
     public ResponseEntity<ChannelVO> disconnectShopee(
         @PathVariable String id,
         @AuthenticationPrincipal UserPrincipal principal
     ) {
-        return channelRepository.findById(id)
-            .filter(c -> c.getMerchantId().equals(principal.getMerchantId()))
-            .map(c -> {
-                shopeeOAuthService.disconnect(id);
-                Channel updated = channelRepository.findById(id).orElse(c);
-                return ResponseEntity.ok(ChannelVO.from(updated, findPlatform(updated.getPlatformId())));
-            })
-            .orElse(ResponseEntity.notFound().build());
+        String merchantId = principal.getMerchantId();
+        EncryptionContext.setMerchantId(merchantId);
+        try {
+            return channelRepository.findById(id)
+                .filter(c -> c.getMerchantId().equals(merchantId))
+                .map(c -> {
+                    shopeeOAuthService.disconnect(id);
+                    Channel updated = channelRepository.findById(id).orElse(c);
+                    return ResponseEntity.ok(ChannelVO.from(updated, findPlatform(updated.getPlatformId())));
+                })
+                .orElse(ResponseEntity.notFound().build());
+        } finally {
+            EncryptionContext.clear();
+        }
     }
 
     // ──────────────────────────────────────────────────────────
     // Helper
     // ──────────────────────────────────────────────────────────
 
-    /** 依 platformId（如 "shopee"）查詢 Platform entity，找不到回傳 null（不阻斷主流程） */
+    /**
+     * 依 platformId（Channel.platformId 欄位值，例如 "shopee"）查詢 Platform entity。
+     * Channel.platformId = Platform.id（非 Platform.platformName）。
+     */
     private Platform findPlatform(String platformId) {
         if (platformId == null) return null;
-        return platformRepository.findByPlatformName(platformId).orElse(null);
+        return platformRepository.findById(platformId).orElse(null);
     }
 }

@@ -58,9 +58,10 @@ public class ShopeeTokenRefreshHandler extends AbstractEventHandler {
 
     @Override
     protected void processReport(JsonNode event, String merchantId, String timestamp) {
-        Platform platform = platformRepository.findByPlatformName("shopee").orElse(null);
+        // Platform.id = "shopee" (not platformName)
+        Platform platform = platformRepository.findById("shopee").orElse(null);
         if (platform == null) {
-            log.warn("Shopee platform not configured, skipping token refresh");
+            log.warn("Shopee platform not configured (id='shopee'), skipping token refresh");
             return;
         }
 
