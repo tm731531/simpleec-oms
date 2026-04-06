@@ -27,6 +27,7 @@ import java.util.List;
  *   :04, :09, :14... (% 5 == 4) → RETURN_REPORT（退貨報表）
  *   :05, :15, :25... (% 10 == 5) → KAFKA_HEALTH_CHECK（健康檢查）
  *   每小時 :00 和 :30 → DAILY_REPORT（日報表）
+ *   每小時 :00 → SHOPEE_TOKEN_REFRESH（蝦皮 token 刷新）
  */
 @Slf4j
 @Component
@@ -99,6 +100,7 @@ public class SchedulerEventHandler {
             // 每小時整點注入假訂單（僅測試用，受 global_config.test_seeder_enabled 控管）
             if (minuteOfHour == 0) {
                 dispatchTask(TaskTypeEnum.SEED_TEST_ORDERS, timestamp);
+                dispatchTask(TaskTypeEnum.SHOPEE_TOKEN_REFRESH, timestamp);
             }
 
         } catch (Exception e) {

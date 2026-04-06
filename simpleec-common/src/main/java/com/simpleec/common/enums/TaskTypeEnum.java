@@ -42,6 +42,7 @@ public enum TaskTypeEnum {
     KAFKA_HEALTH_CHECK("KAFKA_HEALTH_CHECK", "Kafka 健康檢查", false),
     DAILY_REPORT("DAILY_REPORT", "每日報表", false),
     SEED_TEST_ORDERS("SEED_TEST_ORDERS", "每小時假訂單注入（測試用）", false),
+    SHOPEE_TOKEN_REFRESH("SHOPEE_TOKEN_REFRESH", "蝦皮 OAuth Token 刷新", false),
 
     // ========== System (系統) ==========
     HEARTBEAT("HEARTBEAT", "系統心臟脈搏", true),

@@ -41,6 +41,7 @@ public class SecurityConfig {
                     "/actuator/**", "/api/actuator/**",
                     "/api/auth/**", "/api/admin/auth/**",
                     "/api/user/channels/platforms", "/api/enums/**",
+                    "/callback/shopee",
                     "/error").permitAll()
                 .requestMatchers("/api/admin/**").hasAuthority("ROLE_PLATFORM_ADMIN")
                 .anyRequest().authenticated()
