@@ -181,22 +181,23 @@ public class OrderUpsertConsumer {
             order = existingOrder.get();
             oldStatus = order.getOrderStatus() != null ? order.getOrderStatus().getCode() : null;
 
-            // 計算 DB 中現有訂單的 hash（內存，不是從 DB 欄位讀）
-            String dbOrderHash = calculateOrderHash(order, orderDataJson);
+            // 比較 DB 現有狀態 vs 新消息內容（用相同算法）
+            String dbContentHash = computeContentHash(
+                oldStatus,
+                order.getTotalAmount(),
+                order.getItems()
+            );
+            String incomingContentHash = computeContentHash(
+                orderDataJson.path("orderStatus").asText(null),
+                orderDataJson.has("totalAmount")
+                    ? new java.math.BigDecimal(orderDataJson.get("totalAmount").asText()) : null,
+                orderDataJson.has("items")
+                    ? objectMapper.writeValueAsString(orderDataJson.get("items")) : null
+            );
 
-            if (!orderHash.equals(dbOrderHash)) {
-                // Hash 不同 → 有實質變化 → 執行 UPDATE
-                order = updateOrderFromData(order, orderDataJson, isRollback);
-                // 設定 channelOrderNumber（若提供）
-                if (channelOrderNumber != null && !channelOrderNumber.isBlank()) {
-                    order.setChannelOrderNumber(channelOrderNumber);
-                }
-                log.info("Updated order: {} from channel {} (hash changed)",
-                    order.getId(), channelId);
-            } else {
-                // Hash 相同 → 沒有變化 → 跳過
+            if (dbContentHash.equals(incomingContentHash)) {
+                // 內容相同 → 跳過，只刷新 Redis TTL
                 log.debug("Order content unchanged: {}", channelOrderId);
-                // 但仍要更新 Redis（刷新 TTL）
                 try {
                     redisTemplate.opsForValue().set(redisKey, orderHash, Duration.ofHours(24));
                 } catch (Exception e) {
@@ -204,6 +205,16 @@ public class OrderUpsertConsumer {
                 }
                 return;
             }
+
+            // 有實質變化 → 執行 UPDATE
+            order = updateOrderFromData(order, orderDataJson, isRollback);
+            // 設定 channelOrderNumber（若提供）
+            if (channelOrderNumber != null && !channelOrderNumber.isBlank()) {
+                order.setChannelOrderNumber(channelOrderNumber);
+            }
+            log.info("Updated order: {} from channel {} (content changed: {} → {})",
+                order.getId(), channelId, oldStatus,
+                order.getOrderStatus() != null ? order.getOrderStatus().getCode() : null);
         } else {
             // INSERT 新訂單
             order = createOrderFromData(merchantId, channelId, channelOrderId, channelOrderNumber, orderDataJson, isRollback);
@@ -445,34 +456,21 @@ public class OrderUpsertConsumer {
     }
 
     /**
-     * 計算訂單 Hash（比對用）
-     * 只包含會變動的業務欄位，與 Handler 邏輯保持一致
+     * 計算訂單內容 Hash（用於比對 DB 現有狀態 vs 新消息內容是否相同）
+     * 使用相同算法分別對 DB 數據和新數據做 hash，然後比對。
+     * 不與消息中的 orderHash 比對（那是不同算法）。
      */
-    private String calculateOrderHash(Order order, JsonNode orderDataJson) {
+    private String computeContentHash(String status, java.math.BigDecimal amount, String itemsJson) {
         try {
-            // 只包含會變動的業務欄位
-            var sortedData = new java.util.TreeMap<String, Object>();
-
-            if (order.getOrderStatus() != null) {
-                sortedData.put("status", order.getOrderStatus().getCode());
-            }
-            if (order.getTotalAmount() != null) {
-                sortedData.put("totalAmount", order.getTotalAmount());
-            }
-            if (order.getItems() != null) {
-                sortedData.put("items", order.getItems());
-            }
-            if (order.getBuyerInfo() != null) {
-                sortedData.put("buyerInfo", order.getBuyerInfo());
-            }
-            if (order.getShippingInfo() != null) {
-                sortedData.put("shippingInfo", order.getShippingInfo());
-            }
-
-            String json = objectMapper.writeValueAsString(sortedData);
-            return org.apache.commons.codec.digest.DigestUtils.sha256Hex(json);
+            var sortedData = new java.util.TreeMap<String, String>();
+            if (status != null) sortedData.put("status", status);
+            if (amount != null) sortedData.put("totalAmount", amount.toPlainString());
+            if (itemsJson != null) sortedData.put("items", itemsJson);
+            return org.apache.commons.codec.digest.DigestUtils.sha256Hex(
+                objectMapper.writeValueAsString(sortedData)
+            );
         } catch (Exception e) {
-            log.error("Error calculating order hash", e);
+            log.error("Error computing content hash", e);
             return "";
         }
     }

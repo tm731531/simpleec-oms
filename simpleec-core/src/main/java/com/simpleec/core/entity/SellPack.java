@@ -1,11 +1,12 @@
 package com.simpleec.core.entity;
 
-import com.simpleec.core.converter.SyncStatusConverter;
 import com.simpleec.core.dto.SyncStatus;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.type.SqlTypes;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
@@ -74,13 +75,14 @@ public class SellPack {
     @Column(name = "last_sync_at")
     private LocalDateTime lastSyncAt;
 
-    @Convert(converter = SyncStatusConverter.class)
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "sync_status", columnDefinition = "jsonb")
     private SyncStatus syncStatus;
 
     /**
      * 通路規格屬性（顏色、尺寸等平台特定欄位，JSONB 存放）
      */
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "channel_spec_attrs", columnDefinition = "jsonb")
     private String channelSpecAttrs;
 
@@ -89,6 +91,7 @@ public class SellPack {
      * 用於存放無法塞入通用欄位的平台 ID。
      * 例如 Shopify: { "shopify": { "inventory_item_id": "457924702", "location_id": "905684977" } }
      */
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "platform_metadata", columnDefinition = "jsonb")
     private String platformMetadata;
 

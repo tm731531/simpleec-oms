@@ -57,7 +57,7 @@ public class OrderStatusMapper {
     private static String mapCyberbizStatus(String status) {
         return switch (status) {
             case "pending" -> "PENDING";
-            case "paid", "cod" -> "READY_TO_SHIP";
+            case "paid", "cod", "unshipped" -> "READY_TO_SHIP";  // unshipped = paid but not yet shipped
             case "preparing", "partial" -> "SHIPPING";
             case "fulfilled" -> "SHIPPED";
             case "arrived" -> "SHIPPED";

@@ -502,27 +502,97 @@ A:
 
 ---
 
-## 🎯 下一步工作项
+## 🔴 INCIDENT — 2026-04-06：前端程式碼遺失與全面 API 對接失效
 
-### 立即优先
-- [ ] 验证生产环境 Cyberbiz 订单流正常运作
-- [ ] 测试订单状态在前端的完整显示和筛选
-- [ ] 确认用户可以通过 `https://oms.tomting.com` 正常登入
+**嚴重等級：CRITICAL（已解決）**
+完整記錄：`docs/6-OPERATIONS/INCIDENT-2026-04-06-frontend-api-mismatch.md`
 
-### 本周计划
-- [ ] 实现其他通路的 OrderStatusMapper（Shopee, Momo, Yahoo 等）
-- [ ] 添加单元测试 for OrderStatusEnum 和 StatusOptionVO
-- [ ] 实现订单状态转移和业务规则验证
-- [ ] 创建后台任务 for 订单状态对账
+### 事件摘要
+1. `user-app` 原始碼因 git submodule 未提交 `.gitmodules` 而遺失，未及時察覺
+2. 恢復時未讀後端 controller 直接重建，登入路徑、URL、分頁、Response 格式全部寫錯
+3. 審視團隊在部署後才啟動，用戶先看到問題
 
-### 长期计划
-- [ ] 完整的 Return 流程实现
-- [ ] Inventory sync 功能
-- [ ] Analytics & reporting 模块
-- [ ] 性能优化和监控告警增强
+### 修復紀錄（2026-04-06 全日）
+
+| 時間 | 修復內容 |
+|------|---------|
+| 上午 | 從 `dev:docs/archive/plans/` 恢復 22 個前端檔案 |
+| 中午 | 修正 `/api/auth/login` 路徑、token localStorage key 統一為 `authToken` |
+| 下午 | 架構師 agent 建立完整 API contract 對照表 |
+| 下午 | 全端工程師 agent 修正 8 個 API 檔、5 個 components、4 個 views |
+| 傍晚 | 後端 QA + 前端 QA 並行審查，發現 17 Critical + 9 Major 問題 |
+| 傍晚 | 修復 agent 修正全部 Critical/Major，build 通過，部署完成 |
 
 ---
 
-**最后更新**: Feb 25, 2026 1:42 PM (登入问题修复 + 代码发布)
-**当前分支**: `ops/production` (已完成 feature/cyberbiz-channel-job-integration 的合并)
-**维护者**: Tom + Claude
+## 📊 2026-04-06 系統狀態（最新）
+
+### user-app 前端完整 API 對接狀態
+
+| 頁面 | API Endpoint | 狀態 |
+|------|-------------|------|
+| 登入 | POST /api/auth/login | ✅ |
+| 儀表板 | GET /api/user/stats/today | ✅ |
+| 訂單管理 | GET /api/user/orders | ✅ 151筆 |
+| 出貨管理 | GET /api/user/shipments | ✅ 2筆 |
+| 退貨管理 | GET /api/user/refunds | ✅ 1筆 |
+| 商品管理 | GET /api/user/products | ✅ 3筆 |
+| 賣場管理 | GET /api/user/sellpacks | ✅ 4筆 |
+| 庫存管理 | GET /api/user/inventory | ✅ 3筆 |
+| 銷售報表 | GET /api/user/reports/sales | ✅ |
+| 通路設定 | GET /api/user/channels/platforms | ✅ 5筆 |
+| 商家設定 | GET /api/user/settings | ✅ |
+
+### 後端 API 全量測試結果（2026-04-06）
+17/17 endpoint 全部 200，無失效。
+唯一已知問題：`/reports/profit` 的 `totalCost`/`grossProfit`/`grossMargin` 全為 null（後端計算邏輯未完成）。
+
+### 已修復的前端問題（本日）
+- **Critical×8**：syncStatus 崩潰、types 欄位錯誤、SellPackForm 未存資料、ProductForm 雙重解析、PUT→PATCH、Channel URL/欄位、ProductPage 新增按鈕
+- **Major×9**：ProductTable 欄位名、SellPackTable 欄位名、RefundTable 按鈕條件、reject reason 丟失、低庫存 endpoint、product keyword 無效、Dashboard 統計數字、User type 欄位、ChannelPage channel 顯示
+
+### 已知待處理（Minor）
+- OrderPage 訂單詳情頁（placeholder）
+- SellPackPage 批量更新 / retry（placeholder）
+- ShipmentPage 使用 orderAPI.ship() 繞過 shipment workflow
+- /reports/profit 後端計算邏輯待補
+
+---
+
+## 🔧 關鍵技術備忘（前端工程師必讀）
+
+### Token Key
+全部統一：`authToken`（localStorage）
+涉及：`api/index.ts` interceptor、`stores/auth.ts`、`router/index.ts`、`App.vue` 登出
+
+### 後端分頁規則（不一致，技術債）
+| Controller | page 起始 | size param |
+|-----------|----------|-----------|
+| Orders / Refunds / Shipments / Inventory | **1** | `pageSize` |
+| Products / SellPacks | **0** | `size` |
+
+### API Response 格式
+- 分頁列表：`{ data: T[], pagination: { total, pages, page, pageSize } }`
+- 單一物件：flat（無 wrapper）
+- Channels / Platforms list：直接 array（無 wrapper）
+- Stats：`{ data: {...}, success: true }`
+- Reports：flat object（`{ summary, byDate, byPlatform }`）
+
+---
+
+## 🎯 下一步工作項
+
+### 技術債（建議本週處理）
+- [ ] 統一後端分頁為 1-indexed + `pageSize`（Products / SellPacks controller）
+- [ ] 補完 `/reports/profit` 的 cost / revenue join 計算
+- [ ] ShipmentPage 改用完整 shipment workflow（`UserShipmentController`）
+
+### 功能完善
+- [ ] 訂單詳情頁
+- [ ] 通路設定頁（顯示已設定 channels + 新增/編輯 token）
+- [ ] SellPackPage 批量更新
+
+---
+
+**最後更新**: 2026-04-06（前端全面修復 + 二次審查通過）
+**維護者**: Tom + Claude
