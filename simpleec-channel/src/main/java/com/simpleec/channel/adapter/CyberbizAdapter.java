@@ -252,43 +252,102 @@ public class CyberbizAdapter implements ChannelAdapter {
             throw new IllegalArgumentException("Credentials not set - call setCredentials() first");
         }
 
-        // Call the API client to get order detail
-        Map<String, Object> orderDetail = cyberbizApiClient.getOrderDetail(token, secret, orderId);
-
-        // Ensure required fields are present (with defaults if missing)
-        if (!orderDetail.containsKey("items")) {
-            List<Map<String, Object>> items = new ArrayList<>();
-            Map<String, Object> item1 = new LinkedHashMap<>();
-            item1.put("sku", "CBZ-ITEM-001");
-            item1.put("product_id", "9876543210");
-            item1.put("name", "Cyberbiz 商品");
-            item1.put("quantity", 1);
-            item1.put("unit_price", 2300.0);
-            items.add(item1);
-            orderDetail.put("items", items);
+        // Call the API client to get raw Cyberbiz order data
+        Map<String, Object> raw = cyberbizApiClient.getOrderDetail(token, secret, orderId);
+        if (raw.isEmpty()) {
+            log.warn("Empty order detail from Cyberbiz API for orderId={}", orderId);
+            return raw;
         }
 
+        // Translate Cyberbiz field names → OMS standard fields expected by ModeBOrderDetailHandler
+        Map<String, Object> orderDetail = new LinkedHashMap<>(raw);
+
+        // status: Cyberbiz uses nested statuses object; use financial_status for OMS status mapping
+        if (!orderDetail.containsKey("status") && raw.containsKey("statuses")) {
+            Map<String, Object> statuses = (Map<String, Object>) raw.get("statuses");
+            String financialStatus = statuses != null ? String.valueOf(statuses.getOrDefault("financial_status", "pending")) : "pending";
+            String fulfillmentStatus = statuses != null ? String.valueOf(statuses.getOrDefault("fulfillment_status", "")) : "";
+            // Priority: fulfillment status > financial status for OMS mapping
+            orderDetail.put("status", fulfillmentStatus.isBlank() ? financialStatus : fulfillmentStatus);
+        }
+
+        // total_amount: from prices.total_price or subtotal_price
+        if (!orderDetail.containsKey("total_amount")) {
+            if (raw.containsKey("prices")) {
+                Map<String, Object> prices = (Map<String, Object>) raw.get("prices");
+                Object total = prices != null ? prices.get("total_price") : null;
+                if (total == null && prices != null) total = prices.get("total_line_items_price");
+                if (total != null) orderDetail.put("total_amount", total);
+            } else if (raw.containsKey("subtotal_price")) {
+                orderDetail.put("total_amount", raw.get("subtotal_price"));
+            }
+        }
+
+        // shipping_fee: from prices.shipping_rate_price
+        if (!orderDetail.containsKey("shipping_fee") && raw.containsKey("prices")) {
+            Map<String, Object> prices = (Map<String, Object>) raw.get("prices");
+            Object shippingFee = prices != null ? prices.get("shipping_rate_price") : null;
+            if (shippingFee != null) orderDetail.put("shipping_fee", shippingFee);
+        }
+
+        // items: Cyberbiz uses line_items; translate to OMS items format
+        if (!orderDetail.containsKey("items") && raw.containsKey("line_items")) {
+            List<Map<String, Object>> lineItems = (List<Map<String, Object>>) raw.get("line_items");
+            List<Map<String, Object>> omsItems = new ArrayList<>();
+            if (lineItems != null) {
+                for (Map<String, Object> li : lineItems) {
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("channelItemId", String.valueOf(li.getOrDefault("id", "")));
+                    item.put("product_id", String.valueOf(li.getOrDefault("product_id", "")));
+                    item.put("variant_id", String.valueOf(li.getOrDefault("product_variant_id", "")));
+                    item.put("sku", li.getOrDefault("sku", ""));
+                    item.put("name", li.getOrDefault("title", ""));
+                    item.put("variant_name", li.getOrDefault("variant_title", ""));
+                    item.put("quantity", li.getOrDefault("quantity", 1));
+                    item.put("unit_price", li.getOrDefault("price", 0));
+                    omsItems.add(item);
+                }
+            }
+            orderDetail.put("items", omsItems);
+        }
+
+        // buyer_info: Cyberbiz uses buyer (email/mobile) + customer (name)
         if (!orderDetail.containsKey("buyer_info")) {
-            Map<String, Object> buyer = new LinkedHashMap<>();
-            buyer.put("user_id", "CBZ_BUYER_123");
-            buyer.put("username", "cyberbuyer");
-            buyer.put("email", "buyer@cyberbiz.tw");
-            buyer.put("phone", "0922334455");
-            orderDetail.put("buyer_info", buyer);
+            Map<String, Object> buyerInfo = new LinkedHashMap<>();
+            Map<String, Object> buyer = raw.containsKey("buyer") ? (Map<String, Object>) raw.get("buyer") : null;
+            Map<String, Object> customer = raw.containsKey("customer") ? (Map<String, Object>) raw.get("customer") : null;
+            if (buyer != null) {
+                buyerInfo.put("email", buyer.getOrDefault("email", ""));
+                buyerInfo.put("mobile", buyer.getOrDefault("mobile", ""));
+            }
+            if (customer != null) {
+                buyerInfo.put("name", customer.getOrDefault("name", ""));
+            }
+            orderDetail.put("buyer_info", buyerInfo);
         }
 
-        if (!orderDetail.containsKey("shipping_info")) {
-            Map<String, Object> shipping = new LinkedHashMap<>();
-            shipping.put("name", "王小明");
-            shipping.put("phone", "0922334455");
-            shipping.put("address", "台北市信義區忠孝東路 100 號");
-            shipping.put("city", "台北");
-            shipping.put("postal_code", "11001");
-            shipping.put("country", "TW");
-            orderDetail.put("shipping_info", shipping);
+        // shipping_info: Cyberbiz uses receiver
+        if (!orderDetail.containsKey("shipping_info") && raw.containsKey("receiver")) {
+            Map<String, Object> receiver = (Map<String, Object>) raw.get("receiver");
+            Map<String, Object> shippingInfo = new LinkedHashMap<>();
+            if (receiver != null) {
+                shippingInfo.put("name", receiver.getOrDefault("name", ""));
+                shippingInfo.put("phone", receiver.getOrDefault("phone", ""));
+                shippingInfo.put("address", receiver.getOrDefault("address", ""));
+            }
+            orderDetail.put("shipping_info", shippingInfo);
         }
 
-        log.info("Fetched order detail from Cyberbiz: {}", orderId);
+        // channelCreatedAt: Cyberbiz uses created_at string (YYYY-MM-DD HH:MM:SS)
+        if (!orderDetail.containsKey("channelCreatedAt") && raw.containsKey("created_at")) {
+            String createdAt = String.valueOf(raw.get("created_at")).replace(" ", "T") + "Z";
+            orderDetail.put("channelCreatedAt", createdAt);
+        }
+
+        // order_number: keep as-is (used for channelOrderNumber)
+        // order_number is already present from raw
+
+        log.info("Fetched and translated order detail from Cyberbiz: {}", orderId);
         return orderDetail;
     }
 

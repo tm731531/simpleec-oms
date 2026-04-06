@@ -184,9 +184,16 @@ public class CyberbizApiClient {
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 JsonNode root = objectMapper.readTree(response.getBody());
+                // Cyberbiz /v1/orders/{id} returns order directly as flat JSON object (not wrapped)
+                if (root.has("id")) {
+                    Map<String, Object> orderMap = objectMapper.convertValue(root, Map.class);
+                    log.debug("Retrieved order detail from Cyberbiz: {}", orderId);
+                    return orderMap;
+                }
+                // Fallback: legacy envelope format { "success": true, "data": {...} }
                 if (root.has("success") && root.get("success").asBoolean() && root.has("data")) {
                     Map<String, Object> orderMap = objectMapper.convertValue(root.get("data"), Map.class);
-                    log.debug("Retrieved order detail from Cyberbiz: {}", orderId);
+                    log.debug("Retrieved order detail from Cyberbiz (envelope format): {}", orderId);
                     return orderMap;
                 }
             }
