@@ -181,7 +181,7 @@ public class UserOrderController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Order> getOrder(
+    public ResponseEntity<OrderVO> getOrder(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable String id) {
         EncryptionContext.setMerchantId(principal.getMerchantId());
@@ -190,7 +190,8 @@ public class UserOrderController {
             if (order.isEmpty() || !principal.getMerchantId().equals(order.get().getMerchantId())) {
                 return ResponseEntity.notFound().build();
             }
-            return ResponseEntity.ok(order.get());
+            String platformName = getPlatformName(order.get().getChannelId());
+            return ResponseEntity.ok(OrderVO.from(order.get(), platformName));
         } finally {
             EncryptionContext.clear();
         }

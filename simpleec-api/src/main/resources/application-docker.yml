@@ -1,3 +1,7 @@
+simpleec:
+  cors:
+    allowed-origins: "https://oms.tomting.com,https://oms-admin.tomting.com,http://localhost:8080,http://localhost:5173,http://localhost:3000,http://localhost:8089"
+
 spring:
   datasource:
     url: jdbc:postgresql://postgres:5432/simpleec

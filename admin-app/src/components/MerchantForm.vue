@@ -1,10 +1,5 @@
 <template>
-  <!-- 測試用簡單 div 替換 el-dialog -->
-  <div v-if="visible" style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; border: 2px solid red; padding: 20px; width: 600px; max-height: 80vh; overflow-y: auto; z-index: 10000; box-shadow: 0 0 20px rgba(0,0,0,0.3);">
-    <div style="font-size: 20px; font-weight: bold; margin-bottom: 20px;">
-      {{ isEdit ? '編輯商家' : '新增商家' }}
-    </div>
-
+  <el-dialog v-model="visible" :title="isEdit ? '編輯商家' : '新增商家'" width="650px" @close="handleClose">
     <el-form ref="form" :model="formData" label-width="120px">
       <el-form-item v-if="!isEdit" label="商家ID">
         <el-input v-model="formData.id" placeholder="輸入商家ID" />
@@ -61,14 +56,13 @@
         </el-select>
       </el-form-item>
     </el-form>
-
-    <div style="margin-top: 20px; text-align: right;">
+    <template #footer>
       <el-button @click="handleClose">取消</el-button>
       <el-button type="primary" @click="handleSubmit" :loading="loading">
         {{ isEdit ? '更新' : '建立' }}
       </el-button>
-    </div>
-  </div>
+    </template>
+  </el-dialog>
 </template>
 
 <script setup lang="ts">

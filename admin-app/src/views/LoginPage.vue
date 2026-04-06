@@ -57,7 +57,7 @@ async function handleLogin() {
   loading.value = true
   error.value = ''
   try {
-    const data = await api.post('/api/admin/auth/login', {
+    const data = await api.post('/admin/auth/login', {
       email: email.value,
       password: password.value,
     })

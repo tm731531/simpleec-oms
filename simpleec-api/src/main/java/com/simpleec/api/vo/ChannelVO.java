@@ -36,11 +36,19 @@ public class ChannelVO {
     private LocalDateTime updatedAt;
 
     // Token 遮罩顯示值（前4...後4，空值為 null）
+    // 同時保留舊名稱 token/token2~5 供舊版 user-app 使用
     private String token1Masked;
     private String token2Masked;
     private String token3Masked;
     private String token4Masked;
     private String token5Masked;
+
+    // 向後相容欄位（舊版 user-app 期望的欄位名稱）
+    private String token;
+    private String token2;
+    private String token3;
+    private String token4;
+    private String token5;
 
     // 平台 token 欄位語意標籤（來自 Platform.capabilities.tokenLabels）
     private JsonNode tokenLabels;
@@ -70,12 +78,23 @@ public class ChannelVO {
         vo.setCreatedAt(channel.getCreatedAt());
         vo.setUpdatedAt(channel.getUpdatedAt());
 
-        // Token 遮罩
-        vo.setToken1Masked(mask(channel.getToken()));
-        vo.setToken2Masked(mask(channel.getToken2()));
-        vo.setToken3Masked(mask(channel.getToken3()));
-        vo.setToken4Masked(mask(channel.getToken4()));
-        vo.setToken5Masked(mask(channel.getToken5()));
+        // Token 遮罩（新欄位名稱 + 向後相容舊欄位名稱）
+        String t1 = mask(channel.getToken());
+        String t2 = mask(channel.getToken2());
+        String t3 = mask(channel.getToken3());
+        String t4 = mask(channel.getToken4());
+        String t5 = mask(channel.getToken5());
+        vo.setToken1Masked(t1);
+        vo.setToken2Masked(t2);
+        vo.setToken3Masked(t3);
+        vo.setToken4Masked(t4);
+        vo.setToken5Masked(t5);
+        // 向後相容：舊版 user-app 使用 token/token2~5
+        vo.setToken(t1);
+        vo.setToken2(t2);
+        vo.setToken3(t3);
+        vo.setToken4(t4);
+        vo.setToken5(t5);
 
         // Platform capabilities
         if (platform != null && platform.getCapabilities() != null) {

@@ -15,6 +15,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalDateTime;
+import java.time.Instant;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
@@ -167,7 +168,7 @@ public class SeedTestOrdersHandler extends AbstractEventHandler {
         order.put("shippingFee",     0.0);
         order.put("discountAmount",  0.0);
         order.put("items",           List.of(item));
-        order.put("channelCreatedAt", LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+        order.put("channelCreatedAt", Instant.now().toString());  // ISO-8601 with Z suffix for Instant.parse()
 
         return order;
     }

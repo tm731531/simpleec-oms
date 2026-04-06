@@ -758,8 +758,8 @@ services:
       dockerfile: docker/Dockerfile.nginx
     container_name: simpleec-nginx
     ports:
-    - 8089:80
-    - 8090:443
+    - "8089:80"
+    - "8090:443"
     depends_on:
       simpleec-user-app:
         condition: service_started

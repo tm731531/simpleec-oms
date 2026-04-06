@@ -1,9 +1,11 @@
 package com.simpleec.api.vo;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.simpleec.core.entity.Order;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Map;
@@ -13,10 +15,13 @@ import java.util.Map;
  *
  * 將 Order 實體轉換為前端期望的字段結構
  */
+@Slf4j
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 public class OrderVO {
+
+    private static final ObjectMapper MAPPER = new ObjectMapper();
     private String id;
     private String merchantId;
 
@@ -81,7 +86,7 @@ public class OrderVO {
         vo.setBuyerName(order.getBuyerName());
         vo.setBuyerPhone(order.getBuyerPhone());
         vo.setBuyerEmail(order.getBuyerEmail());
-        vo.setItems(order.getItems());
+        vo.setItems(parseJson(order.getItems()));
         vo.setBuyerInfo(order.getBuyerInfo());
         vo.setShippingInfo(order.getShippingInfo());
         vo.setPaymentMethod(order.getPaymentMethod());
@@ -92,5 +97,19 @@ public class OrderVO {
         vo.setIsRollback(order.isRollback());
 
         return vo;
+    }
+
+    /**
+     * Parse JSON string to object so frontend receives a proper array/object, not a string.
+     * Returns the original string if parsing fails.
+     */
+    private static Object parseJson(String json) {
+        if (json == null || json.isBlank()) return null;
+        try {
+            return MAPPER.readValue(json, Object.class);
+        } catch (Exception e) {
+            log.warn("Failed to parse items JSON: {}", e.getMessage());
+            return json;
+        }
     }
 }
