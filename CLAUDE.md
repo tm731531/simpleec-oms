@@ -194,6 +194,13 @@ http://localhost:8088
 - OTEL Agent v2.10.0 + Grafana (Prometheus + Loki + Tempo)
 - 11 Gradle 模組, 26 Docker 容器, **16 Kafka Topics**
 
+### ChannelAdapterRegistry（新增 2026-04-06）
+- `simpleec-channel/.../registry/ChannelAdapterRegistry.java`
+- 自動收集所有 `ChannelAdapter` Spring Bean，`getAdapter(platformCode)` 路由
+- 新增平台 = 實作 ChannelAdapter + 宣告 @Bean，不需改任何 handler
+- CyberbizAdapter credentials 用 `ConcurrentHashMap<channelId, String[]>`，多 thread 安全
+- `ChannelAdapter.setCredentials(channelId, token, secret)` — 必帶 channelId
+
 ### Kafka Topics (10個 + 7業務主題)
 - **10 Channel Topics**: `{platform}.fast`, `{platform}.slow` × 6 platforms (momo, shopee, yahoo, pchome, cyberbiz, easystore)
   - `.fast`: 快速任務（SHIP_ORDER, UPDATE_PRICE, UPDATE_INVENTORY, APPROVE_RETURN）< 5s

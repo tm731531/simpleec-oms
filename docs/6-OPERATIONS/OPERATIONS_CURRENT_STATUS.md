@@ -1,6 +1,6 @@
 # SimpleEC OMS - 当前运维状态 (Feb 25, 2026)
 
-## 📊 系统状态：✅ 完全操作 (All Systems Operational) + 新特性已发布
+## 📊 系統狀態：✅ 完全運行 (All Systems Operational) — 2026-04-06 更新
 
 ### 核心系统
 | 组件 | 状态 | 备注 |
@@ -39,6 +39,46 @@
 
 ### 新增公开端点
 - ✅ `GET /api/enums/order-statuses` → 200 (返回所有订单状态)
+
+---
+
+## 🔧 全面審查 Round 2 — 擴充性 + 水平擴展修復 (2026-04-06)
+
+### commit: 65b81de
+
+#### 核心架構修復
+
+**ARCH-1: ChannelAdapterRegistry（擴充性）**
+- 新增 `simpleec-channel/.../registry/ChannelAdapterRegistry.java`
+- 自動收集所有 `ChannelAdapter` Spring Bean，依 `platformCode` 路由
+- 所有 outbound handler（SHIP_ORDER / UPDATE_PRICE / UPDATE_INVENTORY / APPROVE_RETURN / REJECT_RETURN / FETCH_RETURNS）改用 registry，不再 hardcode `cyberbizAdapter`
+- 新增平台時只需實作 `ChannelAdapter`，無需修改任何 handler
+
+**CyberbizAdapter Credential Race Condition（水平擴展）**
+- 移除 `private String token, secret` singleton instance fields
+- 改用 `ConcurrentHashMap<channelId, String[]>` 儲存 per-channel credentials
+- `setCredentials(channelId, token, secret)` 原子寫入，多 thread / 多 channel 不互蓋
+- `ChannelAdapter` 介面簽名同步更新：`setCredentials(String channelId, String token, String secret)`
+- 補充 `fetchProducts(String channelId)` 至介面（ARCH-5）
+- `SyncPackChannelHandler` 改用 `ChannelAdapter` 介面而非具體 class（ARCH-20）
+
+#### Kafka 契約修復
+
+| 代號 | 問題 | 修復 |
+|------|------|------|
+| K-1 | FETCH_ORDER_DETAIL header 缺 requestId/platformId/source | 補齊；timestamp 改用 baseTimestamp |
+| K-4 | TaskFrontendListener 沒有 schema version 驗證 | 補 SchemaVersionHandler.validate() + DLT routing |
+| K-5 | OrderUpsertConsumer DLT 送 JsonNode 而非 String | 改送 messageJson |
+| K-8 | FETCH_ORDERS 用 requestId 當 key，同 channel 可能散落不同 partition | 改用 channelId |
+| K-11 | HeartbeatJob body 重複放 timestamp | 移除（header 已有） |
+
+#### 資料完整性
+- **DB-14**: 移除 `ReturnOrderRepository.findByChannelRefundId()` 無 scope 方法（多租戶安全）
+
+#### E2E 驗證（2026-04-06）
+- 12 個 API 端點全部通過
+- Cyberbiz 即時資料流確認（5 筆訂單進 DB，含買家/商品/地址）
+- 事件流完整：HeartbeatJob → scheduler → FETCH_ORDERS → FETCH_ORDER_DETAIL → ORDER_UPSERT → DB
 
 ---
 
