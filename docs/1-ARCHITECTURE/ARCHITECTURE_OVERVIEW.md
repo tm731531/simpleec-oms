@@ -1,9 +1,9 @@
 # SimpleEC OMS 系統架構全景圖
 
-> **目的**：統整所有 11 份文檔，呈現系統整體架構、數據流、角色分工，幫助新開發者快速理解全貌。
+> **目的**：統整所有文檔，呈現系統整體架構、數據流、角色分工，幫助新開發者快速理解全貌。
 >
-> **最後更新**：2026-02-20
-> **版本**：1.0（新增，配合 Mode A/B 架構模式）
+> **最後更新**：2026-04-07
+> **版本**：2.0（新增 Platform Capabilities + Channel Health 架構）
 
 ---
 
@@ -37,13 +37,13 @@
 
 ---
 
-## 📊 11 份文檔地圖
+## 📊 文檔地圖（150+ 份文檔）
 
 ### 第一層：基礎設計契約（必讀）
 
 ```
 CORE_CONTRACTS.md ⭐⭐⭐
-  ├─ 16 個 Kafka Topic 定義
+  ├─ 20 個 Kafka Topic 定義（含 platform fast/slow）
   ├─ 統一的 Header/Body 訊息結構
   ├─ 7 個 TaskType 分類
   └─ Mode A/B 處理方式 (§4.1 新增)
@@ -53,7 +53,7 @@ EVENT_SAMPLES.md ⭐⭐⭐
   └─ 開發/測試時參考的真實數據結構
          ↓
 QUEUE_CONSUMER_DESIGN.md ⭐⭐
-  ├─ 16 個 Consumer Group 設計
+  ├─ Consumer Group 設計
   ├─ Heartbeat + Scheduler 架構詳解
   └─ Mode B FETCH_ORDER_DETAIL 流程 (§2 更新)
          ↓
@@ -84,7 +84,29 @@ REDIS_DEDUPLICATION.md ⭐
   └─ 7 天 TTL 被動恢復策略
 ```
 
-### 第三層：支撐設施（部署 & 維運）
+### 第三層：Platform & Channel 管理（新增）
+
+```
+PLATFORM_CAPABILITIES_GUIDE.md ⭐⭐⭐ (新增)
+  ├─ capabilities JSONB 設計
+  ├─ OAuth 類型設定（shopee_oauth / 無）
+  ├─ Token Labels 自訂（token1~token5）
+  └─ 平台能力旗標（multiLocation/webhook/asyncInventory）
+         ↓
+CHANNEL_HEALTH_MONITORING.md ⭐⭐ (新增)
+  ├─ 健康檢查機制
+  ├─ Redis 快取策略（TTL 10 分鐘）
+  ├─ 同步日誌 API
+  └─ ChannelHealthOverview 元件
+         ↓
+SHOPEE_OAUTH_GUIDE.md ⭐⭐
+  ├─ Shopee OAuth 2.0 授權流程
+  ├─ Token 生命週期管理
+  ├─ 分散式鎖設計
+  └─ Popup 授權流程
+```
+
+### 第四層：支撐設施（部署 & 維運）
 
 ```
 DOCKER_GUIDE.md
@@ -97,7 +119,7 @@ OPERATIONS_RUNBOOK.md
   └─ 告警與應急響應
          ↓
 SCHEMA.md
-  ├─ 19 張表的 DDL 定義
+  ├─ 20+ 張表的 DDL 定義
   ├─ 索引與分區策略
   └─ Entity ↔ API 對應
          ↓
@@ -428,6 +450,20 @@ CORE_CONTRACTS.md
    ↓ 想開發 Channel Job？
 
 CHANNEL_IMPLEMENTATION_GUIDE.md
+  ├─ docs/rules/tech/platform-api.md
+  └─ docs/rules/tech/kafka-envelope.md
+
+   ↓ 想了解 Platform Capabilities？
+
+PLATFORM_CAPABILITIES_GUIDE.md (新增)
+  ├─ docs/rules/tech/capabilities-model.md
+  └─ docs/7-IMPLEMENTATION/SHOPEE_OAUTH_GUIDE.md
+
+   ↓ 想了解 Channel Health？
+
+CHANNEL_HEALTH_MONITORING.md (新增)
+  ├─ HealthCheckService.java
+  └─ ChannelHealthOverview.vue
 
    ↓ 想開發 Handler？
 

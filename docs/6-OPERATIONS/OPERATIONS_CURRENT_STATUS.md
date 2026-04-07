@@ -1,6 +1,6 @@
-# SimpleEC OMS - 当前运维状态 (Feb 25, 2026)
+# SimpleEC OMS - 当前运维状态 (Apr 7, 2026)
 
-## 📊 系統狀態：✅ 完全運行 (All Systems Operational) — 2026-04-06 更新（Shopee OAuth）
+## 📊 系統狀態：✅ 完全運行 (All Systems Operational) — 2026-04-07 更新（Platform Capabilities + Channel Health）
 
 ### 核心系统
 | 组件 | 状态 | 备注 |
@@ -45,6 +45,63 @@
 - ✅ `GET /api/user/channels/{id}/shopee/auth-url` → 生成授權 URL
 - ✅ `POST /api/user/channels/{id}/shopee/refresh-token` → 手動強制刷新
 - ✅ `POST /api/user/channels/{id}/shopee/disconnect` → 斷開授權
+
+---
+
+## 🔧 Platform Capabilities UI + Channel Health Overview (2026-04-07)
+
+### commit: e353a07
+
+**功能：Platform 管理完整 capabilities 設定 + Channel 健康狀態總覽**
+
+#### Platform 管理修正（admin-app）
+- **types.ts** — Platform interface 與 DB 欄位 1:1 對齊
+  - 移除：`platform_code`, `merchant_id`, `api_key`, `api_secret`, `status`
+  - 新增：`credential1`, `credential2`, `actived`, `queue_topic`, `currency`, `ship_options`, `capabilities`
+- **PlatformForm.vue** — 大幅擴充表單功能
+  - OAuth 類型選擇（下拉選單：無 / Shopee OAuth）
+  - 平台能力勾選（multiLocation, webhook, asyncInventory）
+  - Token 欄位名稱自訂（token1~token5 可自訂 label）
+  - 配送選項 JSON 編輯器（textarea）
+- **PlatformTable.vue** — 表格欄位擴充
+  - 新增「配送選項」欄位（顯示 JSON keys）
+  - 新增「平台能力」欄位（el-tag 顯示）
+  - 新增「最後更新」時間欄位
+- **Backend** — `AdminPlatformController.updatePlatform()` 新增 capabilities 更新邏輯
+- **JSONB 映射修復** — Platform entity 改用 `@JdbcTypeCode(SqlTypes.JSON)`，修正 PostgreSQL JSONB 類型錯誤
+
+#### Channel 管理擴充（user-app）
+- **ChannelPage.vue** — 大幅擴充
+  - Token1~5 永遠顯示（不再因無 alias 而隱藏）
+  - 新增 `🔑 認證憑證` 分隔線和提示文字
+  - 編輯模式 placeholder 改為「留空表示不修改」
+  - Dialog 加入 `:key` 確保編輯時重新渲染
+  - 新增同步日誌 Drawer（分頁查詢 syncType/狀態/健康/HTTP/錯誤/時間）
+  - 新增「日誌」按鈕到每個通路卡片
+- **ChannelHealthOverview.vue**（新元件）— 通路健康狀態總覽
+  - 顯示所有通路的健康狀態表格
+  - 支援手動重新整理
+- **channel.ts** — 新增 `getSyncLogs()` API 方法
+
+#### Backend 擴充
+- **UserChannelController.java** — 新增同步日誌 API + 健康狀態快取
+  - `GET /api/user/channels/{id}/sync-logs`（分頁查詢）
+  - Redis 快取 `channel:health:` prefix，TTL 10 分鐘
+- **ChannelSyncLogRepository.java** — 新增分頁查詢方法
+- **HealthCheckService.java** — Redis 快取健康檢查結果，健康日誌加入 `health` 欄位
+
+#### Nginx 動態 DNS 解析
+- **nginx.conf** — 移除靜態 `upstream` 區塊
+  - 改用 `resolver 127.0.0.11 valid=10s` + `set $var` 動態解析
+  - 修正容器重啟 IP 改變時的 502 Bad Gateway 問題
+
+#### 設計要點
+- **capabilities JSONB**：驅動業務邏輯，避免 hardcode 平台名稱判斷
+  - `oauthFlow`: 決定 Channel 頁面是否顯示 OAuth 按鈕
+  - `tokenLabels`: 定義 token1~5 的顯示名稱
+  - `multiLocation/webhook/asyncInventory`: 平台能力旗標
+- **Token 安全**：編輯時不顯示完整 token，留空表示不修改
+- **健康檢查快取**：Redis 10 分鐘 TTL，避免頻繁檢查外部 API
 
 ---
 
