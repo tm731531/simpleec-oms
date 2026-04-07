@@ -19,7 +19,19 @@
           <span class="readonly-text">{{ form.tax_id_number || '—' }}</span>
         </el-form-item>
         <el-form-item label="時區">
-          <span class="readonly-text">{{ form.user_local_time_zone || '—' }}</span>
+          <el-select v-model="form.user_local_time_zone" placeholder="選擇時區" style="width: 100%">
+            <el-option label="Asia/Taipei (UTC+8)" value="Asia/Taipei" />
+            <el-option label="Asia/Hong_Kong (UTC+8)" value="Asia/Hong_Kong" />
+            <el-option label="Asia/Shanghai (UTC+8)" value="Asia/Shanghai" />
+            <el-option label="Asia/Tokyo (UTC+9)" value="Asia/Tokyo" />
+            <el-option label="Asia/Seoul (UTC+9)" value="Asia/Seoul" />
+            <el-option label="Asia/Singapore (UTC+8)" value="Asia/Singapore" />
+            <el-option label="Asia/Bangkok (UTC+7)" value="Asia/Bangkok" />
+            <el-option label="UTC" value="UTC" />
+            <el-option label="America/New_York (UTC-5)" value="America/New_York" />
+            <el-option label="America/Los_Angeles (UTC-8)" value="America/Los_Angeles" />
+            <el-option label="Europe/London (UTC+0)" value="Europe/London" />
+          </el-select>
         </el-form-item>
 
         <div class="section-title">地址</div>
@@ -102,6 +114,7 @@ async function submitSettings() {
       merchantName: form.merchant_name,
       merchantEmail: form.merchant_email,
       merchantPhoneNumber: form.merchant_phone_number,
+      userLocalTimeZone: form.user_local_time_zone,
     })
     ElMessage.success('設定已儲存')
   } catch {
