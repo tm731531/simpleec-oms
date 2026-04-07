@@ -83,35 +83,75 @@
 
     <!-- 同步日誌 Drawer -->
     <el-drawer v-model="logsVisible" :title="`${logsChannel?.channelName ?? ''} — 同步日誌`" size="720px">
-      <el-table :data="logsList" v-loading="logsLoading" size="small" style="width: 100%">
-        <el-table-column prop="syncType" label="類型" width="180" />
-        <el-table-column label="狀態" width="90">
-          <template #default="{ row }">
-            <el-tag :type="row.status === 'success' ? 'success' : 'danger'" size="small">{{ row.status }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="健康" width="90">
-          <template #default="{ row }">
-            <el-tag v-if="row.health" :type="row.health === 'healthy' ? 'success' : 'danger'" size="small">{{ row.health }}</el-tag>
-            <span v-else style="color:#ccc">—</span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="httpStatus" label="HTTP" width="70" />
-        <el-table-column prop="errorMessage" label="錯誤訊息" min-width="160" show-overflow-tooltip />
-        <el-table-column label="時間" width="160">
-          <template #default="{ row }">{{ formatTime(row.createdAt) }}</template>
-        </el-table-column>
-      </el-table>
-      <el-pagination
-        v-model:current-page="logsPage"
-        v-model:page-size="logsPageSize"
-        :total="logsTotal"
-        :page-sizes="[20, 50, 100]"
-        layout="total, sizes, prev, pager, next"
-        style="margin-top: 16px; text-align: right"
-        @current-change="loadLogs"
-        @size-change="loadLogs"
-      />
+      <el-tabs v-model="logsTab" @tab-change="onLogsTabChange">
+
+        <!-- 通路日誌 tab -->
+        <el-tab-pane label="通路日誌" name="channel">
+          <el-table :data="logsList" v-loading="logsLoading" size="small" style="width: 100%">
+            <el-table-column prop="syncType" label="類型" width="200" />
+            <el-table-column label="狀態" width="90">
+              <template #default="{ row }">
+                <el-tag :type="row.status === 'success' ? 'success' : (row.status === 'skipped' ? 'info' : 'danger')" size="small">{{ row.status }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="健康" width="90">
+              <template #default="{ row }">
+                <el-tag v-if="row.health" :type="row.health === 'healthy' ? 'success' : (row.health === 'unknown' ? 'info' : 'danger')" size="small">{{ row.health }}</el-tag>
+                <span v-else style="color:#ccc">—</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="httpStatus" label="HTTP" width="70" />
+            <el-table-column prop="errorMessage" label="錯誤訊息" min-width="160" show-overflow-tooltip />
+            <el-table-column label="時間" width="160">
+              <template #default="{ row }">{{ formatTime(row.createdAt) }}</template>
+            </el-table-column>
+          </el-table>
+          <el-pagination
+            v-model:current-page="logsPage"
+            v-model:page-size="logsPageSize"
+            :total="logsTotal"
+            :page-sizes="[20, 50, 100]"
+            layout="total, sizes, prev, pager, next"
+            style="margin-top: 16px; text-align: right"
+            @current-change="loadLogs"
+            @size-change="loadLogs"
+          />
+        </el-tab-pane>
+
+        <!-- 平台日誌 tab -->
+        <el-tab-pane :label="`平台日誌（${logsChannel?.platformName ?? ''}）`" name="platform">
+          <el-table :data="platformLogsList" v-loading="platformLogsLoading" size="small" style="width: 100%">
+            <el-table-column prop="syncType" label="類型" width="200" />
+            <el-table-column label="狀態" width="90">
+              <template #default="{ row }">
+                <el-tag :type="row.status === 'success' ? 'success' : (row.status === 'skipped' ? 'info' : 'danger')" size="small">{{ row.status }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="健康" width="90">
+              <template #default="{ row }">
+                <el-tag v-if="row.health" :type="row.health === 'healthy' ? 'success' : (row.health === 'unknown' ? 'info' : 'danger')" size="small">{{ row.health }}</el-tag>
+                <span v-else style="color:#ccc">—</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="httpStatus" label="HTTP" width="70" />
+            <el-table-column prop="errorMessage" label="錯誤訊息" min-width="160" show-overflow-tooltip />
+            <el-table-column label="時間" width="160">
+              <template #default="{ row }">{{ formatTime(row.createdAt) }}</template>
+            </el-table-column>
+          </el-table>
+          <el-pagination
+            v-model:current-page="platformLogsPage"
+            v-model:page-size="platformLogsPageSize"
+            :total="platformLogsTotal"
+            :page-sizes="[20, 50, 100]"
+            layout="total, sizes, prev, pager, next"
+            style="margin-top: 16px; text-align: right"
+            @current-change="loadPlatformLogs"
+            @size-change="loadPlatformLogs"
+          />
+        </el-tab-pane>
+
+      </el-tabs>
     </el-drawer>
 
     <!-- 新增/編輯 Dialog -->
@@ -196,11 +236,17 @@ const saving = ref(false)
 const syncingChannels = ref<Set<string>>(new Set())
 const logsVisible = ref(false)
 const logsChannel = ref<ChannelVO | null>(null)
+const logsTab = ref<'channel' | 'platform'>('channel')
 const logsList = ref<any[]>([])
 const logsLoading = ref(false)
 const logsPage = ref(1)
 const logsPageSize = ref(20)
 const logsTotal = ref(0)
+const platformLogsList = ref<any[]>([])
+const platformLogsLoading = ref(false)
+const platformLogsPage = ref(1)
+const platformLogsPageSize = ref(20)
+const platformLogsTotal = ref(0)
 const formVisible = ref(false)
 const editingChannel = ref<ChannelVO | null>(null)
 const selectedPlatform = ref<any>(null)
@@ -323,11 +369,21 @@ async function handleSave() {
 
 function openLogs(ch: ChannelVO) {
   logsChannel.value = ch
+  logsTab.value = 'channel'
   logsPage.value = 1
   logsList.value = []
   logsTotal.value = 0
+  platformLogsPage.value = 1
+  platformLogsList.value = []
+  platformLogsTotal.value = 0
   logsVisible.value = true
   loadLogs()
+}
+
+function onLogsTabChange(tab: string) {
+  if (tab === 'platform' && platformLogsList.value.length === 0) {
+    loadPlatformLogs()
+  }
 }
 
 async function loadLogs() {
@@ -341,6 +397,20 @@ async function loadLogs() {
     console.error(e)
   } finally {
     logsLoading.value = false
+  }
+}
+
+async function loadPlatformLogs() {
+  if (!logsChannel.value?.platformId) return
+  platformLogsLoading.value = true
+  try {
+    const res: any = await channelAPI.getPlatformSyncLogs(logsChannel.value.platformId, platformLogsPage.value, platformLogsPageSize.value)
+    platformLogsList.value = res?.data ?? []
+    platformLogsTotal.value = res?.pagination?.total ?? 0
+  } catch (e) {
+    console.error(e)
+  } finally {
+    platformLogsLoading.value = false
   }
 }
 

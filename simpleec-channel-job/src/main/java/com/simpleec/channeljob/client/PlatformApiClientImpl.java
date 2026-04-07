@@ -32,13 +32,14 @@ public class PlatformApiClientImpl implements PlatformApiClient {
 
     // ─── Channel health check (with auth) ────────────────────────────────────
 
-    // Platform base URLs for ping (no auth required)
+    // Platform base URLs for ping (no auth required — must return 2xx/3xx)
+    // Use marketing/portal sites, NOT API endpoints (API roots return 401/403/404)
     private static final java.util.Map<String, String> PLATFORM_PING_URLS = java.util.Map.of(
-        "cyberbiz", "https://api.cyberbiz.co/v1",
-        "shopee",   "https://partner.shopeemobile.com",
-        "momo",     "https://api.momomall.com.tw",
+        "cyberbiz", "https://www.cyberbiz.co",
+        "shopee",   "https://shopee.tw",
+        "momo",     "https://www.momoshop.com.tw",
         "yahoo",    "https://tw.yahoo.com",
-        "pchome",   "https://store.pchome.com.tw",
+        "pchome",   "https://www.pchome.com.tw",
         "easystore","https://www.easystore.co"
     );
 

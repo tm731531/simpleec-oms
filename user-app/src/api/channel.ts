@@ -83,6 +83,10 @@ export const channelAPI = {
     return api.get(`/api/user/channels/${id}/sync-logs`, { params: { page, pageSize } })
   },
 
+  getPlatformSyncLogs(platformId: string, page = 1, pageSize = 20) {
+    return api.get(`/api/user/channels/platforms/${platformId}/sync-logs`, { params: { page, pageSize } })
+  },
+
   getPlatform(id: string) {
     return api.get<Platform>(`/api/user/channels/platforms/${id}`)
   },
