@@ -14,7 +14,7 @@ import java.time.LocalDateTime;
 @Table(name = "channel_sync_logs",
        indexes = {
            @Index(name = "idx_sync_log_channel", columnList = "channel_id, created_at DESC"),
-           @Index(name = "idx_sync_log_merchant", columnList = "merchant_id, created_at DESC")
+           @Index(name = "idx_sync_log_platform", columnList = "platform_id, created_at DESC")
        })
 @Data
 @NoArgsConstructor
@@ -23,16 +23,16 @@ public class ChannelSyncLog {
     @Id
     private String id;
 
-    @Column(nullable = false)
-    private String merchantId;
-
     @Column(nullable = true)
     private String channelId;
+
+    @Column(nullable = true, name = "platform_id")
+    private String platformId;
 
     @Column(nullable = false, name = "sync_type")
     private String syncType; // e.g., "CHANNEL_HEALTH_CHECK", "PLATFORM_HEALTH_CHECK", "ORDER_SYNC"
 
-    @Column(nullable = false)
+    @Column(nullable = true)
     private Integer httpStatus;
 
     @Column(nullable = false)

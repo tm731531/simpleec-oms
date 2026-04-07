@@ -56,7 +56,7 @@ public class HealthCheckService {
 
             if (channel == null) {
                 log.warn("Channel {} not found", channelId);
-                recordHealthLog(channelId, null, null, 404, "Channel not found");
+                recordHealthLog(channelId, null, 404, "Channel not found");
                 return new HealthCheckResult(404, "unhealthy", "Channel not found");
             }
 
@@ -72,7 +72,6 @@ public class HealthCheckService {
 
             recordHealthLog(
                 channelId,
-                channel.getMerchantId(),
                 channel.getPlatformId(),
                 httpStatus,
                 errorMessage
@@ -86,7 +85,7 @@ public class HealthCheckService {
 
         } catch (Exception e) {
             log.error("Error performing health check for channel {}", channelId, e);
-            recordHealthLog(channelId, null, null, 500, e.getMessage());
+            recordHealthLog(channelId, null, 500, e.getMessage());
             return new HealthCheckResult(500, "unhealthy", e.getMessage());
         }
     }
@@ -117,14 +116,14 @@ public class HealthCheckService {
         }
     }
 
-    private void recordHealthLog(String channelId, String merchantId, String platformCode,
+    private void recordHealthLog(String channelId, String platformId,
                                  int httpStatus, String errorMessage) {
         String health = httpStatus >= 400 ? "unhealthy" : "healthy";
         try {
             ChannelSyncLog syncLog = new ChannelSyncLog();
             syncLog.setId(UUID.randomUUID().toString());
             syncLog.setChannelId(channelId);
-            syncLog.setMerchantId(merchantId);
+            syncLog.setPlatformId(platformId);
             syncLog.setSyncType("CHANNEL_HEALTH_CHECK");
             syncLog.setHttpStatus(httpStatus);
             syncLog.setStatus(httpStatus >= 400 ? "failed" : "success");
@@ -143,7 +142,7 @@ public class HealthCheckService {
             cache.put("httpStatus", httpStatus);
             cache.put("checkedAt", LocalDateTime.now().toString());
             cache.put("errorMessage", errorMessage);
-            if (platformCode != null) cache.put("platformId", platformCode);
+            if (platformId != null) cache.put("platformId", platformId);
             redisTemplate.opsForValue().set(
                 HEALTH_CACHE_PREFIX + channelId,
                 objectMapper.writeValueAsString(cache),
@@ -158,8 +157,8 @@ public class HealthCheckService {
         try {
             ChannelSyncLog log = new ChannelSyncLog();
             log.setId(UUID.randomUUID().toString());
-            log.setChannelId("PLATFORM_CHECK"); // Platform-level check marker
-            log.setMerchantId("SYSTEM"); // System-level check
+            log.setChannelId(null);  // 平台檢查，無 channel_id
+            log.setPlatformId(platformCode);
             log.setSyncType("PLATFORM_HEALTH_CHECK");
             log.setHttpStatus(httpStatus);
             log.setStatus(httpStatus >= 400 ? "failed" : "success");

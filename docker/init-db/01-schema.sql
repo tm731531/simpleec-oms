@@ -496,8 +496,8 @@ CREATE INDEX idx_refund_stats ON public.refund_orders (merchant_id, requested_at
 -- ---------------------------------------------------------------------------
 CREATE TABLE public.channel_sync_logs (
     id               VARCHAR(20)  NOT NULL,
-    merchant_id      VARCHAR(20)  NOT NULL,
-    channel_id       VARCHAR(20)  NOT NULL,
+    channel_id       VARCHAR(20),
+    platform_id      VARCHAR(20),
     sync_type        VARCHAR(50)  NOT NULL,
     http_status      INTEGER,
     status           VARCHAR(20)  NOT NULL DEFAULT 'success',
@@ -509,8 +509,9 @@ CREATE TABLE public.channel_sync_logs (
     PRIMARY KEY (id)
 );
 
+-- 索引：支援兩種查詢模式
 CREATE INDEX idx_sync_log_channel ON public.channel_sync_logs (channel_id, created_at DESC);
-CREATE INDEX idx_sync_log_merchant ON public.channel_sync_logs (merchant_id, created_at DESC);
+CREATE INDEX idx_sync_log_platform ON public.channel_sync_logs (platform_id, created_at DESC);
 
 -- ---------------------------------------------------------------------------
 -- 18. daily_statistics — Daily stats, partitioned by stat_date

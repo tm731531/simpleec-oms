@@ -11,5 +11,5 @@ public interface ChannelSyncLogRepository extends JpaRepository<ChannelSyncLog, 
 
     Page<ChannelSyncLog> findByChannelIdOrderByCreatedAtDesc(String channelId, Pageable pageable);
 
-    Page<ChannelSyncLog> findByMerchantIdOrderByCreatedAtDesc(String merchantId, Pageable pageable);
+    Page<ChannelSyncLog> findByPlatformIdOrderByCreatedAtDesc(String platformId, Pageable pageable);
 }

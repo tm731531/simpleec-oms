@@ -44,7 +44,7 @@ public class ChannelMessageProcessor {
                 log.info("Channel {} disabled (enable_sync=false), skipping", channelId);
 
                 // Record skip in logs
-                recordSyncLog(merchantId, channelId, 200, "SKIPPED", "Channel disabled");
+                recordSyncLog(channelId, 200, "SKIPPED", "Channel disabled");
                 return false;
             }
 
@@ -54,26 +54,25 @@ public class ChannelMessageProcessor {
             boolean success = channelService.fetchFromPlatform(channelId, message);
 
             if (success) {
-                recordSyncLog(merchantId, channelId, 200, "SUCCESS", null);
+                recordSyncLog(channelId, 200, "SUCCESS", null);
             } else {
-                recordSyncLog(merchantId, channelId, 500, "FAILED", "Processing failed");
+                recordSyncLog(channelId, 500, "FAILED", "Processing failed");
             }
 
             return success;
 
         } catch (Exception e) {
             log.error("Error processing message for channel {}", channelId, e);
-            recordSyncLog(merchantId, channelId, 500, "ERROR", e.getMessage());
+            recordSyncLog(channelId, 500, "ERROR", e.getMessage());
             return false;
         }
     }
 
-    private void recordSyncLog(String merchantId, String channelId,
+    private void recordSyncLog(String channelId,
                                int httpStatus, String status, String errorMessage) {
         try {
             ChannelSyncLog log = new ChannelSyncLog();
             log.setId(UUID.randomUUID().toString());
-            log.setMerchantId(merchantId);
             log.setChannelId(channelId);
             log.setHttpStatus(httpStatus);
             log.setStatus(status);

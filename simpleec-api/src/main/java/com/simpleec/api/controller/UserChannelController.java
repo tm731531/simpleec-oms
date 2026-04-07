@@ -269,6 +269,31 @@ public class UserChannelController {
     }
 
     /**
+     * 查詢特定平台的同步日誌（包含所有通路 + 平台檢查）
+     */
+    @GetMapping("/platforms/{platformId}/sync-logs")
+    public ResponseEntity<?> getPlatformSyncLogs(
+        @PathVariable String platformId,
+        @AuthenticationPrincipal UserPrincipal principal,
+        @RequestParam(defaultValue = "1") int page,
+        @RequestParam(defaultValue = "20") int pageSize
+    ) {
+        String merchantId = principal.getMerchantId();
+        var pageable = PageRequest.of(page - 1, pageSize, org.springframework.data.domain.Sort.by("createdAt").descending());
+        var logsPage = syncLogRepository.findByPlatformIdOrderByCreatedAtDesc(platformId, pageable);
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("data", logsPage.getContent());
+        result.put("pagination", Map.of(
+            "total", logsPage.getTotalElements(),
+            "pages", logsPage.getTotalPages(),
+            "page", page,
+            "pageSize", pageSize
+        ));
+        return ResponseEntity.ok(result);
+    }
+
+    /**
      * 通路健康狀態一覽（從 Redis cache 讀取）
      * cache key: channel:health:{channelId}，TTL 10分鐘
      * cache 不存在 → health=unknown（表示尚未檢查或已過期）
