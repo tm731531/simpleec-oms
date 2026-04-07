@@ -16,7 +16,7 @@
           <el-input v-model="form.merchant_phone_number" />
         </el-form-item>
         <el-form-item label="統一編號">
-          <span class="readonly-text">{{ form.tax_id_number || '—' }}</span>
+          <el-input v-model="form.tax_id_number" placeholder="輸入統一編號" />
         </el-form-item>
         <el-form-item label="時區">
           <el-select v-model="form.user_local_time_zone" placeholder="選擇時區" style="width: 100%">
@@ -114,6 +114,7 @@ async function submitSettings() {
       merchantName: form.merchant_name,
       merchantEmail: form.merchant_email,
       merchantPhoneNumber: form.merchant_phone_number,
+      taxIdNumber: form.tax_id_number,
       userLocalTimeZone: form.user_local_time_zone,
     })
     ElMessage.success('設定已儲存')

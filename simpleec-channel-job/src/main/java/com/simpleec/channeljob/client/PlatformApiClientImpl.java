@@ -1,94 +1,142 @@
 package com.simpleec.channeljob.client;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.*;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpStatusCodeException;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
-import org.springframework.web.client.RestClientException;
-import org.springframework.http.HttpStatus;
 
-/**
- * Implementation of PlatformApiClient
- * Calls actual platform APIs with proper error handling
- */
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.text.SimpleDateFormat;
+import java.util.Base64;
+import java.util.Date;
+import java.util.TimeZone;
+
 @Slf4j
 @Component
 public class PlatformApiClientImpl implements PlatformApiClient {
 
     private final RestTemplate restTemplate;
 
+    @Value("${cyberbiz.api.base-url:https://api.cyberbiz.co}")
+    private String cyberbizBaseUrl;
+
     public PlatformApiClientImpl(RestTemplate restTemplate) {
         this.restTemplate = restTemplate;
     }
 
+    // ─── Channel health check (with auth) ────────────────────────────────────
+
+    // Platform base URLs for ping (no auth required)
+    private static final java.util.Map<String, String> PLATFORM_PING_URLS = java.util.Map.of(
+        "cyberbiz", "https://api.cyberbiz.co/v1",
+        "shopee",   "https://partner.shopeemobile.com",
+        "momo",     "https://api.momomall.com.tw",
+        "yahoo",    "https://tw.yahoo.com",
+        "pchome",   "https://store.pchome.com.tw",
+        "easystore","https://www.easystore.co"
+    );
+
     @Override
-    public int healthCheck(String platformCode, String token) throws Exception {
-        try {
-            // Placeholder: Map platform code to API endpoint
-            String endpoint = getPlatformHealthEndpoint(platformCode);
-            log.debug("Calling health check for {} with token", platformCode);
-
-            // In real implementation, would call actual platform API
-            // For now, return 200 (success)
-            return 200;
-
-        } catch (RestClientException e) {
-            log.warn("Health check failed for platform {}: {}", platformCode, e.getMessage());
-            return 500;
-        } catch (Exception e) {
-            log.error("Error during health check for platform {}", platformCode, e);
-            return 500;
+    public int healthCheck(String platformCode, String token, String token2) throws Exception {
+        if (token == null || token.isBlank()) {
+            log.info("No token configured for channel on platform {}", platformCode);
+            return 0; // unknown — credentials not set
         }
+        return switch (platformCode.toLowerCase()) {
+            case "cyberbiz" -> cyberbizChannelCheck(token, token2);
+            // Other platforms: real clients not yet implemented → return 0 (unknown)
+            default -> {
+                log.info("Channel healthCheck not yet implemented for platform: {}", platformCode);
+                yield 0;
+            }
+        };
     }
+
+    // ─── Platform health check (no auth) ─────────────────────────────────────
 
     @Override
     public int platformHealthCheck(String platformCode) throws Exception {
+        String pingUrl = PLATFORM_PING_URLS.get(platformCode.toLowerCase());
+        if (pingUrl == null) {
+            log.info("platformHealthCheck not configured for platform: {}", platformCode);
+            return 0;
+        }
+        return simpleGet(pingUrl);
+    }
+
+    // ─── Cyberbiz ─────────────────────────────────────────────────────────────
+
+    /**
+     * GET /v1/orders?per_page=1&page=1 with HMAC-SHA256 auth.
+     * 2xx / 404 = token valid; 401 / 403 = token invalid.
+     */
+    private int cyberbizChannelCheck(String username, String secret) {
+        if (secret == null || secret.isBlank()) {
+            log.info("Cyberbiz secret (token2) not configured");
+            return 0;
+        }
         try {
-            // Platform-level health check (no token needed)
-            String endpoint = getPlatformStatusEndpoint(platformCode);
-            log.debug("Calling platform health check for {}", platformCode);
-
-            // In real implementation, would call actual platform status API
-            // For now, return 200 (success)
-            return 200;
-
-        } catch (RestClientException e) {
-            log.warn("Platform health check failed for {}: {}", platformCode, e.getMessage());
-            return 503; // Service unavailable
+            String path = "/v1/orders";
+            String url  = cyberbizBaseUrl + path + "?per_page=1&page=1";
+            HttpHeaders headers = buildCyberbizHmacHeaders(username, secret, "GET", path);
+            ResponseEntity<String> resp = restTemplate.exchange(url, HttpMethod.GET, new HttpEntity<>(headers), String.class);
+            return resp.getStatusCode().value();
+        } catch (HttpStatusCodeException e) {
+            return e.getStatusCode().value();
+        } catch (ResourceAccessException e) {
+            log.warn("Cyberbiz channel check connection error: {}", e.getMessage());
+            return 503;
         } catch (Exception e) {
-            log.error("Error during platform health check for {}", platformCode, e);
+            log.error("Cyberbiz channel check error", e);
             return 500;
         }
     }
 
-    /**
-     * Get platform-specific health check endpoint
-     */
-    private String getPlatformHealthEndpoint(String platformCode) {
-        return switch (platformCode.toLowerCase()) {
-            case "momo" -> "https://api.momo.com/v1/health";
-            case "shopee" -> "https://partner.shopeemobile.com/api/v2/health";
-            case "yahoo" -> "https://api.yahoo.com/v1/health";
-            case "pchome" -> "https://api.pchome.com.tw/v1/health";
-            case "cyberbiz" -> "https://api.cyberbiz.com/v1/health";
-            case "shopline" -> "https://api.shoplineapp.com/v1/health";
-            case "shopify" -> "https://api.shopify.com/v1/health";
-            default -> throw new IllegalArgumentException("Unknown platform: " + platformCode);
-        };
+    // ─── Generic GET (platform-level, no auth) ────────────────────────────────
+
+    private int simpleGet(String url) {
+        try {
+            ResponseEntity<String> resp = restTemplate.getForEntity(url, String.class);
+            return resp.getStatusCode().value();
+        } catch (HttpStatusCodeException e) {
+            // Any HTTP response means the platform is reachable
+            return e.getStatusCode().value();
+        } catch (ResourceAccessException e) {
+            log.warn("Platform unreachable: {} — {}", url, e.getMessage());
+            return 503;
+        } catch (Exception e) {
+            log.error("Platform check error for {}", url, e);
+            return 500;
+        }
     }
 
-    /**
-     * Get platform-specific status endpoint (no auth)
-     */
-    private String getPlatformStatusEndpoint(String platformCode) {
-        return switch (platformCode.toLowerCase()) {
-            case "momo" -> "https://status.momo.com/api/status";
-            case "shopee" -> "https://status.shopeemobile.com/api/status";
-            case "yahoo" -> "https://status.yahoo.com/api/status";
-            case "pchome" -> "https://status.pchome.com.tw/api/status";
-            case "cyberbiz" -> "https://status.cyberbiz.com/api/status";
-            case "shopline" -> "https://status.shoplineapp.com/api/status";
-            case "shopify" -> "https://status.shopify.com/api/status";
-            default -> throw new IllegalArgumentException("Unknown platform: " + platformCode);
-        };
+    // ─── Cyberbiz HMAC-SHA256 header builder ─────────────────────────────────
+
+    private HttpHeaders buildCyberbizHmacHeaders(String username, String secret, String method, String path) throws Exception {
+        HttpHeaders headers = new HttpHeaders();
+
+        SimpleDateFormat sdf = new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss z");
+        sdf.setTimeZone(TimeZone.getTimeZone("GMT"));
+        String xDate = sdf.format(new Date());
+        headers.set("X-Date", xDate);
+
+        String requestLine  = method + " " + path + " HTTP/1.1";
+        String stringToSign = "x-date: " + xDate + "\n" + requestLine;
+
+        Mac mac = Mac.getInstance("HmacSHA256");
+        mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+        String signature = Base64.getEncoder().encodeToString(mac.doFinal(stringToSign.getBytes(StandardCharsets.UTF_8)));
+
+        headers.set("Authorization", String.format(
+            "hmac username=\"%s\", algorithm=\"hmac-sha256\", headers=\"x-date request-line\", signature=\"%s\"",
+            username, signature));
+
+        return headers;
     }
 }

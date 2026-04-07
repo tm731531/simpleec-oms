@@ -24,8 +24,9 @@ import java.util.Map;
 @Service
 public class HealthCheckService {
 
-    private static final String HEALTH_CACHE_PREFIX = "channel:health:";
-    private static final Duration HEALTH_CACHE_TTL  = Duration.ofMinutes(10);
+    private static final String HEALTH_CACHE_PREFIX    = "channel:health:";
+    private static final String PLATFORM_CACHE_PREFIX  = "platform:health:";
+    private static final Duration HEALTH_CACHE_TTL     = Duration.ofMinutes(10);
 
     private final ChannelRepository        channelRepository;
     private final ChannelSyncLogRepository channelSyncLogRepository;
@@ -63,25 +64,16 @@ public class HealthCheckService {
             // Call platform API with channel's token
             int httpStatus = platformApiClient.healthCheck(
                 channel.getPlatformId(),
-                channel.getToken()
+                channel.getToken(),
+                channel.getToken2()
             );
 
-            String errorMessage = httpStatus >= 400
-                ? getPlatformErrorMessage(httpStatus, channel.getPlatformId())
-                : null;
+            String health       = channelHealth(httpStatus);
+            String errorMessage = healthError(httpStatus, channel.getPlatformId());
 
-            recordHealthLog(
-                channelId,
-                channel.getPlatformId(),
-                httpStatus,
-                errorMessage
-            );
+            recordHealthLog(channelId, channel.getPlatformId(), httpStatus, errorMessage);
 
-            return new HealthCheckResult(
-                httpStatus,
-                httpStatus >= 400 ? "unhealthy" : "healthy",
-                errorMessage
-            );
+            return new HealthCheckResult(httpStatus, health, errorMessage);
 
         } catch (Exception e) {
             log.error("Error performing health check for channel {}", channelId, e);
@@ -97,17 +89,15 @@ public class HealthCheckService {
         try {
             int httpStatus = platformApiClient.platformHealthCheck(platformCode);
 
-            String errorMessage = httpStatus >= 400
-                ? getPlatformErrorMessage(httpStatus, platformCode)
-                : null;
+            // Platform ping: any HTTP response (even 4xx) means API is reachable → healthy
+            // Only 5xx / 0 (unreachable / unknown) → unhealthy or unknown
+            String health       = platformHealth(httpStatus);
+            // Platform ping: 4xx = platform is UP (API responded, just needs auth/resource exists)
+            // Only record error for 5xx or unreachable (0)
+            String errorMessage = (httpStatus == 0 || httpStatus >= 500) ? healthError(httpStatus, platformCode) : null;
 
             recordPlatformHealthLog(platformCode, httpStatus, errorMessage);
-
-            return new HealthCheckResult(
-                httpStatus,
-                httpStatus >= 400 ? "unhealthy" : "healthy",
-                errorMessage
-            );
+            return new HealthCheckResult(httpStatus, health, errorMessage);
 
         } catch (Exception e) {
             log.error("Error performing platform health check for {}", platformCode, e);
@@ -116,9 +106,40 @@ public class HealthCheckService {
         }
     }
 
+    /**
+     * Channel health: 2xx = healthy, 401/403 = unhealthy (bad token), 0 = unknown (not configured)
+     */
+    private static String channelHealth(int httpStatus) {
+        if (httpStatus == 0)                        return "unknown";
+        if (httpStatus == 401 || httpStatus == 403) return "unhealthy";
+        if (httpStatus >= 500)                      return "unhealthy";
+        if (httpStatus >= 200 && httpStatus < 400)  return "healthy";
+        return "unhealthy";
+    }
+
+    /**
+     * Platform health: any HTTP response (2xx/4xx) = healthy (API is reachable), 5xx/0 = unhealthy/unknown
+     */
+    private static String platformHealth(int httpStatus) {
+        if (httpStatus == 0)               return "unknown";
+        if (httpStatus >= 500)             return "unhealthy";
+        return "healthy"; // 2xx or 4xx both mean the API endpoint is reachable
+    }
+
+    private static String healthError(int httpStatus, String context) {
+        return switch (httpStatus) {
+            case 0   -> null; // unknown — not an error, just not checked
+            case 401 -> "Unauthorized: Token invalid or expired";
+            case 403 -> "Forbidden: Insufficient permissions";
+            case 500 -> "Platform service error";
+            case 503 -> "Platform service unavailable";
+            default  -> httpStatus >= 400 ? "HTTP " + httpStatus : null;
+        };
+    }
+
     private void recordHealthLog(String channelId, String platformId,
                                  int httpStatus, String errorMessage) {
-        String health = httpStatus >= 400 ? "unhealthy" : "healthy";
+        String health = channelHealth(httpStatus);
         try {
             ChannelSyncLog syncLog = new ChannelSyncLog();
             syncLog.setId(NanoIdUtil.generate());
@@ -126,7 +147,7 @@ public class HealthCheckService {
             syncLog.setPlatformId(platformId);
             syncLog.setSyncType("CHANNEL_HEALTH_CHECK");
             syncLog.setHttpStatus(httpStatus);
-            syncLog.setStatus(httpStatus >= 400 ? "failed" : "success");
+            syncLog.setStatus("unknown".equals(health) ? "skipped" : (httpStatus >= 400 ? "failed" : "success"));
             syncLog.setHealth(health);
             syncLog.setErrorMessage(errorMessage);
             syncLog.setCreatedAt(LocalDateTime.now());
@@ -154,32 +175,38 @@ public class HealthCheckService {
     }
 
     private void recordPlatformHealthLog(String platformCode, int httpStatus, String errorMessage) {
+        String health = platformHealth(httpStatus);
         try {
-            ChannelSyncLog log = new ChannelSyncLog();
-            log.setId(NanoIdUtil.generate());
-            log.setChannelId(null);  // 平台檢查，無 channel_id
-            log.setPlatformId(platformCode);
-            log.setSyncType("PLATFORM_HEALTH_CHECK");
-            log.setHttpStatus(httpStatus);
-            log.setStatus(httpStatus >= 400 ? "failed" : "success");
-            log.setHealth(httpStatus >= 400 ? "unhealthy" : "healthy");
-            log.setErrorMessage(errorMessage);
-            log.setCreatedAt(LocalDateTime.now());
-
-            channelSyncLogRepository.save(log);
+            ChannelSyncLog syncLog = new ChannelSyncLog();
+            syncLog.setId(NanoIdUtil.generate());
+            syncLog.setChannelId(null);  // 平台檢查，無 channel_id
+            syncLog.setPlatformId(platformCode);
+            syncLog.setSyncType("PLATFORM_HEALTH_CHECK");
+            syncLog.setHttpStatus(httpStatus);
+            syncLog.setStatus("unknown".equals(health) ? "skipped" : (httpStatus >= 500 ? "failed" : "success"));
+            syncLog.setHealth(health);
+            syncLog.setErrorMessage(errorMessage);
+            syncLog.setCreatedAt(LocalDateTime.now());
+            channelSyncLogRepository.save(syncLog);
         } catch (Exception e) {
             log.warn("Failed to record platform health log for {}", platformCode, e);
         }
-    }
 
-    private String getPlatformErrorMessage(int httpStatus, String platformCode) {
-        return switch (httpStatus) {
-            case 401 -> "Unauthorized: Token invalid or expired";
-            case 403 -> "Forbidden: Insufficient permissions";
-            case 500 -> "Platform service error";
-            case 503 -> "Platform service unavailable";
-            default -> "HTTP " + httpStatus;
-        };
+        // 寫 Redis cache — platform:health:{platformCode}，供前端顯示平台整體狀態
+        try {
+            Map<String, Object> cache = new HashMap<>();
+            cache.put("health",       health);
+            cache.put("httpStatus",   httpStatus);
+            cache.put("checkedAt",    LocalDateTime.now().toString());
+            cache.put("errorMessage", errorMessage);
+            redisTemplate.opsForValue().set(
+                PLATFORM_CACHE_PREFIX + platformCode,
+                objectMapper.writeValueAsString(cache),
+                HEALTH_CACHE_TTL
+            );
+        } catch (Exception e) {
+            log.warn("Failed to write platform health cache for {}", platformCode, e);
+        }
     }
 
     /**

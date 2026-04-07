@@ -15,6 +15,9 @@ public interface ChannelRepository extends JpaRepository<Channel, String> {
     @Query("SELECT c FROM Channel c WHERE c.actived = true AND c.enableSync = true")
     List<Channel> findByActivedTrueAndEnableSyncTrue();
 
+    @Query("SELECT c FROM Channel c WHERE c.actived = true")
+    List<Channel> findByActivedTrue();
+
     @Query("SELECT DISTINCT c.merchantId FROM Channel c WHERE c.actived = true AND c.enableSync = true")
     List<String> findDistinctMerchantIdsByActivedTrue();
 }

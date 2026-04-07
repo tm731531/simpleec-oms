@@ -26,10 +26,12 @@ public class ChannelService {
     }
 
     /**
-     * Get all enabled channels
+     * Get all active channels for health checking.
+     * Health check applies to all actived channels regardless of enableSync,
+     * so we can detect dead tokens/credentials even on non-syncing channels.
      */
     public List<Channel> findEnabledChannels() {
-        return channelRepository.findByActivedTrueAndEnableSyncTrue();
+        return channelRepository.findByActivedTrue();
     }
 
     /**

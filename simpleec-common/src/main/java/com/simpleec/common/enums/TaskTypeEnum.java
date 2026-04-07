@@ -43,6 +43,7 @@ public enum TaskTypeEnum {
     DAILY_REPORT("DAILY_REPORT", "每日報表", false),
     SEED_TEST_ORDERS("SEED_TEST_ORDERS", "每小時假訂單注入（測試用）", false),
     SHOPEE_TOKEN_REFRESH("SHOPEE_TOKEN_REFRESH", "蝦皮 OAuth Token 刷新", false),
+    CHANNEL_HEALTH_CHECK("CHANNEL_HEALTH_CHECK", "通路健康檢查（派發到各通路 fast topic）", false),
 
     // ========== System (系統) ==========
     HEARTBEAT("HEARTBEAT", "系統心臟脈搏", true),

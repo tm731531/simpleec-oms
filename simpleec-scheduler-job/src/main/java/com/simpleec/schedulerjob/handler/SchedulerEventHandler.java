@@ -90,6 +90,7 @@ public class SchedulerEventHandler {
             // :05, :15, :25 ... 每 10 分鐘
             if (mod10 == 5) {
                 dispatchTask(TaskTypeEnum.KAFKA_HEALTH_CHECK, timestamp);
+                dispatchTask(TaskTypeEnum.CHANNEL_HEALTH_CHECK, timestamp);
             }
 
             // 每小時 :00 和 :30

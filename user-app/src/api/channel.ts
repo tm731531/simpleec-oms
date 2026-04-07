@@ -85,5 +85,9 @@ export const channelAPI = {
 
   getPlatform(id: string) {
     return api.get<Platform>(`/api/user/channels/platforms/${id}`)
+  },
+
+  triggerHealthCheck() {
+    return api.post<{ channelsTriggered: number; platformsTriggered: number }>('/api/user/channels/trigger-health-check')
   }
 }

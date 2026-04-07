@@ -35,6 +35,7 @@ public class UserSettingsController {
         if (updates.containsKey("merchantName")) merchant.setMerchantName(updates.get("merchantName"));
         if (updates.containsKey("merchantEmail")) merchant.setMerchantEmail(updates.get("merchantEmail"));
         if (updates.containsKey("merchantPhoneNumber")) merchant.setMerchantPhoneNumber(updates.get("merchantPhoneNumber"));
+        if (updates.containsKey("taxIdNumber")) merchant.setTaxIdNumber(updates.get("taxIdNumber"));
         if (updates.containsKey("userLocalTimeZone")) merchant.setUserLocalTimeZone(updates.get("userLocalTimeZone"));
         return ResponseEntity.ok(merchantRepository.save(merchant));
     }

@@ -43,7 +43,8 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class UserChannelController {
 
-    private static final String HEALTH_CACHE_PREFIX = "channel:health:";
+    private static final String HEALTH_CACHE_PREFIX   = "channel:health:";
+    private static final String PLATFORM_CACHE_PREFIX = "platform:health:";
 
     private final ChannelRepository       channelRepository;
     private final PlatformRepository      platformRepository;
@@ -315,11 +316,12 @@ public class UserChannelController {
                 row.put("actived",     ch.getActived());
 
                 // platformName
-                String platformName = findPlatform(ch.getPlatformId()) != null
-                    ? findPlatform(ch.getPlatformId()).getPlatformName() : ch.getPlatformId();
+                String platformId = ch.getPlatformId();
+                String platformName = findPlatform(platformId) != null
+                    ? findPlatform(platformId).getPlatformName() : platformId;
                 row.put("platformName", platformName);
 
-                // Redis cache
+                // 通路層 Redis cache (channel:health:{channelId})
                 try {
                     String cached = redisTemplate.opsForValue().get(HEALTH_CACHE_PREFIX + ch.getId());
                     if (cached != null) {
@@ -337,6 +339,27 @@ public class UserChannelController {
                 } catch (Exception e) {
                     row.put("health", "unknown");
                 }
+
+                // 平台層 Redis cache (platform:health:{platformId})
+                // 用途：區分「帳號掛了」vs「整個平台掛了」
+                try {
+                    String platformCached = redisTemplate.opsForValue().get(PLATFORM_CACHE_PREFIX + platformId);
+                    if (platformCached != null) {
+                        Map<?, ?> pd = objectMapper.readValue(platformCached, Map.class);
+                        row.put("platformHealth",        pd.get("health"));
+                        row.put("platformHttpStatus",    pd.get("httpStatus"));
+                        row.put("platformCheckedAt",     pd.get("checkedAt"));
+                        row.put("platformErrorMessage",  pd.get("errorMessage"));
+                    } else {
+                        row.put("platformHealth",        "unknown");
+                        row.put("platformHttpStatus",    null);
+                        row.put("platformCheckedAt",     null);
+                        row.put("platformErrorMessage",  null);
+                    }
+                } catch (Exception e) {
+                    row.put("platformHealth", "unknown");
+                }
+
                 return row;
             }).toList();
 
@@ -369,8 +392,7 @@ public class UserChannelController {
                     return ResponseEntity.badRequest()
                         .<Map<String, String>>body(Map.of("error", "Platform not found"));
                 }
-                Platform platform = platformOpt.get();
-                String platformCode = platform.getPlatformName().toLowerCase();
+                String platformCode = channel.getPlatformId();
                 String topic = TopicConstants.platformSlowTopic(platformCode);
 
                 Map<String, Object> header = new HashMap<>();
@@ -416,11 +438,8 @@ public class UserChannelController {
         for (Channel channel : channels) {
             if (!Boolean.TRUE.equals(channel.getActived())) continue;
 
-            Optional<Platform> platformOpt = platformRepository.findById(channel.getPlatformId());
-            if (platformOpt.isEmpty()) continue;
-
-            String platformCode = platformOpt.get().getPlatformName().toLowerCase();
-            String topic = TopicConstants.platformSlowTopic(platformCode);
+            String platformCode = channel.getPlatformId();
+            String topic = TopicConstants.platformFastTopic(platformCode);
 
             // CHECK_HEALTH：通路層健康檢查
             Map<String, Object> header = new HashMap<>();
