@@ -8,11 +8,12 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.type.SqlTypes;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
-import com.simpleec.core.converter.JsonNodeConverter;
 
 /**
  * 銷售平台實體
@@ -75,7 +76,7 @@ public class Platform {
     /**
      * 配送選項 JSON (平台支援的物流方式等)
      */
-    @Convert(converter = JsonNodeConverter.class)
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "ship_options", columnDefinition = "jsonb")
     private JsonNode shipOptions;
 
@@ -90,7 +91,7 @@ public class Platform {
      * 使用方式：
      *   capabilities.path("multiLocation").asBoolean(false)
      */
-    @Convert(converter = JsonNodeConverter.class)
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "capabilities", columnDefinition = "jsonb", nullable = false)
     private JsonNode capabilities;
 

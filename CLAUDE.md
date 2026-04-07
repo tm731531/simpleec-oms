@@ -426,6 +426,54 @@ public class ShopeeOrderHandler {
 
 ---
 
+## 🤝 Claude + Qwen 協作分工（2026-04-07 確立）
+
+本專案採用雙 AI 協作模式，以節省 Claude token 並提高效率。
+
+### 分工原則
+
+| 任務類型 | 負責方 | 原因 |
+|---------|--------|------|
+| 架構設計、API 規格決策 | Claude | 需要跨檔案推理與系統理解 |
+| 複雜 Bug 追查、根因分析 | Claude | 需要讀 log、跨模組推理 |
+| Kafka/Redis/Security 整合邏輯 | Claude | 高複雜度，錯一個地方全壞 |
+| CRUD API endpoint（規格清楚） | Qwen | 結構固定，照 spec 寫即可 |
+| Vue 前端頁面/元件 | Qwen | 給 API spec + 欄位定義就能寫 |
+| DB migration SQL | Qwen | 機械性工作 |
+| 格式轉換、mapping 程式碼 | Qwen | 規則明確 |
+
+### 標準工作流程
+
+```
+1. Claude 設計（出 spec：API 格式、欄位、邏輯說明）
+2. Claude 組 prompt → bash 呼叫 qwen -p "..."
+3. Qwen 寫程式碼（輸出到指定檔案）
+4. Claude review Qwen 輸出（確認正確性）
+5. Claude build + deploy 驗證
+```
+
+### Qwen CLI 用法
+
+```bash
+# Non-interactive，直接輸出
+qwen -p "你的 prompt" --output-format text
+
+# 讓 Qwen 直接寫檔案
+qwen -p "根據以下 spec 寫 Vue 元件，直接寫入 user-app/src/views/XxxPage.vue：..."
+```
+
+### Token 節省估算
+- 純前端頁面：可省 **40-50%** Claude token
+- 純 CRUD API：可省 **30-40%** Claude token
+- 複雜整合邏輯：不適合外包，省不了多少且風險高
+
+### 注意事項
+- Qwen 不了解本專案 context，每次 prompt 必須帶完整規格
+- Claude 必須 review 每一個 Qwen 的輸出再 deploy
+- 認證、加密、Kafka 路由等關鍵邏輯不外包
+
+---
+
 ## 與 Claude 協作指南
 
 ### 工作流程

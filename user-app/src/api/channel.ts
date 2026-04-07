@@ -79,6 +79,10 @@ export const channelAPI = {
     return api.post<{ message: string; topic: string }>(`/api/user/channels/${id}/sync-sellpack`)
   },
 
+  getSyncLogs(id: string, page = 1, pageSize = 20) {
+    return api.get(`/api/user/channels/${id}/sync-logs`, { params: { page, pageSize } })
+  },
+
   getPlatform(id: string) {
     return api.get<Platform>(`/api/user/channels/platforms/${id}`)
   }

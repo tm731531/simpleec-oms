@@ -5,9 +5,27 @@
       <el-table-column prop="platform_name" label="平台名稱" />
       <el-table-column prop="queue_topic" label="Kafka Topic" width="150" />
       <el-table-column prop="currency" label="幣種" width="80" />
+      <el-table-column label="配送選項" width="120">
+        <template #default="{ row }">
+          {{ row.ship_options ? Object.keys(row.ship_options).join(', ') : '-' }}
+        </template>
+      </el-table-column>
+      <el-table-column label="平台能力" width="180">
+        <template #default="{ row }">
+          <el-tag v-if="row.capabilities?.multiLocation" size="small" class="capability-tag">多倉庫</el-tag>
+          <el-tag v-if="row.capabilities?.webhook" size="small" type="success" class="capability-tag">Webhook</el-tag>
+          <el-tag v-if="row.capabilities?.asyncInventory" size="small" type="warning" class="capability-tag">非同步庫存</el-tag>
+          <span v-if="!row.capabilities || (!row.capabilities.multiLocation && !row.capabilities.webhook && !row.capabilities.asyncInventory)">-</span>
+        </template>
+      </el-table-column>
       <el-table-column prop="actived" label="狀態" width="80">
         <template #default="{ row }">
           {{ row.actived ? '啟用' : '停用' }}
+        </template>
+      </el-table-column>
+      <el-table-column prop="updated_at" label="最後更新" width="160">
+        <template #default="{ row }">
+          {{ formatDateTime(row.updated_at) }}
         </template>
       </el-table-column>
       <el-table-column label="操作" width="150">
@@ -54,6 +72,18 @@ const currentPage = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
 const loading = ref(false)
+
+function formatDateTime(dateStr: string): string {
+  if (!dateStr) return '-'
+  const date = new Date(dateStr)
+  return date.toLocaleString('zh-TW', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
 
 async function loadPlatforms() {
   loading.value = true
@@ -109,5 +139,10 @@ watch(() => props.refresh, () => {
 .pagination-container {
   margin-top: 20px;
   text-align: right;
+}
+
+.capability-tag {
+  margin-right: 4px;
+  margin-bottom: 2px;
 }
 </style>

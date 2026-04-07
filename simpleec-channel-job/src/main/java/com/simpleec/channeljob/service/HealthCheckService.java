@@ -1,14 +1,19 @@
 package com.simpleec.channeljob.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.simpleec.channeljob.entity.Channel;
 import com.simpleec.channeljob.client.PlatformApiClient;
 import com.simpleec.channeljob.repository.ChannelRepository;
 import com.simpleec.channeljob.repository.ChannelSyncLogRepository;
 import com.simpleec.channeljob.entity.ChannelSyncLog;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -19,16 +24,25 @@ import java.util.UUID;
 @Service
 public class HealthCheckService {
 
-    private final ChannelRepository channelRepository;
+    private static final String HEALTH_CACHE_PREFIX = "channel:health:";
+    private static final Duration HEALTH_CACHE_TTL  = Duration.ofMinutes(10);
+
+    private final ChannelRepository        channelRepository;
     private final ChannelSyncLogRepository channelSyncLogRepository;
-    private final PlatformApiClient platformApiClient;
+    private final PlatformApiClient        platformApiClient;
+    private final StringRedisTemplate      redisTemplate;
+    private final ObjectMapper             objectMapper;
 
     public HealthCheckService(ChannelRepository channelRepository,
                               ChannelSyncLogRepository channelSyncLogRepository,
-                              PlatformApiClient platformApiClient) {
-        this.channelRepository = channelRepository;
+                              PlatformApiClient platformApiClient,
+                              StringRedisTemplate redisTemplate,
+                              ObjectMapper objectMapper) {
+        this.channelRepository        = channelRepository;
         this.channelSyncLogRepository = channelSyncLogRepository;
-        this.platformApiClient = platformApiClient;
+        this.platformApiClient        = platformApiClient;
+        this.redisTemplate            = redisTemplate;
+        this.objectMapper             = objectMapper;
     }
 
     /**
@@ -105,21 +119,38 @@ public class HealthCheckService {
 
     private void recordHealthLog(String channelId, String merchantId, String platformCode,
                                  int httpStatus, String errorMessage) {
+        String health = httpStatus >= 400 ? "unhealthy" : "healthy";
         try {
-            ChannelSyncLog log = new ChannelSyncLog();
-            log.setId(UUID.randomUUID().toString());
-            log.setChannelId(channelId);
-            log.setMerchantId(merchantId);
-            log.setSyncType("CHANNEL_HEALTH_CHECK");
-            log.setHttpStatus(httpStatus);
-            log.setStatus(httpStatus >= 400 ? "failed" : "success");
-            log.setHealth(httpStatus >= 400 ? "unhealthy" : "healthy");
-            log.setErrorMessage(errorMessage);
-            log.setCreatedAt(LocalDateTime.now());
-
-            channelSyncLogRepository.save(log);
+            ChannelSyncLog syncLog = new ChannelSyncLog();
+            syncLog.setId(UUID.randomUUID().toString());
+            syncLog.setChannelId(channelId);
+            syncLog.setMerchantId(merchantId);
+            syncLog.setSyncType("CHANNEL_HEALTH_CHECK");
+            syncLog.setHttpStatus(httpStatus);
+            syncLog.setStatus(httpStatus >= 400 ? "failed" : "success");
+            syncLog.setHealth(health);
+            syncLog.setErrorMessage(errorMessage);
+            syncLog.setCreatedAt(LocalDateTime.now());
+            channelSyncLogRepository.save(syncLog);
         } catch (Exception e) {
             log.warn("Failed to record health log for channel {}", channelId, e);
+        }
+
+        // 寫 Redis cache — 過期自動清除，前端查到 null 顯示 unknown
+        try {
+            Map<String, Object> cache = new HashMap<>();
+            cache.put("health", health);
+            cache.put("httpStatus", httpStatus);
+            cache.put("checkedAt", LocalDateTime.now().toString());
+            cache.put("errorMessage", errorMessage);
+            if (platformCode != null) cache.put("platformId", platformCode);
+            redisTemplate.opsForValue().set(
+                HEALTH_CACHE_PREFIX + channelId,
+                objectMapper.writeValueAsString(cache),
+                HEALTH_CACHE_TTL
+            );
+        } catch (Exception e) {
+            log.warn("Failed to write health cache for channel {}", channelId, e);
         }
     }
 

@@ -1,8 +1,12 @@
 package com.simpleec.api.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.simpleec.api.entity.ChannelSyncLog;
+import com.simpleec.api.repository.ChannelSyncLogRepository;
 import com.simpleec.api.security.UserPrincipal;
 import com.simpleec.api.service.ShopeeOAuthService;
 import com.simpleec.api.vo.ChannelVO;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import com.simpleec.common.constants.TopicConstants;
 import com.simpleec.core.crypto.EncryptionContext;
 import com.simpleec.core.entity.Channel;
@@ -39,10 +43,15 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class UserChannelController {
 
-    private final ChannelRepository  channelRepository;
-    private final PlatformRepository platformRepository;
-    private final ShopeeOAuthService shopeeOAuthService;
+    private static final String HEALTH_CACHE_PREFIX = "channel:health:";
+
+    private final ChannelRepository       channelRepository;
+    private final PlatformRepository      platformRepository;
+    private final ShopeeOAuthService      shopeeOAuthService;
     private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final ChannelSyncLogRepository syncLogRepository;
+    private final StringRedisTemplate     redisTemplate;
+    private final ObjectMapper            objectMapper;
 
     // ──────────────────────────────────────────────────────────
     // 基本 CRUD
@@ -227,6 +236,92 @@ public class UserChannelController {
     }
 
     // ──────────────────────────────────────────────────────────
+    // 同步日誌
+    // ──────────────────────────────────────────────────────────
+
+    /**
+     * 查詢通路的同步日誌（分頁，僅限自己的通路）
+     */
+    @GetMapping("/{id}/sync-logs")
+    public ResponseEntity<?> getSyncLogs(
+        @PathVariable String id,
+        @AuthenticationPrincipal UserPrincipal principal,
+        @RequestParam(defaultValue = "1") int page,
+        @RequestParam(defaultValue = "20") int pageSize
+    ) {
+        String merchantId = principal.getMerchantId();
+        return channelRepository.findById(id)
+            .filter(c -> c.getMerchantId().equals(merchantId))
+            .map(channel -> {
+                var pageable = PageRequest.of(page - 1, pageSize, org.springframework.data.domain.Sort.by("createdAt").descending());
+                var logsPage = syncLogRepository.findByChannelIdOrderByCreatedAtDesc(id, pageable);
+                Map<String, Object> result = new HashMap<>();
+                result.put("data", logsPage.getContent());
+                result.put("pagination", Map.of(
+                    "total", logsPage.getTotalElements(),
+                    "pages", logsPage.getTotalPages(),
+                    "page", page,
+                    "pageSize", pageSize
+                ));
+                return ResponseEntity.ok(result);
+            })
+            .orElse(ResponseEntity.notFound().build());
+    }
+
+    /**
+     * 通路健康狀態一覽（從 Redis cache 讀取）
+     * cache key: channel:health:{channelId}，TTL 10分鐘
+     * cache 不存在 → health=unknown（表示尚未檢查或已過期）
+     */
+    @GetMapping("/health-overview")
+    public ResponseEntity<List<Map<String, Object>>> healthOverview(
+        @AuthenticationPrincipal UserPrincipal principal
+    ) {
+        String merchantId = principal.getMerchantId();
+        List<Channel> channels = channelRepository.findByMerchantId(merchantId);
+
+        EncryptionContext.setMerchantId(merchantId);
+        try {
+            List<Map<String, Object>> result = channels.stream().map(ch -> {
+                Map<String, Object> row = new HashMap<>();
+                row.put("channelId",   ch.getId());
+                row.put("channelName", ch.getChannelName());
+                row.put("channelSn",   ch.getChannelSn());
+                row.put("actived",     ch.getActived());
+
+                // platformName
+                String platformName = findPlatform(ch.getPlatformId()) != null
+                    ? findPlatform(ch.getPlatformId()).getPlatformName() : ch.getPlatformId();
+                row.put("platformName", platformName);
+
+                // Redis cache
+                try {
+                    String cached = redisTemplate.opsForValue().get(HEALTH_CACHE_PREFIX + ch.getId());
+                    if (cached != null) {
+                        Map<?, ?> cacheData = objectMapper.readValue(cached, Map.class);
+                        row.put("health",       cacheData.get("health"));
+                        row.put("httpStatus",   cacheData.get("httpStatus"));
+                        row.put("checkedAt",    cacheData.get("checkedAt"));
+                        row.put("errorMessage", cacheData.get("errorMessage"));
+                    } else {
+                        row.put("health",       "unknown");
+                        row.put("httpStatus",   null);
+                        row.put("checkedAt",    null);
+                        row.put("errorMessage", null);
+                    }
+                } catch (Exception e) {
+                    row.put("health", "unknown");
+                }
+                return row;
+            }).toList();
+
+            return ResponseEntity.ok(result);
+        } finally {
+            EncryptionContext.clear();
+        }
+    }
+
+    // ──────────────────────────────────────────────────────────
     // 同步操作
     // ──────────────────────────────────────────────────────────
 
@@ -275,6 +370,79 @@ public class UserChannelController {
                     .<Map<String, String>>body(Map.of("message", "同步已觸發", "topic", topic));
             })
             .orElse(ResponseEntity.notFound().build());
+    }
+
+    /**
+     * 觸發所有通路健康檢查
+     * 對每個啟用通路發送 CHECK_HEALTH 到對應 {platform}.slow topic
+     * 同時對每個唯一平台發送 CHECK_HEALTH_PLATFORM
+     * Channel Job 執行後寫入 Redis cache，前端再呼叫 /health-overview 取得結果
+     */
+    @PostMapping("/trigger-health-check")
+    public ResponseEntity<Map<String, Object>> triggerHealthCheck(
+        @AuthenticationPrincipal UserPrincipal principal
+    ) {
+        String merchantId = principal.getMerchantId();
+        List<Channel> channels = channelRepository.findByMerchantId(merchantId);
+
+        int channelCount = 0;
+        java.util.Set<String> platformsSent = new java.util.HashSet<>();
+
+        for (Channel channel : channels) {
+            if (!Boolean.TRUE.equals(channel.getActived())) continue;
+
+            Optional<Platform> platformOpt = platformRepository.findById(channel.getPlatformId());
+            if (platformOpt.isEmpty()) continue;
+
+            String platformCode = platformOpt.get().getPlatformName().toLowerCase();
+            String topic = TopicConstants.platformSlowTopic(platformCode);
+
+            // CHECK_HEALTH：通路層健康檢查
+            Map<String, Object> header = new HashMap<>();
+            header.put("taskType", "CHECK_HEALTH");
+            header.put("merchantId", merchantId);
+            header.put("platformId", platformCode);
+            header.put("channelId", channel.getId());
+            header.put("requestId", UUID.randomUUID().toString());
+            header.put("timestamp", Instant.now().toString());
+            header.put("source", "api");
+            header.put("version", 1);
+            header.put("isRollback", false);
+
+            Map<String, Object> message = new HashMap<>();
+            message.put("header", header);
+            message.put("body", Map.of());
+            kafkaTemplate.send(topic, channel.getId(), message);
+            channelCount++;
+
+            // CHECK_HEALTH_PLATFORM：平台層健康檢查（每個平台只送一次）
+            if (!platformsSent.contains(platformCode)) {
+                Map<String, Object> platformHeader = new HashMap<>();
+                platformHeader.put("taskType", "CHECK_HEALTH_PLATFORM");
+                platformHeader.put("merchantId", merchantId);
+                platformHeader.put("platformId", platformCode);
+                platformHeader.put("channelId", "");
+                platformHeader.put("requestId", UUID.randomUUID().toString());
+                platformHeader.put("timestamp", Instant.now().toString());
+                platformHeader.put("source", "api");
+                platformHeader.put("version", 1);
+                platformHeader.put("isRollback", false);
+
+                Map<String, Object> platformMessage = new HashMap<>();
+                platformMessage.put("header", platformHeader);
+                platformMessage.put("body", Map.of());
+                kafkaTemplate.send(topic, platformCode, platformMessage);
+                platformsSent.add(platformCode);
+            }
+        }
+
+        log.info("Health check triggered: merchantId={}, channels={}, platforms={}",
+            merchantId, channelCount, platformsSent);
+
+        return ResponseEntity.accepted().body(Map.of(
+            "channelsTriggered", channelCount,
+            "platformsTriggered", platformsSent.size()
+        ));
     }
 
     // ──────────────────────────────────────────────────────────

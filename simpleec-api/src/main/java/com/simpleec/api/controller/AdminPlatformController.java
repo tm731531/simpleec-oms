@@ -210,9 +210,14 @@ public class AdminPlatformController {
                 platform.setShipOptions(platformUpdate.getShipOptions());
             }
 
+            if (platformUpdate.getCapabilities() != null) {
+                platform.setCapabilities(platformUpdate.getCapabilities());
+            }
+
             // 儲存更新
             Platform updated = platformRepository.save(platform);
             log.info("Updated platform: {} ({})", id, updated.getPlatformName());
+            log.debug("Updated capabilities: {}", updated.getCapabilities());
 
             return ResponseEntity.ok(AdminApiResponse.success(updated));
         } catch (Exception e) {

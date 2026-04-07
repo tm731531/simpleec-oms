@@ -5,6 +5,8 @@
       <el-button type="primary" @click="openCreate">新增通路</el-button>
     </div>
 
+    <ChannelHealthOverview style="margin-bottom: 24px" />
+
     <el-card v-loading="loading">
       <div v-if="channels.length === 0 && !loading" style="text-align: center; padding: 40px; color: #909399">
         尚無通路資料，點擊「新增通路」開始設定
@@ -65,6 +67,7 @@
               <el-button size="small" type="info" :loading="syncingChannels.has(ch.id)" @click="handleSyncSellPack(ch)">
                 同步商品
               </el-button>
+              <el-button size="small" @click="openLogs(ch)">日誌</el-button>
               <template v-if="ch.oauthFlow === 'shopee_oauth'">
                 <el-button size="small" type="primary" @click="handleShopeeConnect(ch)">
                   {{ ch.oauthStatus === 'authorized' ? '重新授權' : '連結蝦皮' }}
@@ -78,8 +81,41 @@
       </el-row>
     </el-card>
 
+    <!-- 同步日誌 Drawer -->
+    <el-drawer v-model="logsVisible" :title="`${logsChannel?.channelName ?? ''} — 同步日誌`" size="720px">
+      <el-table :data="logsList" v-loading="logsLoading" size="small" style="width: 100%">
+        <el-table-column prop="syncType" label="類型" width="180" />
+        <el-table-column label="狀態" width="90">
+          <template #default="{ row }">
+            <el-tag :type="row.status === 'success' ? 'success' : 'danger'" size="small">{{ row.status }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="健康" width="90">
+          <template #default="{ row }">
+            <el-tag v-if="row.health" :type="row.health === 'healthy' ? 'success' : 'danger'" size="small">{{ row.health }}</el-tag>
+            <span v-else style="color:#ccc">—</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="httpStatus" label="HTTP" width="70" />
+        <el-table-column prop="errorMessage" label="錯誤訊息" min-width="160" show-overflow-tooltip />
+        <el-table-column label="時間" width="160">
+          <template #default="{ row }">{{ formatTime(row.createdAt) }}</template>
+        </el-table-column>
+      </el-table>
+      <el-pagination
+        v-model:current-page="logsPage"
+        v-model:page-size="logsPageSize"
+        :total="logsTotal"
+        :page-sizes="[20, 50, 100]"
+        layout="total, sizes, prev, pager, next"
+        style="margin-top: 16px; text-align: right"
+        @current-change="loadLogs"
+        @size-change="loadLogs"
+      />
+    </el-drawer>
+
     <!-- 新增/編輯 Dialog -->
-    <el-dialog v-model="formVisible" :title="editingChannel ? '編輯通路' : '新增通路'" width="540px" @close="onFormClose">
+    <el-dialog v-model="formVisible" :key="editingChannel?.id ?? 'new'" :title="editingChannel ? '編輯通路' : '新增通路'" width="540px" @close="onFormClose">
       <el-form :model="formData" label-width="120px">
         <!-- 新增時選平台 -->
         <el-form-item v-if="!editingChannel" label="平台">
@@ -96,12 +132,18 @@
           <el-input v-model="formData.channelSn" placeholder="平台給的店家/賣場 ID" />
         </el-form-item>
 
-        <!-- Token 欄位：永遠顯示，label 來自 platform capabilities 或 channel tokenLabels -->
+        <!-- Token 欄位：永遠顯示 token1~5，label 優先使用 tokenLabels，沒有就顯示預設 -->
+        <el-divider content-position="left" style="margin: 16px 0 8px; font-size: 13px; color: #909399">
+          🔑 認證憑證
+        </el-divider>
+        <div style="color: #909399; font-size: 12px; margin-bottom: 12px">
+          💡 編輯模式下，留空表示不修改原有憑證，輸入新值才會更新
+        </div>
         <template v-for="i in 5" :key="i">
-          <el-form-item v-if="getFormTokenLabel(i)" :label="getFormTokenLabel(i)">
+          <el-form-item :label="getFormTokenLabel(i)">
             <el-input
               v-model="formTokens[i - 1]"
-              :placeholder="editingChannel ? '不修改請留空' : ''"
+              :placeholder="editingChannel ? '留空表示不修改' : ''"
               type="password"
               show-password
             />
@@ -142,15 +184,23 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { channelAPI, ChannelVO } from '../api/channel'
+import ChannelHealthOverview from '../components/ChannelHealthOverview.vue'
 
 const channels = ref<ChannelVO[]>([])
 const platforms = ref<any[]>([])
 const loading = ref(false)
 const saving = ref(false)
 const syncingChannels = ref<Set<string>>(new Set())
+const logsVisible = ref(false)
+const logsChannel = ref<ChannelVO | null>(null)
+const logsList = ref<any[]>([])
+const logsLoading = ref(false)
+const logsPage = ref(1)
+const logsPageSize = ref(20)
+const logsTotal = ref(0)
 const formVisible = ref(false)
 const editingChannel = ref<ChannelVO | null>(null)
 const selectedPlatform = ref<any>(null)
@@ -171,26 +221,23 @@ const formOAuthFlow = computed(() => {
 })
 
 // Token label：新增模式從 platform capabilities 取，編輯模式從 channel tokenLabels 取
-function getFormTokenLabel(i: number): string | null {
+// 永遠回傳 label，沒有 alias 就顯示預設 "Token N"
+function getFormTokenLabel(i: number): string {
   const key = i === 1 ? 'token1' : `token${i}`
 
   if (editingChannel.value) {
     const labels = editingChannel.value.tokenLabels
-    if (labels) {
-      // platform 有設 tokenLabels：null 表示該欄位此平台不用
-      return labels[key] ?? null
+    if (labels && labels[key]) {
+      return labels[key] as string
     }
-    // platform 沒設 tokenLabels：有 masked 值就顯示，或至少顯示 token1
-    const hasMasked = !!(editingChannel.value as any)[`token${i}Masked`]
-    return (hasMasked || i === 1) ? `Token ${i}` : null
+    return `Token ${i}`
   }
 
   // 新增模式
   const caps = selectedPlatform.value?.capabilities
-  if (caps?.tokenLabels) {
-    return caps.tokenLabels[key] ?? null  // null = 此平台不用此欄位
+  if (caps?.tokenLabels && caps.tokenLabels[key]) {
+    return caps.tokenLabels[key]
   }
-  // 平台沒有 tokenLabels 設定：全部顯示
   return `Token ${i}`
 }
 
@@ -227,11 +274,13 @@ function openCreate() {
   formVisible.value = true
 }
 
-function openEdit(ch: ChannelVO) {
+async function openEdit(ch: ChannelVO) {
   editingChannel.value = ch
   selectedPlatform.value = platforms.value.find(p => p.id === ch.platformId) ?? null
   formData.value = { platformId: ch.platformId, channelName: ch.channelName, channelSn: ch.channelSn, writeActived: ch.writeActived, enableSync: ch.enableSync }
   formTokens.value = ['', '', '', '', '']
+  // 確保 Vue 更新完成後再打開 dialog
+  await nextTick()
   formVisible.value = true
 }
 
@@ -269,6 +318,29 @@ async function handleSave() {
     ElMessage.error('操作失敗')
   } finally {
     saving.value = false
+  }
+}
+
+function openLogs(ch: ChannelVO) {
+  logsChannel.value = ch
+  logsPage.value = 1
+  logsList.value = []
+  logsTotal.value = 0
+  logsVisible.value = true
+  loadLogs()
+}
+
+async function loadLogs() {
+  if (!logsChannel.value) return
+  logsLoading.value = true
+  try {
+    const res: any = await channelAPI.getSyncLogs(logsChannel.value.id, logsPage.value, logsPageSize.value)
+    logsList.value = res?.data ?? []
+    logsTotal.value = res?.pagination?.total ?? 0
+  } catch (e) {
+    console.error(e)
+  } finally {
+    logsLoading.value = false
   }
 }
 
@@ -336,7 +408,7 @@ async function handleShopeeDisconnect(ch: ChannelVO) {
 function getTokenMasked(ch: ChannelVO, i: number) {
   return (ch as any)[`token${i}Masked`]
 }
-function getTokenLabel(ch: ChannelVO, i: number) {
+function getTokenLabel(ch: ChannelVO, i: number): string {
   const key = i === 1 ? 'token1' : `token${i}`
   return ch.tokenLabels?.[key] ?? `Token ${i}`
 }

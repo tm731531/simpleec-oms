@@ -39,11 +39,13 @@ export interface Account {
 export interface Platform {
   id: string
   platform_name: string
-  platform_code: string
-  merchant_id: string
-  api_key: string
-  api_secret?: string
-  status: string
+  credential1?: string
+  credential2?: string
+  actived: boolean
+  queue_topic?: string
+  currency?: string
+  ship_options?: Record<string, any>
+  capabilities?: Record<string, any>
   created_at: string
   updated_at: string
 }
