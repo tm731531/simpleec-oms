@@ -25,13 +25,58 @@ export interface ChannelVO {
   updatedAt: string
 }
 
+export interface ChannelFormData {
+  platformId?: string
+  channelName?: string
+  channelSn?: string
+  token?: string
+  token2?: string
+  token3?: string
+  token4?: string
+  token5?: string
+  writeActived?: boolean
+  enableSync?: boolean
+}
+
 export const channelAPI = {
   listChannels() {
     return api.get<ChannelVO[]>('/api/user/channels')
   },
 
+  getChannel(id: string) {
+    return api.get<ChannelVO>(`/api/user/channels/${id}`)
+  },
+
   listPlatforms() {
     return api.get<Platform[]>('/api/user/channels/platforms')
+  },
+
+  createChannel(data: ChannelFormData) {
+    return api.post<ChannelVO>('/api/user/channels', data)
+  },
+
+  updateChannel(id: string, data: ChannelFormData) {
+    return api.put<ChannelVO>(`/api/user/channels/${id}`, data)
+  },
+
+  toggleStatus(id: string) {
+    return api.put<ChannelVO>(`/api/user/channels/${id}/toggle-status`)
+  },
+
+  getShopeeAuthUrl(id: string) {
+    return api.get<{ authUrl: string }>(`/api/user/channels/${id}/shopee/auth-url`)
+  },
+
+  refreshShopeeToken(id: string) {
+    return api.post<ChannelVO>(`/api/user/channels/${id}/shopee/refresh-token`)
+  },
+
+  disconnectShopee(id: string) {
+    return api.post<ChannelVO>(`/api/user/channels/${id}/shopee/disconnect`)
+  },
+
+  syncSellPack(id: string) {
+    return api.post<{ message: string; topic: string }>(`/api/user/channels/${id}/sync-sellpack`)
   },
 
   getPlatform(id: string) {

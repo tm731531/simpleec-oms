@@ -328,13 +328,13 @@ public class CyberbizAdapter implements ChannelAdapter {
                 for (Map<String, Object> li : lineItems) {
                     Map<String, Object> item = new LinkedHashMap<>();
                     item.put("channelItemId", String.valueOf(li.getOrDefault("id", "")));
-                    item.put("product_id", String.valueOf(li.getOrDefault("product_id", "")));
-                    item.put("variant_id", String.valueOf(li.getOrDefault("product_variant_id", "")));
+                    item.put("channelProductId", String.valueOf(li.getOrDefault("product_id", "")));
+                    item.put("channelSpecId", String.valueOf(li.getOrDefault("product_variant_id", "")));
                     item.put("sku", li.getOrDefault("sku", ""));
-                    item.put("name", li.getOrDefault("title", ""));
-                    item.put("variant_name", li.getOrDefault("variant_title", ""));
+                    item.put("productName", li.getOrDefault("title", ""));
+                    item.put("variantName", li.getOrDefault("variant_title", ""));
                     item.put("quantity", li.getOrDefault("quantity", 1));
-                    item.put("unit_price", li.getOrDefault("price", 0));
+                    item.put("unitPrice", li.getOrDefault("price", 0));
                     omsItems.add(item);
                 }
             }

@@ -3,6 +3,7 @@ package com.simpleec.api.controller;
 import com.simpleec.api.security.UserPrincipal;
 import com.simpleec.api.service.ShopeeOAuthService;
 import com.simpleec.api.vo.ChannelVO;
+import com.simpleec.common.constants.TopicConstants;
 import com.simpleec.core.crypto.EncryptionContext;
 import com.simpleec.core.entity.Channel;
 import com.simpleec.core.entity.Platform;
@@ -12,11 +13,16 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
 
 /**
  * 用戶通路管理控制器
@@ -36,6 +42,7 @@ public class UserChannelController {
     private final ChannelRepository  channelRepository;
     private final PlatformRepository platformRepository;
     private final ShopeeOAuthService shopeeOAuthService;
+    private final KafkaTemplate<String, Object> kafkaTemplate;
 
     // ──────────────────────────────────────────────────────────
     // 基本 CRUD
@@ -217,6 +224,57 @@ public class UserChannelController {
         } finally {
             EncryptionContext.clear();
         }
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // 同步操作
+    // ──────────────────────────────────────────────────────────
+
+    /**
+     * 觸發通路 SellPack 同步
+     * 發送 SYNC_PACK 任務到 {platform}.slow topic
+     * Channel Job 會拉取通路商品目錄並寫入 DB
+     */
+    @PostMapping("/{id}/sync-sellpack")
+    public ResponseEntity<Map<String, String>> syncSellPack(
+        @PathVariable String id,
+        @AuthenticationPrincipal UserPrincipal principal
+    ) {
+        String merchantId = principal.getMerchantId();
+        return channelRepository.findById(id)
+            .filter(c -> c.getMerchantId().equals(merchantId))
+            .map(channel -> {
+                Optional<Platform> platformOpt = platformRepository.findById(channel.getPlatformId());
+                if (platformOpt.isEmpty()) {
+                    return ResponseEntity.badRequest()
+                        .<Map<String, String>>body(Map.of("error", "Platform not found"));
+                }
+                Platform platform = platformOpt.get();
+                String platformCode = platform.getPlatformName().toLowerCase();
+                String topic = TopicConstants.platformSlowTopic(platformCode);
+
+                Map<String, Object> header = new HashMap<>();
+                header.put("taskType", "SYNC_PACK");
+                header.put("merchantId", merchantId);
+                header.put("platformId", platformCode);
+                header.put("channelId", id);
+                header.put("requestId", UUID.randomUUID().toString());
+                header.put("timestamp", Instant.now().toString());
+                header.put("source", "api");
+                header.put("version", 1);
+                header.put("isRollback", false);
+
+                Map<String, Object> message = new HashMap<>();
+                message.put("header", header);
+                message.put("body", Map.of());
+
+                kafkaTemplate.send(topic, id, message);
+                log.info("SYNC_PACK triggered: channel={}, platform={}, topic={}", id, platformCode, topic);
+
+                return ResponseEntity.accepted()
+                    .<Map<String, String>>body(Map.of("message", "同步已觸發", "topic", topic));
+            })
+            .orElse(ResponseEntity.notFound().build());
     }
 
     // ──────────────────────────────────────────────────────────
