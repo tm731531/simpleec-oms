@@ -92,9 +92,8 @@ public class HealthCheckService {
             // Platform ping: any HTTP response (even 4xx) means API is reachable → healthy
             // Only 5xx / 0 (unreachable / unknown) → unhealthy or unknown
             String health       = platformHealth(httpStatus);
-            // Platform ping uses public URLs (marketing sites) that should return 2xx/3xx.
-            // 4xx means URL is wrong/invalid → treat as error.
-            String errorMessage = (httpStatus == 0 || httpStatus >= 400) ? healthError(httpStatus, platformCode) : null;
+            // Platform ping: 4xx is expected (no auth). Only record error for 5xx or unreachable (0).
+            String errorMessage = (httpStatus == 0 || httpStatus >= 500) ? healthError(httpStatus, platformCode) : null;
 
             recordPlatformHealthLog(platformCode, httpStatus, errorMessage);
             return new HealthCheckResult(httpStatus, health, errorMessage);
@@ -118,13 +117,19 @@ public class HealthCheckService {
     }
 
     /**
-     * Platform health: 2xx/3xx = healthy (server reachable and URL valid),
-     * 4xx = unhealthy (URL wrong / endpoint not found), 5xx/0 = unhealthy/unknown
+     * Platform health: ping an API endpoint (no auth).
+     * 2xx/3xx = healthy (endpoint responds normally)
+     * 401/403 = healthy (endpoint exists, auth required — expected when pinging without credentials)
+     * 404 = unhealthy (URL is wrong / endpoint does not exist — ping URL misconfigured)
+     * 5xx/0 = unhealthy (server error or unreachable)
      */
     private static String platformHealth(int httpStatus) {
-        if (httpStatus == 0)               return "unknown";
-        if (httpStatus >= 400)             return "unhealthy";
-        return "healthy"; // 2xx or 3xx
+        if (httpStatus == 0)                        return "unknown";
+        if (httpStatus >= 500)                      return "unhealthy";
+        if (httpStatus == 404)                      return "unhealthy"; // wrong URL
+        if (httpStatus == 401 || httpStatus == 403) return "healthy";   // endpoint exists, auth needed
+        if (httpStatus >= 200 && httpStatus < 400)  return "healthy";
+        return "unhealthy";
     }
 
     private static String healthError(int httpStatus, String context) {

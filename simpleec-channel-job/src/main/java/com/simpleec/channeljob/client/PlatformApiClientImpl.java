@@ -32,15 +32,17 @@ public class PlatformApiClientImpl implements PlatformApiClient {
 
     // ─── Channel health check (with auth) ────────────────────────────────────
 
-    // Platform base URLs for ping (no auth required — must return 2xx/3xx)
-    // Use marketing/portal sites, NOT API endpoints (API roots return 401/403/404)
+    // Platform API ping URLs — should return 2xx/3xx/401/403 (not 404).
+    // 401/403 = endpoint exists, auth needed = platform alive.
+    // 404 = wrong URL = treated as unhealthy (misconfigured).
+    // Momo omitted until correct API URL is confirmed (returns 0 = unknown).
     private static final java.util.Map<String, String> PLATFORM_PING_URLS = java.util.Map.of(
-        "cyberbiz", "https://www.cyberbiz.co",
-        "shopee",   "https://shopee.tw",
-        "momo",     "https://www.momoshop.com.tw",
+        "cyberbiz", "https://api.cyberbiz.co",                          // → 401 (auth required)
+        "shopee",   "https://partner.shopeemobile.com/api/v2/shop/get_shop_info", // → 200 (no auth needed at this endpoint)
         "yahoo",    "https://tw.yahoo.com",
-        "pchome",   "https://www.pchome.com.tw",
+        "pchome",   "https://store.pchome.com.tw",
         "easystore","https://www.easystore.co"
+        // momo: URL TBD — api.momomall.com.tw DNS fails, need correct API host
     );
 
     @Override
