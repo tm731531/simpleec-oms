@@ -13,9 +13,6 @@ public interface ChannelSyncLogRepository extends JpaRepository<ChannelSyncLog, 
     // 查詢特定通路的日誌
     Page<ChannelSyncLog> findByChannelId(String channelId, Pageable pageable);
 
-    // 查詢特定商家的日誌
-    Page<ChannelSyncLog> findByMerchantId(String merchantId, Pageable pageable);
-
     // 查詢特定平台的日誌
     Page<ChannelSyncLog> findByPlatformId(String platformId, Pageable pageable);
 

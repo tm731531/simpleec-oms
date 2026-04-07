@@ -6,6 +6,7 @@ import com.simpleec.channeljob.client.PlatformApiClient;
 import com.simpleec.channeljob.repository.ChannelRepository;
 import com.simpleec.channeljob.repository.ChannelSyncLogRepository;
 import com.simpleec.channeljob.entity.ChannelSyncLog;
+import com.simpleec.common.util.NanoIdUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
@@ -14,7 +15,6 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.UUID;
 
 /**
  * Service for performing health checks on channels and platforms
@@ -121,7 +121,7 @@ public class HealthCheckService {
         String health = httpStatus >= 400 ? "unhealthy" : "healthy";
         try {
             ChannelSyncLog syncLog = new ChannelSyncLog();
-            syncLog.setId(UUID.randomUUID().toString());
+            syncLog.setId(NanoIdUtil.generate());
             syncLog.setChannelId(channelId);
             syncLog.setPlatformId(platformId);
             syncLog.setSyncType("CHANNEL_HEALTH_CHECK");
@@ -156,7 +156,7 @@ public class HealthCheckService {
     private void recordPlatformHealthLog(String platformCode, int httpStatus, String errorMessage) {
         try {
             ChannelSyncLog log = new ChannelSyncLog();
-            log.setId(UUID.randomUUID().toString());
+            log.setId(NanoIdUtil.generate());
             log.setChannelId(null);  // 平台檢查，無 channel_id
             log.setPlatformId(platformCode);
             log.setSyncType("PLATFORM_HEALTH_CHECK");
