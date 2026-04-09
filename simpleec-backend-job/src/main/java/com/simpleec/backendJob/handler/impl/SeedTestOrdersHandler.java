@@ -94,9 +94,14 @@ public class SeedTestOrdersHandler extends AbstractEventHandler {
             return;
         }
 
-        // 3. Verify fake channel exists
-        if (channelRepository.findById(FAKE_CHANNEL_ID).isEmpty()) {
+        // 3. Verify fake channel exists AND is enabled (actived + enable_sync)
+        Channel fakeChannel = channelRepository.findById(FAKE_CHANNEL_ID).orElse(null);
+        if (fakeChannel == null) {
             log.warn("SEED_TEST_ORDERS: fake channel {} not found — skipping", FAKE_CHANNEL_ID);
+            return;
+        }
+        if (!fakeChannel.isActived() || !fakeChannel.isEnableSync()) {
+            log.info("SEED_TEST_ORDERS: fake channel {} is not active/enable_sync — skipping", FAKE_CHANNEL_ID);
             return;
         }
 
