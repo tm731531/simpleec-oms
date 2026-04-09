@@ -74,7 +74,7 @@ public class ChannelHealthCheckHandler extends AbstractEventHandler {
             ObjectNode message = objectMapper.createObjectNode();
             message.set("header", header);
             message.set("body", objectMapper.createObjectNode());
-            kafkaTemplate.send(topic, channel.getId(), message);
+            kafkaTemplate.send(topic, channel.getId(), toJson(message));
             channelCount++;
 
             // CHECK_HEALTH_PLATFORM：平台層（每平台只送一次）
@@ -93,12 +93,20 @@ public class ChannelHealthCheckHandler extends AbstractEventHandler {
                 ObjectNode phMessage = objectMapper.createObjectNode();
                 phMessage.set("header", phHeader);
                 phMessage.set("body", objectMapper.createObjectNode());
-                kafkaTemplate.send(topic, platformCode, phMessage);
+                kafkaTemplate.send(topic, platformCode, toJson(phMessage));
                 platformsSent.add(platformCode);
             }
         }
 
         log.info("CHANNEL_HEALTH_CHECK dispatched: merchant={}, channels={}, platforms={}",
             merchantId, channelCount, platformsSent);
+    }
+
+    private String toJson(ObjectNode node) {
+        try {
+            return objectMapper.writeValueAsString(node);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to serialize Kafka message", e);
+        }
     }
 }
