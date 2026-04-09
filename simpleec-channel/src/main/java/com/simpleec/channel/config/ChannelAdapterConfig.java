@@ -1,6 +1,7 @@
 package com.simpleec.channel.config;
 
 import com.simpleec.channel.adapter.ChannelAdapter;
+import com.simpleec.channel.adapter.CustomAdapter;
 import com.simpleec.channel.adapter.CyberbizAdapter;
 import com.simpleec.channel.adapter.EasystoreAdapter;
 import com.simpleec.channel.adapter.ShopifyAdapter;
@@ -53,5 +54,14 @@ public class ChannelAdapterConfig {
     @Bean
     public ChannelAdapter shopeeAdapter() {
         return new ShopeeAdapter();
+    }
+
+    /**
+     * 註冊客製通路適配器（Custom Platform）
+     * 無真實 API：FETCH_ORDERS 回空 list，訂單由 SeedTestOrdersHandler 注入
+     */
+    @Bean
+    public ChannelAdapter customAdapter() {
+        return new CustomAdapter();
     }
 }

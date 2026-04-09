@@ -85,7 +85,7 @@ INSERT INTO public.platform (id, platform_name, actived, queue_topic, currency) 
 ('yahoo',     'Yahoo奇摩',    true,  'yahoo',     'TWD'),
 ('pchome',    'PChome商店街', false, 'pchome',    'TWD'),
 ('cyberbiz',  'Cyberbiz',     true,  'cyberbiz',  'TWD'),
-('fake',      '測試平台',     true,  'fake',      'TWD');
+('custom',    '客製通路',     true,  'custom',    'TWD');
 
 -- ---------------------------------------------------------------------------
 -- channel_api_versions
@@ -121,9 +121,9 @@ INSERT INTO public.channel (
     id, platform_id, merchant_id, channel_sn, channel_name,
     multi_spec, token, actived, write_actived, enable_sync
 ) VALUES
-('ch_fake_123', 'fake', 'm_test_001', '123',
+('ch_fake_123', 'custom', 'm_test_001', '123',
  '客製測試通路 123', false,
- 'fake-token', true, false, false);
+ 'custom-token', true, false, true);
 
 -- ---------------------------------------------------------------------------
 -- product_group

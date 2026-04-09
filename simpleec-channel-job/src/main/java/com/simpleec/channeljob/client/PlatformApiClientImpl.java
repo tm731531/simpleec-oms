@@ -47,6 +47,10 @@ public class PlatformApiClientImpl implements PlatformApiClient {
 
     @Override
     public int healthCheck(String platformCode, String token, String token2) throws Exception {
+        // custom platform: always healthy (no real API — orders come from test seeder)
+        if ("custom".equalsIgnoreCase(platformCode)) {
+            return 200;
+        }
         if (token == null || token.isBlank()) {
             log.info("No token configured for channel on platform {}", platformCode);
             return 0; // unknown — credentials not set
@@ -65,6 +69,10 @@ public class PlatformApiClientImpl implements PlatformApiClient {
 
     @Override
     public int platformHealthCheck(String platformCode) throws Exception {
+        // custom platform: always healthy (no real API to ping)
+        if ("custom".equalsIgnoreCase(platformCode)) {
+            return 200;
+        }
         String pingUrl = PLATFORM_PING_URLS.get(platformCode.toLowerCase());
         if (pingUrl == null) {
             log.info("platformHealthCheck not configured for platform: {}", platformCode);

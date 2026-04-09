@@ -420,6 +420,62 @@ services:
       kafka-init:
         condition: service_completed_successfully
     restart: unless-stopped
+  simpleec-channel-custom-fast:
+    image: simpleec-channel-job
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.channel-job
+    container_name: simpleec-channel-custom-fast
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      DB_HOST: postgres
+      DB_PORT: '5432'
+      DB_NAME: simpleec
+      DB_USER: simpleec
+      DB_PASSWORD: simpleec123
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      JOB_CHANNEL_TOPICS: custom.fast
+      JOB_CHANNEL_GROUP_ID: channel-job-custom
+      JOB_CHANNEL_CONCURRENCY: '2'
+      JAVA_TOOL_OPTIONS: "-Xmx256m -XX:+ExitOnOutOfMemoryError"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+  simpleec-channel-custom-slow:
+    image: simpleec-channel-job
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.channel-job
+    container_name: simpleec-channel-custom-slow
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      DB_HOST: postgres
+      DB_PORT: '5432'
+      DB_NAME: simpleec
+      DB_USER: simpleec
+      DB_PASSWORD: simpleec123
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      JOB_CHANNEL_TOPICS: custom.slow
+      JOB_CHANNEL_GROUP_ID: channel-job-custom
+      JOB_CHANNEL_CONCURRENCY: '2'
+      JAVA_TOOL_OPTIONS: "-Xmx256m -XX:+ExitOnOutOfMemoryError"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
   simpleec-channel-shopline-fast:
     image: simpleec-channel-job
     build:
