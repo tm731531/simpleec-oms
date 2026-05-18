@@ -157,6 +157,8 @@ services:
       JOB_CHANNEL_GROUP_ID: channel-job-momo
       JOB_CHANNEL_CONCURRENCY: '3'
       JAVA_TOOL_OPTIONS: "-Xmx384m -XX:+ExitOnOutOfMemoryError"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://simpleec-otel-collector:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
     depends_on:
       postgres:
         condition: service_healthy
@@ -185,6 +187,8 @@ services:
       JOB_CHANNEL_GROUP_ID: channel-job-momo
       JOB_CHANNEL_CONCURRENCY: '3'
       JAVA_TOOL_OPTIONS: "-Xmx384m -XX:+ExitOnOutOfMemoryError"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://simpleec-otel-collector:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
     depends_on:
       postgres:
         condition: service_healthy
@@ -213,6 +217,8 @@ services:
       JOB_CHANNEL_GROUP_ID: channel-job-shopee
       JOB_CHANNEL_CONCURRENCY: '3'
       JAVA_TOOL_OPTIONS: "-Xmx384m -XX:+ExitOnOutOfMemoryError"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://simpleec-otel-collector:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
     depends_on:
       postgres:
         condition: service_healthy
@@ -241,6 +247,8 @@ services:
       JOB_CHANNEL_GROUP_ID: channel-job-shopee
       JOB_CHANNEL_CONCURRENCY: '3'
       JAVA_TOOL_OPTIONS: "-Xmx384m -XX:+ExitOnOutOfMemoryError"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://simpleec-otel-collector:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
     depends_on:
       postgres:
         condition: service_healthy
@@ -269,6 +277,8 @@ services:
       JOB_CHANNEL_GROUP_ID: channel-job-yahoo
       JOB_CHANNEL_CONCURRENCY: '3'
       JAVA_TOOL_OPTIONS: "-Xmx384m -XX:+ExitOnOutOfMemoryError"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://simpleec-otel-collector:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
     depends_on:
       postgres:
         condition: service_healthy
@@ -297,6 +307,8 @@ services:
       JOB_CHANNEL_GROUP_ID: channel-job-yahoo
       JOB_CHANNEL_CONCURRENCY: '3'
       JAVA_TOOL_OPTIONS: "-Xmx384m -XX:+ExitOnOutOfMemoryError"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://simpleec-otel-collector:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
     depends_on:
       postgres:
         condition: service_healthy
@@ -325,6 +337,8 @@ services:
       JOB_CHANNEL_GROUP_ID: channel-job-pchome
       JOB_CHANNEL_CONCURRENCY: '3'
       JAVA_TOOL_OPTIONS: "-Xmx384m -XX:+ExitOnOutOfMemoryError"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://simpleec-otel-collector:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
     depends_on:
       postgres:
         condition: service_healthy
@@ -353,6 +367,8 @@ services:
       JOB_CHANNEL_GROUP_ID: channel-job-pchome
       JOB_CHANNEL_CONCURRENCY: '3'
       JAVA_TOOL_OPTIONS: "-Xmx384m -XX:+ExitOnOutOfMemoryError"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://simpleec-otel-collector:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
     depends_on:
       postgres:
         condition: service_healthy
@@ -381,6 +397,8 @@ services:
       JOB_CHANNEL_GROUP_ID: channel-job-cyberbiz
       JOB_CHANNEL_CONCURRENCY: '3'
       JAVA_TOOL_OPTIONS: "-Xmx384m -XX:+ExitOnOutOfMemoryError"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://simpleec-otel-collector:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
       CYBERBIZ_API_BASE_URL: https://api.cyberbiz.co
       CYBERBIZ_API_TOKEN: ${CYBERBIZ_API_TOKEN}
     depends_on:
@@ -411,6 +429,8 @@ services:
       JOB_CHANNEL_GROUP_ID: channel-job-cyberbiz
       JOB_CHANNEL_CONCURRENCY: '3'
       JAVA_TOOL_OPTIONS: "-Xmx384m -XX:+ExitOnOutOfMemoryError"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://simpleec-otel-collector:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
       CYBERBIZ_API_BASE_URL: https://api.cyberbiz.co
       CYBERBIZ_API_TOKEN: ${CYBERBIZ_API_TOKEN}
     depends_on:
@@ -441,6 +461,8 @@ services:
       JOB_CHANNEL_GROUP_ID: channel-job-custom
       JOB_CHANNEL_CONCURRENCY: '2'
       JAVA_TOOL_OPTIONS: "-Xmx384m -XX:+ExitOnOutOfMemoryError"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://simpleec-otel-collector:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
     depends_on:
       postgres:
         condition: service_healthy
@@ -469,6 +491,8 @@ services:
       JOB_CHANNEL_GROUP_ID: channel-job-custom
       JOB_CHANNEL_CONCURRENCY: '2'
       JAVA_TOOL_OPTIONS: "-Xmx384m -XX:+ExitOnOutOfMemoryError"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://simpleec-otel-collector:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
     depends_on:
       postgres:
         condition: service_healthy
@@ -497,6 +521,8 @@ services:
       JOB_CHANNEL_GROUP_ID: channel-job-shopline
       JOB_CHANNEL_CONCURRENCY: '3'
       JAVA_TOOL_OPTIONS: "-Xmx384m -XX:+ExitOnOutOfMemoryError"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://simpleec-otel-collector:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
     depends_on:
       postgres:
         condition: service_healthy
@@ -525,6 +551,8 @@ services:
       JOB_CHANNEL_GROUP_ID: channel-job-shopline
       JOB_CHANNEL_CONCURRENCY: '3'
       JAVA_TOOL_OPTIONS: "-Xmx384m -XX:+ExitOnOutOfMemoryError"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://simpleec-otel-collector:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
     depends_on:
       postgres:
         condition: service_healthy
@@ -553,6 +581,8 @@ services:
       JOB_CHANNEL_GROUP_ID: channel-job-shopify
       JOB_CHANNEL_CONCURRENCY: '3'
       JAVA_TOOL_OPTIONS: "-Xmx384m -XX:+ExitOnOutOfMemoryError"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://simpleec-otel-collector:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
     depends_on:
       postgres:
         condition: service_healthy
@@ -581,6 +611,8 @@ services:
       JOB_CHANNEL_GROUP_ID: channel-job-shopify
       JOB_CHANNEL_CONCURRENCY: '3'
       JAVA_TOOL_OPTIONS: "-Xmx384m -XX:+ExitOnOutOfMemoryError"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://simpleec-otel-collector:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
     depends_on:
       postgres:
         condition: service_healthy
@@ -598,6 +630,8 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: docker
       JAVA_TOOL_OPTIONS: "-Xmx384m -XX:+ExitOnOutOfMemoryError"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://simpleec-otel-collector:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
       DB_HOST: postgres
       DB_PORT: '5432'
       DB_NAME: simpleec
@@ -623,6 +657,8 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: docker
       JAVA_TOOL_OPTIONS: "-Xmx192m -XX:+ExitOnOutOfMemoryError"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://simpleec-otel-collector:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
       DB_HOST: postgres
       DB_PORT: '5432'
       DB_NAME: simpleec
@@ -650,6 +686,8 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: docker
       JAVA_TOOL_OPTIONS: "-Xmx384m -XX:+ExitOnOutOfMemoryError"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://simpleec-otel-collector:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
       DB_HOST: postgres
       DB_PORT: '5432'
       DB_NAME: simpleec
@@ -675,6 +713,8 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: docker
       JAVA_TOOL_OPTIONS: "-Xmx192m -XX:+ExitOnOutOfMemoryError"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://simpleec-otel-collector:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
       DB_HOST: postgres
       DB_PORT: '5432'
       DB_NAME: simpleec
@@ -700,6 +740,8 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: docker
       JAVA_TOOL_OPTIONS: "-Xmx256m -XX:+ExitOnOutOfMemoryError"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://simpleec-otel-collector:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
       DB_HOST: postgres
       DB_PORT: '5432'
       DB_NAME: simpleec
@@ -759,6 +801,8 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: docker
       JAVA_TOOL_OPTIONS: "-Xmx384m -XX:+ExitOnOutOfMemoryError"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://simpleec-otel-collector:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
       KAFKA_BOOTSTRAP_SERVERS: simpleec-kafka:9092
       WEBHOOK_SECRET_SHOPIFY: ${WEBHOOK_SECRET_SHOPIFY:-}
       WEBHOOK_SECRET_SHOPEE: ${WEBHOOK_SECRET_SHOPEE:-}
