@@ -22,8 +22,13 @@ import org.springframework.stereotype.Component;
         "com.simpleec.common"
     },
     exclude = {
-        org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration.class,
+        // DataSource auto-config IS enabled — DltConsumer writes failed_task_logs via JdbcTemplate.
+        // Hibernate excluded: retry-job is a message router, not a domain service.
+        // JpaRepositories excluded too: simpleec-core has JpaRepository classes on classpath
+        // (ChannelRepository, OrderRepository, etc.). Without this exclude, Spring would
+        // try to build an entityManagerFactory to back them and fail since Hibernate is gone.
         org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration.class,
+        org.springframework.boot.autoconfigure.data.jpa.JpaRepositoriesAutoConfiguration.class,
         com.simpleec.core.config.ServiceAutoConfiguration.class
     }
 )

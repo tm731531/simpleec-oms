@@ -20,6 +20,10 @@ spring:
       bootstrap-servers: simpleec-kafka:9092
       group-id: scheduler-consumer-group
       auto-offset-reset: earliest
+      # Scheduler processes few tasks per tick — see brain/kafka-message-queue.md
+      max-poll-records: 5
+      fetch-max-bytes: 1048576
+      max-partition-fetch-bytes: 262144
   data:
     redis:
       host: ${REDIS_HOST:simpleec-redis}
@@ -31,7 +35,7 @@ server:
 
 logging:
   level:
-    com.simpleec: DEBUG
-    com.simpleec.schedulerjob: DEBUG
-    org.springframework.kafka: DEBUG
-    org.springframework.kafka.listener: DEBUG
+    com.simpleec: INFO
+    com.simpleec.schedulerjob: INFO
+    org.springframework.kafka: INFO
+    org.springframework.kafka.listener: INFO

@@ -2,11 +2,10 @@ package com.simpleec.retryjob.consumer;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.simpleec.core.entity.FailedTaskLog;
-import com.simpleec.core.repository.FailedTaskLogRepository;
 import com.simpleec.common.util.NanoIdUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
@@ -25,8 +24,18 @@ import java.time.format.DateTimeFormatter;
 public class DltConsumer {
 
     private final ObjectMapper objectMapper;
-    private final FailedTaskLogRepository failedTaskLogRepository;
+    private final JdbcTemplate jdbcTemplate;
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
+    // Plain INSERT — avoids dragging full Hibernate into the retry-job (DLT is
+    // append-only audit log, no read path, no relations). Keep retry-job lean.
+    private static final String INSERT_FAILED_TASK_LOG = """
+            INSERT INTO failed_task_logs
+              (id, message_id, task_type, task_action, source_job_type,
+               merchant_id, original_topic, error_message, reason, retry_count,
+               payload, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, NOW())
+            """;
 
     /**
      * 消費 task.dlt topic
@@ -74,21 +83,19 @@ public class DltConsumer {
             String originalTopic = originalMessage.path("header").path("originalTopic").asText(null);
             String payloadJson = objectMapper.writeValueAsString(originalMessage);
 
-            FailedTaskLog log_ = FailedTaskLog.builder()
-                    .id(NanoIdUtil.generate(20))
-                    .messageId(taskId)
-                    .taskType(taskType)
-                    .taskAction("DLT_RECEIVED")
-                    .sourceJobType("retry-job")
-                    .merchantId(merchantId)
-                    .originalTopic(originalTopic)
-                    .errorMessage(error)
-                    .reason("DLT")
-                    .retryCount(0)
-                    .payload(payloadJson)
-                    .build();
+            jdbcTemplate.update(INSERT_FAILED_TASK_LOG,
+                    NanoIdUtil.generate(20),
+                    taskId,
+                    taskType,
+                    "DLT_RECEIVED",
+                    "retry-job",
+                    merchantId,
+                    originalTopic,
+                    error,
+                    "DLT",
+                    0,
+                    payloadJson);
 
-            failedTaskLogRepository.save(log_);
             log.info("DLT message persisted to failed_task_logs: {}", taskId);
 
         } catch (Exception e) {

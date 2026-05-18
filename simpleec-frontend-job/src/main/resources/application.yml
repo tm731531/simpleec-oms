@@ -7,6 +7,9 @@ spring:
       group-id: frontend-job-group
       max-poll-records: 100
       auto-offset-reset: earliest
+      # Bound fetch buffer — see brain/kafka-message-queue.md (Iron Rule)
+      fetch-max-bytes: 1048576
+      max-partition-fetch-bytes: 262144
   mvc:
     async:
       request-timeout: 300000
@@ -20,5 +23,5 @@ jwt:
 
 logging:
   level:
-    com.simpleec: DEBUG
+    com.simpleec: INFO
     org.springframework.kafka: INFO

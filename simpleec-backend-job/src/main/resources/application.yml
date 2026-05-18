@@ -17,6 +17,10 @@ spring:
       bootstrap-servers: simpleec-kafka:9092
       group-id: backend-consumer-group
       auto-offset-reset: earliest
+      # Cap poll() size — see brain/kafka-message-queue.md (Iron Rule)
+      max-poll-records: 10
+      fetch-max-bytes: 1048576
+      max-partition-fetch-bytes: 262144
   data:
     redis:
       host: simpleec-redis
@@ -27,6 +31,6 @@ server:
 
 logging:
   level:
-    com.simpleec: DEBUG
-    com.simpleec.backendJob: DEBUG
-    org.springframework.kafka: DEBUG
+    com.simpleec: INFO
+    com.simpleec.backendJob: INFO
+    org.springframework.kafka: INFO

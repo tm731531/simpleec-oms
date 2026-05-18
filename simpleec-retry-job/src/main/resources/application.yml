@@ -13,6 +13,10 @@ spring:
     consumer:
       group-id: retry-job-group
       auto-offset-reset: earliest
+      # Cap poll() size — see brain/kafka-message-queue.md (Iron Rule)
+      max-poll-records: 10
+      fetch-max-bytes: 1048576
+      max-partition-fetch-bytes: 262144
   data:
     redis:
       host: simpleec-redis
@@ -23,4 +27,4 @@ server:
 
 logging:
   level:
-    com.simpleec: DEBUG
+    com.simpleec: INFO

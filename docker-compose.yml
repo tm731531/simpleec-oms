@@ -47,6 +47,7 @@ services:
   kafka:
     image: apache/kafka:3.7.1
     container_name: simpleec-kafka
+    init: true
     ports:
     - 9092:9092
     environment:
@@ -155,7 +156,7 @@ services:
       JOB_CHANNEL_TOPICS: momo.fast
       JOB_CHANNEL_GROUP_ID: channel-job-momo
       JOB_CHANNEL_CONCURRENCY: '3'
-      JAVA_TOOL_OPTIONS: "-Xmx256m -XX:+ExitOnOutOfMemoryError"
+      JAVA_TOOL_OPTIONS: "-Xmx384m -XX:+ExitOnOutOfMemoryError"
     depends_on:
       postgres:
         condition: service_healthy
@@ -183,7 +184,7 @@ services:
       JOB_CHANNEL_TOPICS: momo.slow
       JOB_CHANNEL_GROUP_ID: channel-job-momo
       JOB_CHANNEL_CONCURRENCY: '3'
-      JAVA_TOOL_OPTIONS: "-Xmx256m -XX:+ExitOnOutOfMemoryError"
+      JAVA_TOOL_OPTIONS: "-Xmx384m -XX:+ExitOnOutOfMemoryError"
     depends_on:
       postgres:
         condition: service_healthy
@@ -211,7 +212,7 @@ services:
       JOB_CHANNEL_TOPICS: shopee.fast
       JOB_CHANNEL_GROUP_ID: channel-job-shopee
       JOB_CHANNEL_CONCURRENCY: '3'
-      JAVA_TOOL_OPTIONS: "-Xmx256m -XX:+ExitOnOutOfMemoryError"
+      JAVA_TOOL_OPTIONS: "-Xmx384m -XX:+ExitOnOutOfMemoryError"
     depends_on:
       postgres:
         condition: service_healthy
@@ -239,7 +240,7 @@ services:
       JOB_CHANNEL_TOPICS: shopee.slow
       JOB_CHANNEL_GROUP_ID: channel-job-shopee
       JOB_CHANNEL_CONCURRENCY: '3'
-      JAVA_TOOL_OPTIONS: "-Xmx256m -XX:+ExitOnOutOfMemoryError"
+      JAVA_TOOL_OPTIONS: "-Xmx384m -XX:+ExitOnOutOfMemoryError"
     depends_on:
       postgres:
         condition: service_healthy
@@ -267,7 +268,7 @@ services:
       JOB_CHANNEL_TOPICS: yahoo.fast
       JOB_CHANNEL_GROUP_ID: channel-job-yahoo
       JOB_CHANNEL_CONCURRENCY: '3'
-      JAVA_TOOL_OPTIONS: "-Xmx256m -XX:+ExitOnOutOfMemoryError"
+      JAVA_TOOL_OPTIONS: "-Xmx384m -XX:+ExitOnOutOfMemoryError"
     depends_on:
       postgres:
         condition: service_healthy
@@ -295,7 +296,7 @@ services:
       JOB_CHANNEL_TOPICS: yahoo.slow
       JOB_CHANNEL_GROUP_ID: channel-job-yahoo
       JOB_CHANNEL_CONCURRENCY: '3'
-      JAVA_TOOL_OPTIONS: "-Xmx256m -XX:+ExitOnOutOfMemoryError"
+      JAVA_TOOL_OPTIONS: "-Xmx384m -XX:+ExitOnOutOfMemoryError"
     depends_on:
       postgres:
         condition: service_healthy
@@ -323,7 +324,7 @@ services:
       JOB_CHANNEL_TOPICS: pchome.fast
       JOB_CHANNEL_GROUP_ID: channel-job-pchome
       JOB_CHANNEL_CONCURRENCY: '3'
-      JAVA_TOOL_OPTIONS: "-Xmx256m -XX:+ExitOnOutOfMemoryError"
+      JAVA_TOOL_OPTIONS: "-Xmx384m -XX:+ExitOnOutOfMemoryError"
     depends_on:
       postgres:
         condition: service_healthy
@@ -351,7 +352,7 @@ services:
       JOB_CHANNEL_TOPICS: pchome.slow
       JOB_CHANNEL_GROUP_ID: channel-job-pchome
       JOB_CHANNEL_CONCURRENCY: '3'
-      JAVA_TOOL_OPTIONS: "-Xmx256m -XX:+ExitOnOutOfMemoryError"
+      JAVA_TOOL_OPTIONS: "-Xmx384m -XX:+ExitOnOutOfMemoryError"
     depends_on:
       postgres:
         condition: service_healthy
@@ -379,7 +380,7 @@ services:
       JOB_CHANNEL_TOPICS: cyberbiz.fast
       JOB_CHANNEL_GROUP_ID: channel-job-cyberbiz
       JOB_CHANNEL_CONCURRENCY: '3'
-      JAVA_TOOL_OPTIONS: "-Xmx256m -XX:+ExitOnOutOfMemoryError"
+      JAVA_TOOL_OPTIONS: "-Xmx384m -XX:+ExitOnOutOfMemoryError"
       CYBERBIZ_API_BASE_URL: https://api.cyberbiz.co
       CYBERBIZ_API_TOKEN: ${CYBERBIZ_API_TOKEN}
     depends_on:
@@ -409,7 +410,7 @@ services:
       JOB_CHANNEL_TOPICS: cyberbiz.slow
       JOB_CHANNEL_GROUP_ID: channel-job-cyberbiz
       JOB_CHANNEL_CONCURRENCY: '3'
-      JAVA_TOOL_OPTIONS: "-Xmx256m -XX:+ExitOnOutOfMemoryError"
+      JAVA_TOOL_OPTIONS: "-Xmx384m -XX:+ExitOnOutOfMemoryError"
       CYBERBIZ_API_BASE_URL: https://api.cyberbiz.co
       CYBERBIZ_API_TOKEN: ${CYBERBIZ_API_TOKEN}
     depends_on:
@@ -439,7 +440,7 @@ services:
       JOB_CHANNEL_TOPICS: custom.fast
       JOB_CHANNEL_GROUP_ID: channel-job-custom
       JOB_CHANNEL_CONCURRENCY: '2'
-      JAVA_TOOL_OPTIONS: "-Xmx256m -XX:+ExitOnOutOfMemoryError"
+      JAVA_TOOL_OPTIONS: "-Xmx384m -XX:+ExitOnOutOfMemoryError"
     depends_on:
       postgres:
         condition: service_healthy
@@ -467,7 +468,7 @@ services:
       JOB_CHANNEL_TOPICS: custom.slow
       JOB_CHANNEL_GROUP_ID: channel-job-custom
       JOB_CHANNEL_CONCURRENCY: '2'
-      JAVA_TOOL_OPTIONS: "-Xmx256m -XX:+ExitOnOutOfMemoryError"
+      JAVA_TOOL_OPTIONS: "-Xmx384m -XX:+ExitOnOutOfMemoryError"
     depends_on:
       postgres:
         condition: service_healthy
@@ -495,7 +496,7 @@ services:
       JOB_CHANNEL_TOPICS: shopline.fast
       JOB_CHANNEL_GROUP_ID: channel-job-shopline
       JOB_CHANNEL_CONCURRENCY: '3'
-      JAVA_TOOL_OPTIONS: "-Xmx256m -XX:+ExitOnOutOfMemoryError"
+      JAVA_TOOL_OPTIONS: "-Xmx384m -XX:+ExitOnOutOfMemoryError"
     depends_on:
       postgres:
         condition: service_healthy
@@ -523,7 +524,7 @@ services:
       JOB_CHANNEL_TOPICS: shopline.slow
       JOB_CHANNEL_GROUP_ID: channel-job-shopline
       JOB_CHANNEL_CONCURRENCY: '3'
-      JAVA_TOOL_OPTIONS: "-Xmx256m -XX:+ExitOnOutOfMemoryError"
+      JAVA_TOOL_OPTIONS: "-Xmx384m -XX:+ExitOnOutOfMemoryError"
     depends_on:
       postgres:
         condition: service_healthy
@@ -551,7 +552,7 @@ services:
       JOB_CHANNEL_TOPICS: shopify.fast
       JOB_CHANNEL_GROUP_ID: channel-job-shopify
       JOB_CHANNEL_CONCURRENCY: '3'
-      JAVA_TOOL_OPTIONS: "-Xmx256m -XX:+ExitOnOutOfMemoryError"
+      JAVA_TOOL_OPTIONS: "-Xmx384m -XX:+ExitOnOutOfMemoryError"
     depends_on:
       postgres:
         condition: service_healthy
@@ -579,7 +580,7 @@ services:
       JOB_CHANNEL_TOPICS: shopify.slow
       JOB_CHANNEL_GROUP_ID: channel-job-shopify
       JOB_CHANNEL_CONCURRENCY: '3'
-      JAVA_TOOL_OPTIONS: "-Xmx256m -XX:+ExitOnOutOfMemoryError"
+      JAVA_TOOL_OPTIONS: "-Xmx384m -XX:+ExitOnOutOfMemoryError"
     depends_on:
       postgres:
         condition: service_healthy
@@ -698,7 +699,7 @@ services:
     container_name: simpleec-retry-job
     environment:
       SPRING_PROFILES_ACTIVE: docker
-      JAVA_TOOL_OPTIONS: "-Xmx192m -XX:+ExitOnOutOfMemoryError"
+      JAVA_TOOL_OPTIONS: "-Xmx256m -XX:+ExitOnOutOfMemoryError"
       DB_HOST: postgres
       DB_PORT: '5432'
       DB_NAME: simpleec
@@ -757,7 +758,7 @@ services:
       - "8081:8081"
     environment:
       SPRING_PROFILES_ACTIVE: docker
-      JAVA_TOOL_OPTIONS: "-Xmx256m -XX:+ExitOnOutOfMemoryError"
+      JAVA_TOOL_OPTIONS: "-Xmx384m -XX:+ExitOnOutOfMemoryError"
       KAFKA_BOOTSTRAP_SERVERS: simpleec-kafka:9092
       WEBHOOK_SECRET_SHOPIFY: ${WEBHOOK_SECRET_SHOPIFY:-}
       WEBHOOK_SECRET_SHOPEE: ${WEBHOOK_SECRET_SHOPEE:-}

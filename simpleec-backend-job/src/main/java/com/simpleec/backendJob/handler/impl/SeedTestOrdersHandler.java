@@ -100,7 +100,9 @@ public class SeedTestOrdersHandler extends AbstractEventHandler {
             log.warn("SEED_TEST_ORDERS: fake channel {} not found — skipping", FAKE_CHANNEL_ID);
             return;
         }
-        if (!fakeChannel.isActived() || !fakeChannel.isEnableSync()) {
+        // Boolean (boxed) fields → Lombok @Data generates getXxx(), not isXxx()
+        if (!Boolean.TRUE.equals(fakeChannel.getActived())
+                || !Boolean.TRUE.equals(fakeChannel.getEnableSync())) {
             log.info("SEED_TEST_ORDERS: fake channel {} is not active/enable_sync — skipping", FAKE_CHANNEL_ID);
             return;
         }

@@ -8,6 +8,12 @@ spring:
     consumer:
       group-id: ${JOB_CHANNEL_GROUP_ID:channel-job-group}
       auto-offset-reset: earliest
+      # Cap each poll() at ~1MB so a 256MB-heap container never gets a
+      # 52MB batch dumped into heap during consumer-lag spikes (the
+      # classic "poison batch crash loop" — see brain/kafka-message-queue.md).
+      max-poll-records: 10
+      fetch-max-bytes: 1048576           # 1 MB total per poll
+      max-partition-fetch-bytes: 262144  # 256 KB per partition
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -20,16 +26,16 @@ spring:
     password: ${DB_PASSWORD:postgres}
     driver-class-name: org.postgresql.Driver
     hikari:
-      maximum-pool-size: 10
-      minimum-idle: 2
+      maximum-pool-size: 4
+      minimum-idle: 1
   jpa:
     enabled: true
     hibernate:
-      ddl-auto: validate
+      ddl-auto: none
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
 
 logging:
   level:
-    com.simpleec: DEBUG
+    com.simpleec: INFO
