@@ -293,8 +293,8 @@ public class ModeBOrderDetailHandler {
     private void sendOrderUpsertMessage(String merchantId, String channelId, String channelOrderId, String channelOrderNumber,
                                         String orderHash, ObjectNode orderData, String platformCode) throws Exception {
 
-        // Encrypt scalar PII at source before publishing — see docs/cycles/pii-encrypt-at-source-migration.md
-        orderPiiEncryptor.encryptScalars(orderData, merchantId);
+        // Encrypt PII at source before publishing — see docs/cycles/pii-encrypt-at-source-migration.md
+        orderPiiEncryptor.encryptInPlace(orderData, merchantId);
 
         ObjectNode message = objectMapper.createObjectNode();
 
