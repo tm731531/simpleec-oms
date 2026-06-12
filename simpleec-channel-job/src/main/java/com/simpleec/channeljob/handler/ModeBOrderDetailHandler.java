@@ -10,6 +10,7 @@ import com.simpleec.channeljob.util.OrderStatusMapper;
 import com.simpleec.common.enums.TaskTypeEnum;
 import com.simpleec.common.util.NanoIdUtil;
 import com.simpleec.common.constants.TopicConstants;
+import com.simpleec.core.crypto.OrderPiiEncryptor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.codec.digest.DigestUtils;
@@ -43,6 +44,7 @@ public class ModeBOrderDetailHandler {
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final ObjectMapper objectMapper;
     private final ChannelService channelService;
+    private final OrderPiiEncryptor orderPiiEncryptor;
 
     /**
      * 處理 Mode B 訂單詳情
@@ -290,6 +292,9 @@ public class ModeBOrderDetailHandler {
      */
     private void sendOrderUpsertMessage(String merchantId, String channelId, String channelOrderId, String channelOrderNumber,
                                         String orderHash, ObjectNode orderData, String platformCode) throws Exception {
+
+        // Encrypt scalar PII at source before publishing — see docs/cycles/pii-encrypt-at-source-migration.md
+        orderPiiEncryptor.encryptScalars(orderData, merchantId);
 
         ObjectNode message = objectMapper.createObjectNode();
 
