@@ -5,6 +5,7 @@ import com.simpleec.channeljob.util.OrderStatusMapper;
 import com.simpleec.common.enums.ModeEnum;
 import com.simpleec.common.enums.TaskTypeEnum;
 import com.simpleec.common.constants.TopicConstants;
+import com.simpleec.core.crypto.OrderPiiEncryptor;
 import com.simpleec.common.util.RedisKeyUtil;
 import com.simpleec.common.util.NanoIdUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -34,6 +35,7 @@ public class ModeAOrderListHandler {
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
+    private final OrderPiiEncryptor orderPiiEncryptor;
 
     /**
      * 處理 Mode A 訂單列表
@@ -348,6 +350,9 @@ public class ModeAOrderListHandler {
      */
     private void sendOrderUpsert(String channelOrderId, String channelOrderNumber, ObjectNode omsOrderData,
                                  String orderHash, String channelId, String merchantId, String platformCode) throws Exception {
+
+        // Encrypt scalar PII at source before publishing — see docs/cycles/pii-encrypt-at-source-migration.md
+        orderPiiEncryptor.encryptScalars(omsOrderData, merchantId);
 
         ObjectNode message = objectMapper.createObjectNode();
 
